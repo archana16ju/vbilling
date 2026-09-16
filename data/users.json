@@ -1,0 +1,16 @@
+[
+  {
+    "id": "u1",
+    "username": "admin",
+    "password": "admin",
+    "role": "admin",
+    "createdAt": 1789559418725
+  },
+  {
+    "id": "u2",
+    "username": "cashier",
+    "password": "cashier123",
+    "role": "cashier",
+    "createdAt": 1789559418725
+  }
+]
