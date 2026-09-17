@@ -136,8 +136,17 @@ export const useTerminalStore = create<TerminalState>()(
         timestamp: Date.now()
       }
       
+      const updatedProducts = state.products.map(p => {
+        const cartItem = saleData.items.find(i => i.product.id === p.id);
+        if (cartItem) {
+          return { ...p, stock: p.stock - cartItem.quantity };
+        }
+        return p;
+      });
+
       return { 
         sales: [newSale, ...state.sales],
+        products: updatedProducts,
         cart: [], 
         discountValue: 0 
       }

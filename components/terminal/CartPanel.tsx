@@ -4,9 +4,10 @@ import { calculateSubtotal, calculateDiscount, calculateTax, calculateGlobalTota
 import CartItem from "./CartItem"
 import { Trash2, CreditCard, Banknote, Wallet, PauseCircle } from "lucide-react"
 import { useState } from "react"
+import { recordSale } from "@/lib/actions/db"
 
 export default function CartPanel() {
-  const { cart, clearCart, completeSale, discountValue, isDiscountPercentage, setDiscount } = useTerminalStore()
+  const { cart, clearCart, completeSale, discountValue, isDiscountPercentage, setDiscount, setProducts } = useTerminalStore()
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash")
 
   const subtotal = calculateSubtotal(cart)
@@ -83,14 +84,27 @@ export default function CartPanel() {
           </button>
           <button 
             className="flex-1 rounded-lg bg-blue-600 py-3 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-            onClick={() => completeSale({
-              items: cart,
-              subtotal,
-              discount: discountAmount,
-              tax: taxAmount,
-              total,
-              paymentMethod
-            })}
+            onClick={async () => {
+              const saleData = {
+                items: cart,
+                subtotal,
+                discount: discountAmount,
+                tax: taxAmount,
+                total,
+                paymentMethod
+              };
+              completeSale(saleData);
+              try {
+                const saleId = "INV-" + Date.now();
+                await recordSale({ ...saleData, id: saleId, timestamp: Date.now() });
+                // Reload fresh stock from DB
+                const { getProducts } = await import("@/lib/actions/db");
+                const freshProducts = await getProducts();
+                setProducts(freshProducts);
+              } catch (e) {
+                console.error("Failed to record sale in DB:", e);
+              }
+            }}
             disabled={cart.length === 0}
           >
             BILL

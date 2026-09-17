@@ -80,3 +80,18 @@ export async function seedDatabase() {
     await db.collection('categories').insertMany(CATEGORIES.map(c => ({ ...c, _id: c.id as any })));
   }
 }
+
+export async function recordSale(sale: any) {
+  const db = await getDb();
+  // Insert sale
+  await db.collection('sales').insertOne({ ...sale, _id: sale.id as any });
+  
+  // Update stock for each product
+  for (const item of sale.items) {
+    await db.collection('products').updateOne(
+      { id: item.product.id },
+      { $inc: { stock: -item.quantity } }
+    );
+  }
+  return true;
+}
