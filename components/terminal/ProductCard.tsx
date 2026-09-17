@@ -7,7 +7,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
   return (
     <div className="grid grid-cols-12 items-center gap-4 border-b border-slate-100 bg-white px-6 py-4 transition-colors hover:bg-slate-50">
-      <div className="col-span-8 flex items-center gap-4">
+      <div className="col-span-7 flex items-center gap-4">
         {product.image ? (
           <img 
             src={product.image} 
@@ -29,7 +29,7 @@ export default function ProductCard({ product }: { product: Product }) {
         <span className="text-lg font-bold text-slate-800">₹{product.price}</span>
       </div>
       
-      <div className="col-span-2 flex justify-end">
+      <div className="col-span-3 flex justify-end">
         <button 
           className="flex items-center gap-2 rounded-md bg-blue-700 px-4 py-2 font-bold text-white transition-colors hover:bg-blue-800 active:scale-95"
           onClick={() => addToCart(product)}

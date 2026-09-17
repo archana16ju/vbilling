@@ -53,9 +53,9 @@ export default function ProductPanel() {
       
       <div className="flex-1 overflow-y-auto">
         <div className="grid grid-cols-12 gap-4 border-y border-slate-100 bg-indigo-50/30 px-6 py-3 text-xs font-bold tracking-wider text-slate-500 uppercase">
-          <div className="col-span-8">PRODUCT</div>
+          <div className="col-span-7">PRODUCT</div>
           <div className="col-span-2 text-right">PRICE</div>
-          <div className="col-span-2 text-right">QUICK TENDER</div>
+          <div className="col-span-3 text-right">QUICK TENDER</div>
         </div>
         <div className="flex flex-col">
           {filteredProducts.map((product) => (
