@@ -1,5 +1,5 @@
 'use client'
-import { CartItemData, calculateItemTotal } from "@/lib/calculations"
+import { CartItemData, calculateItemSubtotal } from "@/lib/calculations"
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Trash2, Minus, Plus } from "lucide-react"
 import { useState, useEffect } from "react"
