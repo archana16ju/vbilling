@@ -103,15 +103,18 @@ export async function getNextBillId(): Promise<string> {
 
 export async function recordSale(sale: any) {
   const db = await getDb();
-  // Insert sale
   await db.collection('sales').insertOne({ ...sale, _id: sale.id as any });
-  
-  // Update stock for each product
   for (const item of sale.items) {
     await db.collection('products').updateOne(
       { id: item.product.id },
       { $inc: { stock: -item.quantity } }
     );
   }
+  return true;
+}
+
+export async function clearAllSales() {
+  const db = await getDb();
+  await db.collection('sales').deleteMany({});
   return true;
 }

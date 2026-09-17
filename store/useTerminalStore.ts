@@ -45,6 +45,7 @@ type TerminalState = {
   resetData: () => void
   setProducts: (products: Product[]) => void
   setCategories: (categories: Category[]) => void
+  clearSales: () => void
   printerType: string
   setPrinterType: (type: string) => void
 }
@@ -317,7 +318,8 @@ export const useTerminalStore = create<TerminalState>()(
   
   resetData: () => set({ products: PRODUCTS, categories: CATEGORIES }),
   setProducts: (products) => set({ products }),
-  setCategories: (categories) => set({ categories })
+  setCategories: (categories) => set({ categories }),
+  clearSales: () => set({ sales: [] })
 }),
 {
   name: 'terminal-storage',

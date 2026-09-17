@@ -1,11 +1,13 @@
 'use client'
 import { useTerminalStore, Sale } from "@/store/useTerminalStore"
-import { IndianRupee, CreditCard, Banknote, Wallet, Receipt, X, Printer } from "lucide-react"
+import { IndianRupee, CreditCard, Banknote, Wallet, Receipt, X, Printer, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { clearAllSales } from "@/lib/actions/db"
 
 export default function SalesPage() {
-  const { sales } = useTerminalStore()
+  const { sales, clearSales } = useTerminalStore()
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
+  const [resetting, setResetting] = useState(false)
 
   const totalSales = sales.reduce((sum, sale) => sum + sale.total, 0)
   const cashSales = sales.filter(s => s.paymentMethod === 'Cash').reduce((sum, sale) => sum + sale.total, 0)
@@ -82,9 +84,30 @@ export default function SalesPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Sales & Bills</h1>
-        <p className="text-slate-500">Overview of your recent transactions.</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Sales & Bills</h1>
+          <p className="text-slate-500">Overview of your recent transactions.</p>
+        </div>
+        <button
+          onClick={async () => {
+            if (!confirm("Are you sure you want to reset ALL sales? This cannot be undone.")) return;
+            setResetting(true);
+            try {
+              await clearAllSales();
+              clearSales();
+            } catch (e) {
+              console.error("Failed to clear sales:", e);
+            } finally {
+              setResetting(false);
+            }
+          }}
+          disabled={resetting || sales.length === 0}
+          className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-40 border border-red-200"
+        >
+          <Trash2 className="h-4 w-4" />
+          {resetting ? "Resetting..." : "Reset All Sales"}
+        </button>
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
