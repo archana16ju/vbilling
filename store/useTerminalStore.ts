@@ -154,54 +154,155 @@ export const useTerminalStore = create<TerminalState>()(
     
     const state = useTerminalStore.getState();
     if (state.printerType === 'wire' || state.printerType === 'browser') {
-      // Simulate printing by opening print dialog or opening a receipt window
-      const printWindow = window.open('', '_blank', 'width=400,height=600');
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const printWindow = window.open('', '_blank', 'width=340,height=700');
       if (printWindow) {
         printWindow.document.write(`
-          <html>
-            <head>
-              <title>Receipt ${newSaleId}</title>
-              <style>
-                body { font-family: monospace; padding: 20px; }
-                h1 { text-align: center; }
-                .item { display: flex; justify-content: space-between; margin-bottom: 5px; }
-                .total { border-top: 1px solid #000; margin-top: 10px; padding-top: 10px; font-weight: bold; }
-              </style>
-            </head>
-            <body>
-              <h1>QuickBill Receipt</h1>
-              <p>Invoice: ${newSaleId}</p>
-              <p>Date: ${new Date().toLocaleString()}</p>
-              <hr />
-              ${saleData.items.map(item => `
-                <div class="item">
-                  <span>${item.quantity}x ${item.product.name}</span>
-                  <span>₹${(item.quantity * item.product.price).toFixed(2)}</span>
-                </div>
-              `).join('')}
-              <div class="total item">
-                <span>Subtotal:</span>
-                <span>₹${saleData.subtotal.toFixed(2)}</span>
-              </div>
-              <div class="item">
-                <span>Discount:</span>
-                <span>-₹${saleData.discount.toFixed(2)}</span>
-              </div>
-              <div class="item">
-                <span>Tax:</span>
-                <span>₹${saleData.tax.toFixed(2)}</span>
-              </div>
-              <div class="total item" style="font-size: 1.2em;">
-                <span>Total:</span>
-                <span>₹${saleData.total.toFixed(2)}</span>
-              </div>
-              <p style="text-align: center; margin-top: 20px;">Thank you for shopping!</p>
-              <script>
-                window.onload = function() { window.print(); window.close(); }
-              </script>
-            </body>
-          </html>
-        `);
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      width: 80mm;
+      max-width: 80mm;
+      padding: 4mm 4mm;
+      color: #000;
+      background: #fff;
+    }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: bold; }
+    .restaurant-name {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+    .sub-title {
+      font-size: 10px;
+      text-align: center;
+      margin-bottom: 6px;
+      color: #333;
+    }
+    .divider {
+      border: none;
+      border-top: 1px dashed #000;
+      margin: 5px 0;
+    }
+    .divider-solid {
+      border: none;
+      border-top: 1px solid #000;
+      margin: 5px 0;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin: 2px 0;
+      font-size: 12px;
+    }
+    .row .name {
+      flex: 1;
+      padding-right: 4px;
+      word-break: break-word;
+    }
+    .row .qty {
+      width: 24px;
+      text-align: center;
+    }
+    .row .price {
+      width: 56px;
+      text-align: right;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: bold;
+      border-bottom: 1px solid #000;
+      padding-bottom: 3px;
+      margin-bottom: 3px;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+      font-size: 12px;
+    }
+    .grand-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 4px 0;
+      margin-top: 2px;
+    }
+    .payment-method {
+      font-size: 11px;
+      text-align: center;
+      margin-top: 4px;
+    }
+    .footer {
+      font-size: 10px;
+      text-align: center;
+      margin-top: 8px;
+      color: #333;
+    }
+    .inv-info {
+      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      margin: 2px 0;
+    }
+    @media print {
+      body { width: 80mm; }
+      @page { margin: 0; size: 80mm auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="restaurant-name">SK BIRYANI</div>
+  <div class="sub-title">Restaurant & Fast Food</div>
+  <hr class="divider-solid">
+  <div class="inv-info"><span>Bill No: ${newSaleId.replace('INV-','#')}</span><span>${dateStr}</span></div>
+  <div class="inv-info"><span>Payment: ${saleData.paymentMethod}</span><span>${timeStr}</span></div>
+  <hr class="divider">
+  <div class="header-row">
+    <span style="flex:1">ITEM</span>
+    <span style="width:24px;text-align:center">QTY</span>
+    <span style="width:56px;text-align:right">AMT</span>
+  </div>
+  ${saleData.items.map(item => `
+  <div class="row">
+    <span class="name">${item.product.name}</span>
+    <span class="qty">${item.quantity}</span>
+    <span class="price">₹${(item.quantity * item.product.price).toFixed(2)}</span>
+  </div>`).join('')}
+  <hr class="divider">
+  <div class="totals-row"><span>Subtotal</span><span>₹${saleData.subtotal.toFixed(2)}</span></div>
+  ${saleData.discount > 0 ? `<div class="totals-row"><span>Discount</span><span>-₹${saleData.discount.toFixed(2)}</span></div>` : ''}
+  ${saleData.tax > 0 ? `<div class="totals-row"><span>Tax</span><span>₹${saleData.tax.toFixed(2)}</span></div>` : ''}
+  <hr class="divider-solid">
+  <div class="grand-total"><span>TOTAL</span><span>₹${saleData.total.toFixed(2)}</span></div>
+  <hr class="divider">
+  <div class="footer">
+    *** Thank You, Visit Again! ***<br>
+  </div>
+  <script>
+    window.onload = function() {
+      window.print();
+      setTimeout(function() { window.close(); }, 1000);
+    }
+  </script>
+</body>
+</html>`);
         printWindow.document.close();
       } else {
         alert("Sale Completed! Please allow popups to print receipt.");
