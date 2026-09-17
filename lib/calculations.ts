@@ -51,7 +51,7 @@ export const calculateDiscount = (subtotal: number, discountValue: number, isPer
   return discountValue
 }
 
-export const calculateTax = (amountAfterDiscount: number, taxRate: number = 0.0864): number => {
+export const calculateTax = (amountAfterDiscount: number, taxRate: number = 0): number => {
   return amountAfterDiscount * taxRate
 }
 
