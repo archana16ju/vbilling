@@ -11,7 +11,6 @@ export default function DataLoader() {
     // Only fetch once on mount to populate store
     async function loadData() {
       try {
-        await seedDatabase();
         const [dbProducts, dbCategories] = await Promise.all([
           getProducts(),
           getCategories()
