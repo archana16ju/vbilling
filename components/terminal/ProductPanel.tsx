@@ -38,10 +38,19 @@ export default function ProductPanel() {
               placeholder="Scan barcode, enter SKU or search item title..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (filteredProducts.length === 1) {
+                    useTerminalStore.getState().addToCart(filteredProducts[0], filteredProducts[0].quantityStep || 1);
+                    setSearchQuery('');
+                  }
+                }
+              }}
               className="w-full rounded-md border border-slate-200 bg-white py-2.5 pl-11 pr-20 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
             <div className="absolute right-2 top-2 rounded bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">
-              F2 Scan
+              Enter ↵ to Add
             </div>
           </div>
           
