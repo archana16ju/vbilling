@@ -81,6 +81,26 @@ export async function seedDatabase() {
   }
 }
 
+export async function getNextBillId(): Promise<string> {
+  const db = await getDb();
+  const now = new Date();
+  // Format: DDMMYY
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(-2);
+  const datePrefix = `${dd}${mm}${yy}`;
+
+  // Count how many bills exist today
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const endOfDay   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const todayCount = await db.collection('sales').countDocuments({
+    timestamp: { $gte: startOfDay.getTime(), $lte: endOfDay.getTime() }
+  });
+
+  const seq = String(todayCount + 1).padStart(3, '0');
+  return `${datePrefix}-${seq}`; // e.g. 170926-001
+}
+
 export async function recordSale(sale: any) {
   const db = await getDb();
   // Insert sale

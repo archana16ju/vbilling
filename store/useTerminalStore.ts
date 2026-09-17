@@ -41,7 +41,7 @@ type TerminalState = {
   clearCart: () => void
   
   setDiscount: (value: number, isPercentage: boolean) => void
-  completeSale: (sale: Omit<Sale, 'id' | 'timestamp'>) => void
+  completeSale: (sale: Omit<Sale, 'id' | 'timestamp'>, billId?: string) => void
   resetData: () => void
   setProducts: (products: Product[]) => void
   setCategories: (categories: Category[]) => void
@@ -127,12 +127,15 @@ export const useTerminalStore = create<TerminalState>()(
   
   setDiscount: (value, isPercentage) => set({ discountValue: value, isDiscountPercentage: isPercentage }),
   
-  completeSale: (saleData) => {
-    let newSaleId = "INV-" + Date.now();
+  completeSale: (saleData, billId?) => {
+    // Use the passed billId (DDMMYY-NNN) or fallback
+    const fullBillId = billId || ("INV-" + Date.now());
+    // Extract only the sequence part (e.g. "001") for the printed receipt
+    const seqPart = fullBillId.includes('-') ? fullBillId.split('-').pop()! : fullBillId;
     set((state) => {
       const newSale: Sale = {
         ...saleData,
-        id: newSaleId,
+        id: fullBillId,
         timestamp: Date.now()
       }
       
@@ -271,7 +274,7 @@ export const useTerminalStore = create<TerminalState>()(
   <div class="restaurant-name">SK BIRYANI</div>
   <div class="sub-title">Restaurant & Fast Food</div>
   <hr class="divider-solid">
-  <div class="inv-info"><span>Bill No: ${newSaleId.replace('INV-','#')}</span><span>${dateStr}</span></div>
+  <div class="inv-info"><span>BILL NO-${seqPart}</span><span>${dateStr}</span></div>
   <div class="inv-info"><span>Payment: ${saleData.paymentMethod}</span><span>${timeStr}</span></div>
   <hr class="divider">
   <div class="header-row">

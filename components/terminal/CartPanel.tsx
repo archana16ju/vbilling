@@ -4,7 +4,7 @@ import { calculateSubtotal, calculateDiscount, calculateTax, calculateGlobalTota
 import CartItem from "./CartItem"
 import { Trash2, CreditCard, Banknote, Wallet, PauseCircle } from "lucide-react"
 import { useState } from "react"
-import { recordSale } from "@/lib/actions/db"
+import { recordSale, getNextBillId } from "@/lib/actions/db"
 
 export default function CartPanel() {
   const { cart, clearCart, completeSale, discountValue, isDiscountPercentage, setDiscount, setProducts } = useTerminalStore()
@@ -93,16 +93,20 @@ export default function CartPanel() {
                 total,
                 paymentMethod
               };
-              completeSale(saleData);
               try {
-                const saleId = "INV-" + Date.now();
-                await recordSale({ ...saleData, id: saleId, timestamp: Date.now() });
+                // Get a proper DDMMYY-NNN bill ID from the server
+                const billId = await getNextBillId();
+                // Pass it to both the local store (for receipt) and the DB
+                completeSale(saleData, billId);
+                await recordSale({ ...saleData, id: billId, timestamp: Date.now() });
                 // Reload fresh stock from DB
                 const { getProducts } = await import("@/lib/actions/db");
                 const freshProducts = await getProducts();
                 setProducts(freshProducts);
               } catch (e) {
                 console.error("Failed to record sale in DB:", e);
+                // Fallback — complete sale without DB sync
+                completeSale(saleData);
               }
             }}
             disabled={cart.length === 0}
