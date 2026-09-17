@@ -35,7 +35,7 @@ export default function CartItem({ item }: { item: CartItemData }) {
     }
   }
 
-  const lineTotal = calculateItemTotal(item)
+  const lineSubtotal = calculateItemSubtotal(item)
 
   return (
     <div className="flex items-start justify-between border-b border-slate-100 bg-white p-3 hover:bg-slate-50">
@@ -53,7 +53,7 @@ export default function CartItem({ item }: { item: CartItemData }) {
           <span className="text-xs text-slate-500">
             {product.unit} × ₹{product.price}
           </span>
-          <span className="font-semibold text-slate-900">₹{lineTotal.toFixed(2)}</span>
+          <span className="font-semibold text-slate-900">₹{lineSubtotal.toFixed(2)}</span>
         </div>
         
         <div className="mt-2 flex items-center gap-2">

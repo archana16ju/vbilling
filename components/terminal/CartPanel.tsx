@@ -1,6 +1,6 @@
 'use client'
 import { useTerminalStore } from "@/store/useTerminalStore"
-import { calculateSubtotal, calculateDiscount, calculateTax, calculateGlobalTotal } from "@/lib/calculations"
+import { calculateSubtotal, calculateDiscount, calculateTotalTax, calculateGlobalTotal } from "@/lib/calculations"
 import CartItem from "./CartItem"
 import { Trash2, CreditCard, Banknote, Wallet, PauseCircle } from "lucide-react"
 import { useState } from "react"
@@ -12,8 +12,8 @@ export default function CartPanel() {
 
   const subtotal = calculateSubtotal(cart)
   const discountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage)
-  const afterDiscount = subtotal - discountAmount
-  const taxAmount = calculateTax(afterDiscount)
+  // Sum up all the individual product taxes
+  const taxAmount = calculateTotalTax(cart)
   const total = calculateGlobalTotal(subtotal, discountAmount, taxAmount)
 
   return (
