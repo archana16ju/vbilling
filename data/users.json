@@ -12,5 +12,12 @@
     "password": "cashier123",
     "role": "cashier",
     "createdAt": 1789559418725
+  },
+  {
+    "id": "u1789641770047",
+    "username": "cashier2",
+    "password": "cash",
+    "role": "cashier",
+    "createdAt": 1789641770047
   }
 ]
