@@ -4,7 +4,7 @@ import { Monitor, PackagePlus } from "lucide-react"
 export default function QuickActions() {
   const actions = [
     { name: "New Sale", href: "/terminal", icon: Monitor, color: "bg-blue-100 text-blue-600", hover: "hover:bg-blue-50" },
-    { name: "Add Product", href: "/products/new", icon: PackagePlus, color: "bg-emerald-100 text-emerald-600", hover: "hover:bg-emerald-50" },
+    { name: "Add Product", href: "/products", icon: PackagePlus, color: "bg-emerald-100 text-emerald-600", hover: "hover:bg-emerald-50" },
   ]
 
   return (
