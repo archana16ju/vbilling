@@ -2,14 +2,32 @@
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Product } from "@/lib/mock-data"
 import { Package, Plus, Edit2, Trash2 } from "lucide-react"
-import { useState } from "react"
-import { createProduct, updateProduct, deleteProduct as deleteProductDb } from "@/lib/actions/db"
+import { useState, useEffect } from "react"
+import { createProduct, updateProduct, deleteProduct as deleteProductDb, getProducts, getCategories } from "@/lib/actions/db"
 
 export default function ProductsPage() {
-  const { products, addProduct, editProduct, deleteProduct, categories } = useTerminalStore()
+  const { products, addProduct, editProduct, deleteProduct, categories, setProducts, setCategories } = useTerminalStore()
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Always fetch fresh from DB on page load
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      try {
+        const [dbProducts, dbCategories] = await Promise.all([getProducts(), getCategories()])
+        setProducts(dbProducts)
+        setCategories(dbCategories)
+      } catch (e) {
+        console.error('Failed to load products from DB:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   const handleOpenForm = (product?: Product) => {
     if (product) {
@@ -174,7 +192,14 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {products.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-slate-400">
+                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  Loading products...
+                </td>
+              </tr>
+            ) : products.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-slate-400">
                   <Package className="mx-auto mb-2 h-8 w-8" />
