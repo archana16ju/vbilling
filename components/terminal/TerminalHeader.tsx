@@ -13,7 +13,7 @@ export default function TerminalHeader() {
   return (
     <header className="flex h-16 items-center justify-between bg-slate-900 px-6 text-white shadow-md">
       <div className="flex items-center gap-6">
-        <h1 className="text-xl font-bold tracking-tight text-blue-400">Billing POS</h1>
+        <h1 className="text-xl font-bold tracking-tight text-blue-400">Vseyal Billing POS</h1>
       </div>
 
       <div className="flex items-center gap-4">
