@@ -6,16 +6,19 @@ export type CartItemData = {
 }
 
 export const calculateItemSubtotal = (item: CartItemData): number => {
-  return item.product.price * item.quantity
+  if (!item || !item.product) return 0;
+  return (item.product.price || 0) * (item.quantity || 0)
 }
 
 export const calculateItemDiscount = (item: CartItemData): number => {
+  if (!item || !item.product) return 0;
   const subtotal = calculateItemSubtotal(item)
   const discountRate = item.product.discount || 0
   return subtotal * (discountRate / 100)
 }
 
 export const calculateItemTax = (item: CartItemData): number => {
+  if (!item || !item.product) return 0;
   const subtotal = calculateItemSubtotal(item)
   const discount = calculateItemDiscount(item)
   const afterDiscount = subtotal - discount
@@ -29,18 +32,22 @@ export const calculateItemTotal = (item: CartItemData): number => {
 }
 
 export const calculateSubtotal = (items: CartItemData[]): number => {
+  if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => sum + calculateItemSubtotal(item), 0)
 }
 
 export const calculateTotalDiscount = (items: CartItemData[]): number => {
+  if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => sum + calculateItemDiscount(item), 0)
 }
 
 export const calculateTotalTax = (items: CartItemData[]): number => {
+  if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => sum + calculateItemTax(item), 0)
 }
 
 export const calculateTotal = (items: CartItemData[]): number => {
+  if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => sum + calculateItemTotal(item), 0)
 }
 

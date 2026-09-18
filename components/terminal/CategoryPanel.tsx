@@ -30,6 +30,7 @@ export default function CategoryPanel() {
       <div className="flex-1 overflow-y-auto no-scrollbar px-2 pb-4">
         <div className="flex flex-col gap-1">
           {categories.map((category) => {
+            if (!category) return null;
             const isActive = selectedCategoryId === category.id
             
             return (
@@ -37,9 +38,9 @@ export default function CategoryPanel() {
                 key={category.id}
                 onClick={() => setCategory(category.id)}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                  isActive
-                    ? "bg-gray-200 font-semibold text-black"
-                    : "bg-white text-zinc-700 hover:bg-zinc-50"
+                  isActive 
+                    ? "bg-black text-white" 
+                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
                 }`}
               >
                 {category.image ? (

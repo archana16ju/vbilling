@@ -55,9 +55,10 @@ export default function CartPanel() {
             <p>Cart is empty</p>
           </div>
         ) : (
-          cartSafe.map((item) => (
-            <CartItem key={item.product.id} item={item} />
-          ))
+          cartSafe.map((item, idx) => {
+            if (!item || !item.product) return null;
+            return <CartItem key={item.product.id || idx} item={item} />
+          })
         )}
       </div>
 
@@ -123,10 +124,12 @@ export default function CartPanel() {
                 </button>
               </div>
               <div className="max-h-48 overflow-y-auto space-y-2 no-scrollbar">
-                {heldCarts.map((h, idx) => (
-                  <div key={h.id} className="flex flex-col gap-1 rounded border border-zinc-100 p-2 hover:bg-zinc-50">
+                {heldCarts.map((h, idx) => {
+                  if (!h || !h.items) return null;
+                  return (
+                  <div key={h.id || idx} className="flex flex-col gap-1 rounded border border-zinc-100 p-2 hover:bg-zinc-50">
                     <div className="flex justify-between text-xs text-zinc-500">
-                      <span>{new Date(h.timestamp).toLocaleTimeString()}</span>
+                      <span>{h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : 'Unknown'}</span>
                       <span className="font-semibold text-zinc-700">₹{calculateSubtotal(h.items).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between mt-1">
@@ -144,7 +147,7 @@ export default function CartPanel() {
                       </button>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
