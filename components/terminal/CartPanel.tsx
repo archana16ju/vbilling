@@ -14,12 +14,21 @@ export default function CartPanel() {
   
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash")
   const [showHeldCarts, setShowHeldCarts] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const subtotal = calculateSubtotal(cart)
   const discountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage)
   // Sum up all the individual product taxes
   const taxAmount = calculateTotalTax(cart)
   const total = calculateGlobalTotal(subtotal, discountAmount, taxAmount)
+
+  if (!mounted) {
+    return <div className="flex h-full flex-col border-l border-zinc-200 bg-white" />
+  }
 
   return (
     <div className="flex h-full flex-col border-l border-zinc-200 bg-white">
