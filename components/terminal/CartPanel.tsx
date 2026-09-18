@@ -20,10 +20,11 @@ export default function CartPanel() {
     setMounted(true)
   }, [])
 
-  const subtotal = calculateSubtotal(cart)
+  const cartSafe = cart || []
+  const subtotal = calculateSubtotal(cartSafe)
   const discountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage)
   // Sum up all the individual product taxes
-  const taxAmount = calculateTotalTax(cart)
+  const taxAmount = calculateTotalTax(cartSafe)
   const total = calculateGlobalTotal(subtotal, discountAmount, taxAmount)
 
   if (!mounted) {
@@ -48,13 +49,13 @@ export default function CartPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar bg-zinc-50/50">
-        {cart.length === 0 ? (
+        {cartSafe.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-zinc-400">
             <ShoppingCartIcon className="mb-2 h-12 w-12 text-zinc-200" />
             <p>Cart is empty</p>
           </div>
         ) : (
-          cart.map((item) => (
+          cartSafe.map((item) => (
             <CartItem key={item.product.id} item={item} />
           ))
         )}
@@ -94,23 +95,23 @@ export default function CartPanel() {
         <div className="mt-3 flex gap-2 relative">
           <button 
             className={`flex items-center justify-center gap-1 rounded-lg border px-4 py-3 font-medium transition-colors ${
-              cart.length > 0
+              cartSafe.length > 0
                 ? "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
                 : heldCarts.length > 0
                 ? "border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100"
                 : "border-zinc-300 bg-zinc-100 text-zinc-400 cursor-not-allowed"
             }`}
             onClick={() => {
-              if (cart.length > 0) {
+              if (cartSafe.length > 0) {
                 holdCart()
               } else if (heldCarts.length > 0) {
                 setShowHeldCarts(!showHeldCarts)
               }
             }}
-            disabled={cart.length === 0 && heldCarts.length === 0}
+            disabled={cartSafe.length === 0 && heldCarts.length === 0}
           >
             <PauseCircle className="h-5 w-5" />
-            {cart.length > 0 ? "Hold" : `Recall (${heldCarts.length})`}
+            {cartSafe.length > 0 ? "Hold" : `Recall (${heldCarts.length})`}
           </button>
           
           {showHeldCarts && heldCarts.length > 0 && (
@@ -152,7 +153,7 @@ export default function CartPanel() {
             className="flex-1 rounded-lg bg-black py-3 font-bold text-white hover:bg-gray-800 disabled:opacity-50"
             onClick={async () => {
               const saleData = {
-                items: cart,
+                items: cartSafe,
                 subtotal,
                 discount: discountAmount,
                 tax: taxAmount,
@@ -171,11 +172,11 @@ export default function CartPanel() {
                 setProducts(freshProducts);
               } catch (e) {
                 console.error("Failed to record sale in DB:", e);
-                // Fallback — complete sale without DB sync
+                // Fallback – complete sale without DB sync
                 completeSale(saleData);
               }
             }}
-            disabled={cart.length === 0}
+            disabled={cartSafe.length === 0}
           >
             BILL
           </button>

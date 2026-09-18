@@ -4,15 +4,15 @@ import ProductCard from "./ProductCard"
 import { Search, SlidersHorizontal } from "lucide-react"
 
 export default function ProductPanel() {
-  const { products, selectedCategoryId, categories, searchQuery, setSearchQuery } = useTerminalStore()
+  const { products = [], selectedCategoryId, categories = [], searchQuery = '', setSearchQuery } = useTerminalStore()
   
   const selectedCategory = categories.find(c => c.id === selectedCategoryId)
   
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategoryId === 'all' || p.categoryId === selectedCategoryId
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          p.barcode.includes(searchQuery)
+    const matchesSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          p.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          p.barcode?.includes(searchQuery)
     return matchesCategory && matchesSearch
   })
 

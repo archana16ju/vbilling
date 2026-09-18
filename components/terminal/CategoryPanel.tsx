@@ -3,7 +3,7 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 import { Search } from "lucide-react"
 
 export default function CategoryPanel() {
-  const { categories, selectedCategoryId, setCategory } = useTerminalStore()
+  const { categories = [], selectedCategoryId, setCategory } = useTerminalStore()
 
   return (
     <div className="flex h-full flex-col bg-white pt-4">
