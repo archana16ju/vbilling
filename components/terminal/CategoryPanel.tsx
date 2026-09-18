@@ -9,20 +9,20 @@ export default function CategoryPanel() {
     <div className="flex h-full flex-col bg-white pt-4">
       <div className="mb-4 px-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+          <h2 className="flex items-center gap-2 text-xl font-bold text-zinc-800">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-black"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
             Categories
           </h2>
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-black">
             ({categories.length})
           </span>
         </div>
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <input
             type="text"
             placeholder="Filter categories..."
-            className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm outline-none placeholder:text-zinc-400 focus:border-gray-600 focus:ring-1 focus:ring-gray-600"
           />
         </div>
       </div>
@@ -38,8 +38,8 @@ export default function CategoryPanel() {
                 onClick={() => setCategory(category.id)}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
                   isActive
-                    ? "bg-indigo-100 font-semibold text-blue-900"
-                    : "bg-white text-slate-700 hover:bg-slate-50"
+                    ? "bg-gray-200 font-semibold text-black"
+                    : "bg-white text-zinc-700 hover:bg-zinc-50"
                 }`}
               >
                 {category.image ? (
@@ -49,7 +49,7 @@ export default function CategoryPanel() {
                     className="h-10 w-10 shrink-0 rounded-full object-cover shadow-sm bg-white"
                   />
                 ) : (
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 font-bold text-slate-400 shadow-sm">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 font-bold text-zinc-400 shadow-sm">
                     {category.name.charAt(0).toUpperCase()}
                   </div>
                 )}

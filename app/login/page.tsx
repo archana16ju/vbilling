@@ -30,7 +30,7 @@ export default function LoginPage() {
               name="username"
               type="text"
               required
-              className="w-full px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-gray-600 focus:border-gray-600 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white"
               placeholder="admin or cashier"
             />
           </div>
@@ -43,7 +43,7 @@ export default function LoginPage() {
               name="password"
               type="password"
               required
-              className="w-full px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg focus:ring-2 focus:ring-gray-600 focus:border-gray-600 bg-white dark:bg-zinc-950 text-gray-900 dark:text-white"
               placeholder="••••••••"
             />
           </div>
@@ -51,7 +51,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-black hover:bg-gray-800 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isPending ? 'Signing in...' : 'Sign in'}
           </button>

@@ -20,17 +20,17 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between bg-white px-8 shadow-sm">
       <div className="flex flex-col">
-        <h2 className="text-xl font-semibold text-slate-800">Dashboard</h2>
-        <span className="text-xs text-slate-500">{currentDate}</span>
+        <h2 className="text-xl font-semibold text-zinc-800">Dashboard</h2>
+        <span className="text-xs text-zinc-500">{currentDate}</span>
       </div>
 
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 text-slate-500">
+        <div className="flex items-center gap-2 text-zinc-500">
           <div className="text-right hidden sm:block">
-            <div className="text-sm font-medium text-slate-700 capitalize">{role || 'Loading...'}</div>
-            <div className="text-xs text-slate-400">Current Session</div>
+            <div className="text-sm font-medium text-zinc-700 capitalize">{role || 'Loading...'}</div>
+            <div className="text-xs text-zinc-400">Current Session</div>
           </div>
-          <UserCircle className="h-8 w-8 text-blue-600" />
+          <UserCircle className="h-8 w-8 text-black" />
         </div>
       </div>
     </header>

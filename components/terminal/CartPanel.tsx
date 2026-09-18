@@ -17,13 +17,13 @@ export default function CartPanel() {
   const total = calculateGlobalTotal(subtotal, discountAmount, taxAmount)
 
   return (
-    <div className="flex h-full flex-col border-l border-slate-200 bg-white">
-      <div className="border-b border-slate-200 p-4">
+    <div className="flex h-full flex-col border-l border-zinc-200 bg-white">
+      <div className="border-b border-zinc-200 p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">Order #POS-4892</h2>
+          <h2 className="text-lg font-bold text-zinc-800">Order #POS-4892</h2>
           <div className="flex gap-2">
             <button 
-              className="flex items-center gap-1 text-sm text-slate-500 hover:text-red-600"
+              className="flex items-center gap-1 text-sm text-zinc-500 hover:text-red-600"
               onClick={clearCart}
             >
               <Trash2 className="h-4 w-4" />
@@ -33,10 +33,10 @@ export default function CartPanel() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-slate-50/50">
+      <div className="flex-1 overflow-y-auto bg-zinc-50/50">
         {cart.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-slate-400">
-            <ShoppingCartIcon className="mb-2 h-12 w-12 text-slate-200" />
+          <div className="flex h-full flex-col items-center justify-center text-zinc-400">
+            <ShoppingCartIcon className="mb-2 h-12 w-12 text-zinc-200" />
             <p>Cart is empty</p>
           </div>
         ) : (
@@ -46,27 +46,27 @@ export default function CartPanel() {
         )}
       </div>
 
-      <div className="border-t border-slate-200 bg-white p-4">
+      <div className="border-t border-zinc-200 bg-white p-4">
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between text-slate-600">
+          <div className="flex justify-between text-zinc-600">
             <span>Subtotal</span>
             <span>₹{subtotal.toFixed(2)}</span>
           </div>
           
-          <div className="flex items-center justify-between text-slate-600">
+          <div className="flex items-center justify-between text-zinc-600">
             <span>Product Discounts</span>
             <span className="text-red-500">-₹{discountAmount.toFixed(2)}</span>
           </div>
 
-          <div className="flex justify-between text-slate-600">
+          <div className="flex justify-between text-zinc-600">
             <span>Tax</span>
             <span>₹{taxAmount.toFixed(2)}</span>
           </div>
           
-          <div className="my-2 border-t border-dashed border-slate-200 pt-2">
+          <div className="my-2 border-t border-dashed border-zinc-200 pt-2">
             <div className="flex items-end justify-between">
-              <span className="text-base font-bold text-slate-900">TOTAL</span>
-              <span className="text-3xl font-black text-blue-600">₹{total.toFixed(2)}</span>
+              <span className="text-base font-bold text-zinc-900">TOTAL</span>
+              <span className="text-3xl font-black text-black">₹{total.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -78,12 +78,12 @@ export default function CartPanel() {
         </div>
 
         <div className="mt-3 flex gap-2">
-          <button className="flex items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-4 py-3 font-medium text-slate-700 hover:bg-slate-50">
+          <button className="flex items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 hover:bg-zinc-50">
             <PauseCircle className="h-5 w-5" />
             Hold
           </button>
           <button 
-            className="flex-1 rounded-lg bg-blue-600 py-3 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex-1 rounded-lg bg-black py-3 font-bold text-white hover:bg-gray-800 disabled:opacity-50"
             onClick={async () => {
               const saleData = {
                 items: cart,
@@ -125,8 +125,8 @@ function PaymentBtn({ icon: Icon, label, active, onClick }: { icon: React.Elemen
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-1 rounded-lg border py-2 transition-colors ${
         active 
-          ? "border-blue-600 bg-blue-50 text-blue-700" 
-          : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50/50"
+          ? "border-black bg-gray-100 text-black" 
+          : "border-zinc-200 bg-white text-zinc-600 hover:border-gray-400 hover:bg-gray-100/50"
       }`}
     >
       <Icon className="h-5 w-5" />

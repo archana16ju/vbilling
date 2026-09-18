@@ -86,8 +86,8 @@ export default function SalesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sales & Bills</h1>
-          <p className="text-slate-500">Overview of your recent transactions.</p>
+          <h1 className="text-2xl font-bold text-zinc-900">Sales & Bills</h1>
+          <p className="text-zinc-500">Overview of your recent transactions.</p>
         </div>
         <button
           onClick={async () => {
@@ -117,9 +117,9 @@ export default function SalesPage() {
         <SummaryCard title="UPI Sales" value={upiSales} icon={Wallet} color="orange" />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+        <table className="w-full text-left text-sm text-zinc-600">
+          <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
             <tr>
               <th className="px-6 py-4 font-medium">Bill ID</th>
               <th className="px-6 py-4 font-medium">Date & Time</th>
@@ -129,21 +129,21 @@ export default function SalesPage() {
               <th className="px-6 py-4 font-medium text-center">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-zinc-200">
             {sales.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                  <Receipt className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+                <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
+                  <Receipt className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
                   No sales recorded yet.
                 </td>
               </tr>
             ) : sales.map((sale) => (
               <tr
                 key={sale.id}
-                className="hover:bg-slate-50 cursor-pointer"
+                className="hover:bg-zinc-50 cursor-pointer"
                 onClick={() => setSelectedSale(sale)}
               >
-                <td className="px-6 py-4 font-medium text-slate-900">{sale.id}</td>
+                <td className="px-6 py-4 font-medium text-zinc-900">{sale.id}</td>
                 <td className="px-6 py-4">
                   {new Date(sale.timestamp).toLocaleDateString()} {new Date(sale.timestamp).toLocaleTimeString()}
                 </td>
@@ -159,13 +159,13 @@ export default function SalesPage() {
                     {sale.paymentMethod}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-right font-bold text-slate-900">
+                <td className="px-6 py-4 text-right font-bold text-zinc-900">
                   ₹{sale.total.toFixed(2)}
                 </td>
                 <td className="px-6 py-4 text-center">
                   <button
                     onClick={(e) => { e.stopPropagation(); handlePrint(sale); }}
-                    className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 hover:bg-blue-100 hover:text-blue-700"
+                    className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-700 hover:bg-gray-200 hover:text-black"
                     title="Print Receipt"
                   >
                     <Printer className="h-3 w-3" /> Print
@@ -190,19 +190,19 @@ export default function SalesPage() {
           >
             {/* Close & Print buttons */}
             <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-semibold text-slate-700">Receipt Preview</span>
+              <span className="text-sm font-semibold text-zinc-700">Receipt Preview</span>
               <div className="flex gap-2">
                 <button
                   onClick={() => handlePrint(selectedSale)}
-                  className="flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  className="flex items-center gap-1 rounded-md bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
                 >
                   <Printer className="h-3.5 w-3.5" /> Print
                 </button>
                 <button
                   onClick={() => setSelectedSale(null)}
-                  className="flex items-center justify-center rounded-md bg-slate-100 p-1.5 hover:bg-slate-200"
+                  className="flex items-center justify-center rounded-md bg-zinc-100 p-1.5 hover:bg-zinc-200"
                 >
-                  <X className="h-4 w-4 text-slate-600" />
+                  <X className="h-4 w-4 text-zinc-600" />
                 </button>
               </div>
             </div>
@@ -265,21 +265,21 @@ export default function SalesPage() {
 
 function SummaryCard({ title, value, icon: Icon, color }: { title: string, value: number, icon: React.ElementType, color: string }) {
   const colorMap: Record<string, string> = {
-    blue: "bg-blue-100 text-blue-600",
+    blue: "bg-gray-200 text-black",
     emerald: "bg-emerald-100 text-emerald-600",
     purple: "bg-purple-100 text-purple-600",
     orange: "bg-orange-100 text-orange-600",
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
       <div className="flex items-center gap-4">
         <div className={`rounded-lg p-3 ${colorMap[color]}`}>
           <Icon className="h-6 w-6" />
         </div>
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className="text-2xl font-bold text-slate-900">₹{value.toFixed(2)}</p>
+          <p className="text-sm font-medium text-zinc-500">{title}</p>
+          <p className="text-2xl font-bold text-zinc-900">₹{value.toFixed(2)}</p>
         </div>
       </div>
     </div>

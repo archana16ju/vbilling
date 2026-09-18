@@ -5,7 +5,7 @@ import CartPanel from "@/components/terminal/CartPanel"
 
 export default function TerminalPage() {
   return (
-    <main className="flex h-screen flex-col bg-slate-100 overflow-hidden">
+    <main className="flex h-screen flex-col bg-zinc-100 overflow-hidden">
       <TerminalHeader />
 
       <div className="flex flex-1 overflow-hidden">
@@ -13,11 +13,11 @@ export default function TerminalPage() {
           <CategoryPanel />
         </div>
 
-        <div className="flex-1 overflow-hidden border-l border-slate-200">
+        <div className="flex-1 overflow-hidden border-l border-zinc-200">
           <ProductPanel />
         </div>
 
-        <div className="w-[380px] shrink-0 border-l border-slate-200 xl:w-[420px]">
+        <div className="w-[380px] shrink-0 border-l border-zinc-200 xl:w-[420px]">
           <CartPanel />
         </div>
       </div>

@@ -1,13 +1,22 @@
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const cookieStore = await cookies()
+  const role = cookieStore.get('auth_role')?.value
+
+  if (role !== 'admin') {
+    redirect('/login')
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-zinc-50">
       <Sidebar />
       <div className="ml-64 flex flex-1 flex-col overflow-hidden">
         <Header />

@@ -108,12 +108,12 @@ export default function ProductsPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Products</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">Products</h1>
         <div className="flex gap-2">
 
           <button 
             onClick={() => handleOpenForm()}
-            className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
             <Plus className="h-4 w-4" /> Add Product
           </button>
@@ -121,67 +121,67 @@ export default function ProductsPage() {
       </div>
 
       {isFormOpen && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-bold text-slate-900">
+        <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-bold text-zinc-900">
             {editingProduct ? "Edit Product" : "New Product"}
           </h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700">Name</label>
-              <input required defaultValue={editingProduct?.name} name="name" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Name</label>
+              <input required defaultValue={editingProduct?.name} name="name" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700">SKU</label>
-              <input required defaultValue={editingProduct?.sku} name="sku" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">SKU</label>
+              <input required defaultValue={editingProduct?.sku} name="sku" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Price (₹)</label>
-              <input required defaultValue={editingProduct?.price} type="number" step="0.01" name="price" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Price (₹)</label>
+              <input required defaultValue={editingProduct?.price} type="number" step="0.01" name="price" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Stock</label>
-              <input required defaultValue={editingProduct?.stock} type="number" name="stock" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Stock</label>
+              <input required defaultValue={editingProduct?.stock} type="number" name="stock" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Unit</label>
-              <input required defaultValue={editingProduct?.unit} name="unit" placeholder="e.g. piece, kg" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900 placeholder:text-slate-400" />
+              <label className="block text-sm font-medium text-zinc-700">Unit</label>
+              <input required defaultValue={editingProduct?.unit} name="unit" placeholder="e.g. piece, kg" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900 placeholder:text-zinc-400" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Step</label>
-              <input required defaultValue={editingProduct?.quantityStep || 1} type="number" step="0.01" name="quantityStep" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Step</label>
+              <input required defaultValue={editingProduct?.quantityStep || 1} type="number" step="0.01" name="quantityStep" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Tax (%)</label>
-              <input required defaultValue={editingProduct?.tax || 0} type="number" step="0.01" name="tax" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Tax (%)</label>
+              <input required defaultValue={editingProduct?.tax || 0} type="number" step="0.01" name="tax" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Discount (%)</label>
-              <input required defaultValue={editingProduct?.discount || 0} type="number" step="0.01" name="discount" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Discount (%)</label>
+              <input required defaultValue={editingProduct?.discount || 0} type="number" step="0.01" name="discount" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700">Category</label>
-              <select defaultValue={editingProduct?.categoryId} name="categoryId" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900">
+              <label className="block text-sm font-medium text-zinc-700">Category</label>
+              <select defaultValue={editingProduct?.categoryId} name="categoryId" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900">
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700">Image</label>
-              <input type="file" accept="image/*" name="imageFile" className="mt-1 w-full rounded border border-slate-300 bg-white p-1.5 text-slate-900 file:mr-4 file:rounded file:border-0 file:bg-slate-100 file:px-4 file:py-1 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200" />
-              {editingProduct?.image && <p className="mt-1 text-xs text-slate-500">Leave blank to keep existing image</p>}
+              <label className="block text-sm font-medium text-zinc-700">Image</label>
+              <input type="file" accept="image/*" name="imageFile" className="mt-1 w-full rounded border border-zinc-300 bg-white p-1.5 text-zinc-900 file:mr-4 file:rounded file:border-0 file:bg-zinc-100 file:px-4 file:py-1 file:text-sm file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200" />
+              {editingProduct?.image && <p className="mt-1 text-xs text-zinc-500">Leave blank to keep existing image</p>}
             </div>
             <div className="col-span-4 mt-2 flex gap-2">
-              <button disabled={isUploading} type="submit" className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
+              <button disabled={isUploading} type="submit" className="rounded bg-black px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50">
                 {isUploading ? "Saving..." : "Save"}
               </button>
-              <button disabled={isUploading} type="button" onClick={handleCloseForm} className="rounded bg-slate-200 px-4 py-2 text-slate-800 hover:bg-slate-300 disabled:opacity-50">Cancel</button>
+              <button disabled={isUploading} type="button" onClick={handleCloseForm} className="rounded bg-zinc-200 px-4 py-2 text-zinc-800 hover:bg-zinc-300 disabled:opacity-50">Cancel</button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <table className="w-full text-left text-sm text-zinc-600">
+          <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
             <tr>
               <th className="px-6 py-4">Product Name</th>
               <th className="px-6 py-4">SKU</th>
@@ -191,29 +191,29 @@ export default function ProductsPage() {
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-zinc-200">
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400">
-                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                <td colSpan={6} className="p-8 text-center text-zinc-400">
+                  <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-black border-t-transparent" />
                   Loading products...
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400">
+                <td colSpan={6} className="p-8 text-center text-zinc-400">
                   <Package className="mx-auto mb-2 h-8 w-8" />
                   No products found. Add some to get started.
                 </td>
               </tr>
             ) : products.map((p) => (
               <tr key={p.id}>
-                <td className="px-6 py-4 font-medium text-slate-900">
+                <td className="px-6 py-4 font-medium text-zinc-900">
                   <div className="flex items-center gap-3">
                     {p.image ? (
                       <img src={p.image} alt="" className="h-8 w-8 rounded-md object-cover" />
                     ) : (
-                      <div className="h-8 w-8 rounded-md bg-slate-100" />
+                      <div className="h-8 w-8 rounded-md bg-zinc-100" />
                     )}
                     {p.name}
                   </div>
@@ -223,7 +223,7 @@ export default function ProductsPage() {
                 <td className="px-6 py-4">₹{p.price}</td>
                 <td className="px-6 py-4">{p.stock} {p.unit}</td>
                 <td className="px-6 py-4 text-right">
-                  <button onClick={() => handleOpenForm(p)} className="mr-3 text-blue-600 hover:text-blue-800">
+                  <button onClick={() => handleOpenForm(p)} className="mr-3 text-black hover:text-black">
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button onClick={async () => { 

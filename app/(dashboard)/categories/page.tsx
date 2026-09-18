@@ -69,65 +69,65 @@ export default function CategoriesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Categories</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">Categories</h1>
         <button 
           onClick={() => handleOpenForm()}
-          className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
           <Plus className="h-4 w-4" /> Add Category
         </button>
       </div>
 
       {isFormOpen && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-bold text-slate-900">
+        <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-bold text-zinc-900">
             {editingCategory ? "Edit Category" : "New Category"}
           </h2>
           <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700">Name</label>
-              <input required defaultValue={editingCategory?.name} name="name" className="mt-1 w-full rounded border border-slate-300 bg-white p-2 text-slate-900" />
+              <label className="block text-sm font-medium text-zinc-700">Name</label>
+              <input required defaultValue={editingCategory?.name} name="name" className="mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-zinc-900" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Image</label>
-              <input type="file" accept="image/*" name="imageFile" className="mt-1 w-full rounded border border-slate-300 bg-white p-1.5 text-slate-900 file:mr-4 file:rounded file:border-0 file:bg-slate-100 file:px-4 file:py-1 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200" />
-              {editingCategory?.image && <p className="mt-1 text-xs text-slate-500">Leave blank to keep existing image</p>}
+              <label className="block text-sm font-medium text-zinc-700">Image</label>
+              <input type="file" accept="image/*" name="imageFile" className="mt-1 w-full rounded border border-zinc-300 bg-white p-1.5 text-zinc-900 file:mr-4 file:rounded file:border-0 file:bg-zinc-100 file:px-4 file:py-1 file:text-sm file:font-semibold file:text-zinc-700 hover:file:bg-zinc-200" />
+              {editingCategory?.image && <p className="mt-1 text-xs text-zinc-500">Leave blank to keep existing image</p>}
             </div>
             <div className="flex gap-2">
-              <button disabled={isUploading} type="submit" className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50">
+              <button disabled={isUploading} type="submit" className="rounded bg-black px-4 py-2 text-white hover:bg-gray-800 disabled:opacity-50">
                 {isUploading ? "Saving..." : "Save"}
               </button>
-              <button disabled={isUploading} type="button" onClick={handleCloseForm} className="rounded bg-slate-200 px-4 py-2 text-slate-800 hover:bg-slate-300 disabled:opacity-50">Cancel</button>
+              <button disabled={isUploading} type="button" onClick={handleCloseForm} className="rounded bg-zinc-200 px-4 py-2 text-zinc-800 hover:bg-zinc-300 disabled:opacity-50">Cancel</button>
             </div>
           </form>
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <table className="w-full text-left text-sm text-zinc-600">
+          <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
             <tr>
               <th className="px-6 py-4">ID</th>
               <th className="px-6 py-4">Category Name</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-zinc-200">
             {categories.map((c) => (
               <tr key={c.id}>
                 <td className="px-6 py-4">{c.id}</td>
-                <td className="px-6 py-4 font-medium text-slate-900">
+                <td className="px-6 py-4 font-medium text-zinc-900">
                   <div className="flex items-center gap-3">
                     {c.image ? (
                       <img src={c.image} alt="" className="h-8 w-8 rounded-full object-cover" />
                     ) : (
-                      <div className="h-8 w-8 rounded-full bg-slate-100" />
+                      <div className="h-8 w-8 rounded-full bg-zinc-100" />
                     )}
                     {c.name}
                   </div>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <button onClick={() => handleOpenForm(c)} className="mr-3 text-blue-600 hover:text-blue-800">
+                  <button onClick={() => handleOpenForm(c)} className="mr-3 text-black hover:text-black">
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button onClick={() => { if(confirm('Delete this category?')) deleteCategory(c.id) }} className="text-red-600 hover:text-red-800">

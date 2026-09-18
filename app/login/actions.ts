@@ -13,7 +13,7 @@ export async function login(prevState: unknown, formData: FormData) {
 
   if (user) {
     const cookieStore = await cookies();
-    cookieStore.set('auth_role', user.role, { secure: true, httpOnly: true });
+    cookieStore.set('auth_role', user.role, { httpOnly: true, path: '/' });
     
     if (user.role === 'admin') {
       redirect('/dashboard');
