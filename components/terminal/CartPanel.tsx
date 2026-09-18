@@ -3,7 +3,7 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 import { calculateSubtotal, calculateDiscount, calculateTotalTax, calculateGlobalTotal } from "@/lib/calculations"
 import CartItem from "./CartItem"
 import { Trash2, CreditCard, Banknote, Wallet, PauseCircle } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { recordSale, getNextBillId } from "@/lib/actions/db"
 
 export default function CartPanel() {
