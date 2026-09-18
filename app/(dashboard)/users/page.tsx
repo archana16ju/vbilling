@@ -42,20 +42,26 @@ export default function UsersPage() {
     
     const formData = new FormData(e.currentTarget)
     
-    let result
-    if (editingUser) {
-      result = await updateUser(editingUser.id, null, formData)
-    } else {
-      result = await createUser(null, formData)
+    try {
+      let result
+      if (editingUser) {
+        result = await updateUser(editingUser.id, null, formData)
+      } else {
+        result = await createUser(null, formData)
+      }
+      
+      if (result?.error) {
+        setError(result.error)
+      } else {
+        handleCloseForm()
+        fetchUsers()
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'An unexpected error occurred')
+    } finally {
+      setIsSaving(false)
     }
-    
-    if (result?.error) {
-      setError(result.error)
-    } else {
-      handleCloseForm()
-      fetchUsers()
-    }
-    setIsSaving(false)
   }
 
   const handleDelete = async (id: string) => {

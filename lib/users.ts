@@ -13,8 +13,13 @@ export interface User {
 }
 
 function getDataFilePath() {
-  const dataDir = path.join(process.cwd(), 'data')
-  return path.join(dataDir, 'users.json')
+  // Use the user's home directory so the file is ALWAYS writable and persists across app updates
+  try {
+    const dataDir = path.join(os.homedir(), '.billing-software')
+    return path.join(dataDir, 'users.json')
+  } catch (err) {
+    return path.join(os.tmpdir(), 'billing-software-users.json')
+  }
 }
 
 const DEFAULT_USERS: User[] = [
@@ -26,16 +31,9 @@ async function ensureDataFile(filePath: string) {
   try {
     await fs.access(filePath)
   } catch (e) {
-    try {
-      await fs.mkdir(path.dirname(filePath), { recursive: true })
-      await fs.writeFile(filePath, JSON.stringify(DEFAULT_USERS, null, 2))
-    } catch (err) {
-      // Fallback to temp directory if process.cwd() is read-only
-      const fallbackPath = path.join(os.tmpdir(), 'billing-software', 'users.json')
-      await fs.mkdir(path.dirname(fallbackPath), { recursive: true })
-      await fs.writeFile(fallbackPath, JSON.stringify(DEFAULT_USERS, null, 2))
-      return fallbackPath
-    }
+    // If it doesn't exist, create it in the writable home directory
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, JSON.stringify(DEFAULT_USERS, null, 2))
   }
   return filePath
 }
@@ -43,8 +41,17 @@ async function ensureDataFile(filePath: string) {
 export async function getUsers(): Promise<User[]> {
   const targetPath = getDataFilePath()
   const filePath = await ensureDataFile(targetPath)
-  const data = await fs.readFile(filePath, 'utf8')
-  return JSON.parse(data)
+  
+  try {
+    const data = await fs.readFile(filePath, 'utf8')
+    if (!data || data.trim() === '') {
+      return DEFAULT_USERS
+    }
+    return JSON.parse(data)
+  } catch (err) {
+    console.error('Failed to read or parse users.json, falling back to defaults:', err)
+    return DEFAULT_USERS
+  }
 }
 
 export async function saveUsers(users: User[]): Promise<void> {
