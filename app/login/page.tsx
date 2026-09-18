@@ -57,11 +57,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-sm text-center text-gray-500 dark:text-zinc-400">
-          <p className="font-semibold mb-1">Default Credentials:</p>
-          <p>Admin: admin / admin</p>
-          <p>Cashier: cashier / cashier123</p>
-        </div>
+
       </div>
     </div>
   );
