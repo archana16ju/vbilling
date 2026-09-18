@@ -6,6 +6,7 @@ import { PRODUCTS, CATEGORIES } from '@/lib/mock-data';
 export async function GET() {
   try {
     const client = await clientPromise;
+    if (!client) throw new Error('MongoDB is offline/disconnected');
     const db = client.db('billing_software');
     
     // Clear existing just in case (if user wants a fresh start)
