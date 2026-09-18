@@ -1,9 +1,17 @@
 'use client'
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Search } from "lucide-react"
+import { useState, useEffect } from "react"
 
 export default function CategoryPanel() {
-  const { categories = [], selectedCategoryId, setCategory } = useTerminalStore()
+  const { categories, selectedCategoryId, setCategory } = useTerminalStore()
+  
+  const safeCategories = categories || [];
+  
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  if (!mounted) return <div className="flex h-full flex-col bg-white pt-4" />
 
   return (
     <div className="flex h-full flex-col bg-white pt-4">
@@ -14,7 +22,7 @@ export default function CategoryPanel() {
             Categories
           </h2>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-black">
-            ({categories.length})
+            ({safeCategories.length})
           </span>
         </div>
         <div className="relative">
@@ -29,7 +37,7 @@ export default function CategoryPanel() {
       
       <div className="flex-1 overflow-y-auto no-scrollbar px-2 pb-4">
         <div className="flex flex-col gap-1">
-          {categories.map((category) => {
+          {safeCategories.map((category) => {
             if (!category) return null;
             const isActive = selectedCategoryId === category.id
             

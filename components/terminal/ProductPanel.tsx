@@ -2,20 +2,31 @@
 import { useTerminalStore } from "@/store/useTerminalStore"
 import ProductCard from "./ProductCard"
 import { Search, SlidersHorizontal } from "lucide-react"
+import { useState, useEffect } from "react"
 
 export default function ProductPanel() {
-  const { products = [], selectedCategoryId = 'all', categories = [], searchQuery = '', setSearchQuery } = useTerminalStore()
+  const { products, selectedCategoryId = 'all', categories, searchQuery, setSearchQuery } = useTerminalStore()
   
-  const selectedCategory = categories.find(c => c?.id === selectedCategoryId)
+  const safeProducts = products || [];
+  const safeCategories = categories || [];
   
-  const filteredProducts = products.filter(p => {
+  const selectedCategory = safeCategories.find(c => c?.id === selectedCategoryId)
+  
+  const safeSearchQuery = (searchQuery || '').toLowerCase()
+  
+  const filteredProducts = safeProducts.filter(p => {
     if (!p) return false;
     const matchesCategory = selectedCategoryId === 'all' || p.categoryId === selectedCategoryId
-    const matchesSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (p.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (p.barcode || '').includes(searchQuery)
+    const matchesSearch = (p.name || '').toLowerCase().includes(safeSearchQuery) || 
+                          (p.sku || '').toLowerCase().includes(safeSearchQuery) ||
+                          (p.barcode || '').includes(searchQuery || '')
     return matchesCategory && matchesSearch
   })
+  
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  if (!mounted) return <div className="flex h-full flex-col bg-white" />
 
   return (
     <div className="flex h-full flex-col bg-white">

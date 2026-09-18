@@ -4,6 +4,9 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 
 export default function ProductCard({ product }: { product: Product }) {
   const addToCart = useTerminalStore((state) => state.addToCart)
+  
+  if (!product) return null;
+  const productName = product.name || 'Unknown Product';
 
   return (
     <div className="grid grid-cols-12 items-center gap-4 border-b border-zinc-100 bg-white px-6 py-4 transition-colors hover:bg-zinc-50">
@@ -11,22 +14,22 @@ export default function ProductCard({ product }: { product: Product }) {
         {product.image ? (
           <img 
             src={product.image} 
-            alt={product.name}
+            alt={productName}
             className="h-16 w-16 shrink-0 rounded-xl object-cover shadow-sm bg-white"
           />
         ) : (
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-zinc-100 font-bold text-zinc-400 shadow-sm">
-            {product.name.charAt(0).toUpperCase()}
+            {productName.charAt(0).toUpperCase()}
           </div>
         )}
         <div className="flex flex-col">
-          <span className="font-bold text-zinc-900">{product.name}</span>
-          <span className="text-xs text-zinc-500">SKU: {product.sku}</span>
+          <span className="font-bold text-zinc-900">{productName}</span>
+          <span className="text-xs text-zinc-500">SKU: {product.sku || 'N/A'}</span>
         </div>
       </div>
       
       <div className="col-span-2 text-right">
-        <span className="text-lg font-bold text-zinc-800">₹{product.price}</span>
+        <span className="text-lg font-bold text-zinc-800">₹{product.price || 0}</span>
       </div>
       
       <div className="col-span-3 flex justify-end">

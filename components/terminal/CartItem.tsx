@@ -5,7 +5,10 @@ import { Trash2, Minus, Plus } from "lucide-react"
 import { useState, useEffect } from "react"
 
 export default function CartItem({ item }: { item: CartItemData }) {
-  const { product, quantity } = item
+  if (!item || !item.product) return null;
+  const product = item.product;
+  const quantity = item.quantity ?? 1;
+
   const updateQuantity = useTerminalStore((state) => state.updateQuantity)
   const removeFromCart = useTerminalStore((state) => state.removeFromCart)
   
@@ -13,8 +16,8 @@ export default function CartItem({ item }: { item: CartItemData }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setInputValue(quantity.toString())
-  }, [quantity])
+    setInputValue((item.quantity ?? 1).toString())
+  }, [item.quantity])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value)
@@ -51,7 +54,7 @@ export default function CartItem({ item }: { item: CartItemData }) {
         </div>
         <div className="mt-1 flex items-center justify-between">
           <span className="text-xs text-zinc-500">
-            {product.unit} × ₹{product.price}
+            {product.unit || 'pc'} × ₹{product.price || 0}
           </span>
           <span className="font-semibold text-zinc-900">₹{lineSubtotal.toFixed(2)}</span>
         </div>
@@ -60,7 +63,7 @@ export default function CartItem({ item }: { item: CartItemData }) {
           <div className="flex items-center rounded-md border border-zinc-200">
             <button 
               className="flex h-7 w-7 items-center justify-center rounded-l-md bg-zinc-50 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200"
-              onClick={() => updateQuantity(product.id, quantity - product.quantityStep)}
+              onClick={() => updateQuantity(product.id, Math.max(0, quantity - (product.quantityStep || 1)))}
             >
               <Minus className="h-3 w-3" />
             </button>
@@ -74,12 +77,12 @@ export default function CartItem({ item }: { item: CartItemData }) {
             />
             <button 
               className="flex h-7 w-7 items-center justify-center rounded-r-md bg-zinc-50 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200"
-              onClick={() => updateQuantity(product.id, quantity + product.quantityStep)}
+              onClick={() => updateQuantity(product.id, quantity + (product.quantityStep || 1))}
             >
               <Plus className="h-3 w-3" />
             </button>
           </div>
-          <span className="text-xs text-zinc-500">{product.unit}</span>
+          <span className="text-xs text-zinc-500">{product.unit || 'pc'}</span>
         </div>
       </div>
     </div>
