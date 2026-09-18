@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware'
 import { Product, PRODUCTS, Category, CATEGORIES } from '@/lib/mock-data'
 import { CartItemData } from '@/lib/calculations'
 
+export type HeldCart = {
+  id: string
+  items: CartItemData[]
+  timestamp: number
+}
+
 export type Sale = {
   id: string
   items: CartItemData[]
@@ -23,9 +29,14 @@ type TerminalState = {
   cart: CartItemData[]
   discountValue: number
   isDiscountPercentage: boolean
+  heldCarts: HeldCart[]
   
   setCategory: (id: string) => void
   setSearchQuery: (query: string) => void
+  
+  holdCart: () => void
+  recallCart: (id: string) => void
+  deleteHeldCart: (id: string) => void
   
   addCategory: (category: Category) => void
   editCategory: (id: string, category: Partial<Category>) => void
@@ -62,12 +73,41 @@ export const useTerminalStore = create<TerminalState>()(
   discountValue: 0,
   isDiscountPercentage: false,
   printerType: 'browser',
+  heldCarts: [],
 
   setPrinterType: (type) => set({ printerType: type }),
 
   setCategory: (id) => set({ selectedCategoryId: id }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   
+  holdCart: () => set((state) => {
+    if (state.cart.length === 0) return state;
+    const newHeldCart: HeldCart = {
+      id: "HOLD-" + Date.now(),
+      items: state.cart,
+      timestamp: Date.now()
+    };
+    return {
+      heldCarts: [newHeldCart, ...state.heldCarts],
+      cart: [],
+      discountValue: 0
+    }
+  }),
+  
+  recallCart: (id) => set((state) => {
+    const held = state.heldCarts.find(h => h.id === id);
+    if (!held) return state;
+    return {
+      cart: held.items,
+      heldCarts: state.heldCarts.filter(h => h.id !== id),
+      discountValue: 0
+    }
+  }),
+  
+  deleteHeldCart: (id) => set((state) => ({
+    heldCarts: state.heldCarts.filter(h => h.id !== id)
+  })),
+
   addCategory: (category) => set((state) => ({ categories: [...state.categories, category] })),
   editCategory: (id, categoryUpdate) => set((state) => ({
     categories: state.categories.map(c => c.id === id ? { ...c, ...categoryUpdate } : c)

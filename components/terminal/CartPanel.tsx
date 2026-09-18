@@ -7,8 +7,13 @@ import { useState } from "react"
 import { recordSale, getNextBillId } from "@/lib/actions/db"
 
 export default function CartPanel() {
-  const { cart, clearCart, completeSale, discountValue, isDiscountPercentage, setDiscount, setProducts } = useTerminalStore()
+  const { 
+    cart, clearCart, completeSale, discountValue, isDiscountPercentage, 
+    setDiscount, setProducts, heldCarts, holdCart, recallCart, deleteHeldCart 
+  } = useTerminalStore()
+  
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash")
+  const [showHeldCarts, setShowHeldCarts] = useState(false)
 
   const subtotal = calculateSubtotal(cart)
   const discountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage)
@@ -77,11 +82,61 @@ export default function CartPanel() {
           <PaymentBtn icon={Wallet} label="UPI" active={paymentMethod === "UPI"} onClick={() => setPaymentMethod("UPI")} />
         </div>
 
-        <div className="mt-3 flex gap-2">
-          <button className="flex items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 font-medium text-zinc-700 hover:bg-zinc-50">
+        <div className="mt-3 flex gap-2 relative">
+          <button 
+            className={`flex items-center justify-center gap-1 rounded-lg border px-4 py-3 font-medium transition-colors ${
+              cart.length > 0
+                ? "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                : heldCarts.length > 0
+                ? "border-amber-500 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                : "border-zinc-300 bg-zinc-100 text-zinc-400 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (cart.length > 0) {
+                holdCart()
+              } else if (heldCarts.length > 0) {
+                setShowHeldCarts(!showHeldCarts)
+              }
+            }}
+            disabled={cart.length === 0 && heldCarts.length === 0}
+          >
             <PauseCircle className="h-5 w-5" />
-            Hold
+            {cart.length > 0 ? "Hold" : `Recall (${heldCarts.length})`}
           </button>
+          
+          {showHeldCarts && heldCarts.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl z-10">
+              <div className="mb-2 flex items-center justify-between px-2 text-sm font-bold text-zinc-800">
+                Held Carts
+                <button onClick={() => setShowHeldCarts(false)} className="text-zinc-400 hover:text-zinc-600">Ã—</button>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {heldCarts.map((h, idx) => (
+                  <div key={h.id} className="flex flex-col gap-1 rounded border border-zinc-100 p-2 hover:bg-zinc-50">
+                    <div className="flex justify-between text-xs text-zinc-500">
+                      <span>{new Date(h.timestamp).toLocaleTimeString()}</span>
+                      <span>{h.items.length} items</span>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <button 
+                        onClick={() => { recallCart(h.id); setShowHeldCarts(false); }}
+                        className="rounded bg-black px-3 py-1 text-xs font-medium text-white hover:bg-gray-800"
+                      >
+                        Recall
+                      </button>
+                      <button 
+                        onClick={() => deleteHeldCart(h.id)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button 
             className="flex-1 rounded-lg bg-black py-3 font-bold text-white hover:bg-gray-800 disabled:opacity-50"
             onClick={async () => {
