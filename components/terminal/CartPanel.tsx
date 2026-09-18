@@ -9,7 +9,7 @@ import { recordSale, getNextBillId } from "@/lib/actions/db"
 export default function CartPanel() {
   const { 
     cart, clearCart, completeSale, discountValue, isDiscountPercentage, 
-    setDiscount, setProducts, heldCarts, holdCart, recallCart, deleteHeldCart 
+    setDiscount, setProducts, heldCarts = [], holdCart, recallCart, deleteHeldCart 
   } = useTerminalStore()
   
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash")

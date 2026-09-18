@@ -88,24 +88,25 @@ export const useTerminalStore = create<TerminalState>()(
       timestamp: Date.now()
     };
     return {
-      heldCarts: [newHeldCart, ...state.heldCarts],
+      heldCarts: [newHeldCart, ...(state.heldCarts || [])],
       cart: [],
       discountValue: 0
     }
   }),
   
   recallCart: (id) => set((state) => {
-    const held = state.heldCarts.find(h => h.id === id);
+    const safeHeldCarts = state.heldCarts || [];
+    const held = safeHeldCarts.find(h => h.id === id);
     if (!held) return state;
     return {
       cart: held.items,
-      heldCarts: state.heldCarts.filter(h => h.id !== id),
+      heldCarts: safeHeldCarts.filter(h => h.id !== id),
       discountValue: 0
     }
   }),
   
   deleteHeldCart: (id) => set((state) => ({
-    heldCarts: state.heldCarts.filter(h => h.id !== id)
+    heldCarts: (state.heldCarts || []).filter(h => h.id !== id)
   })),
 
   addCategory: (category) => set((state) => ({ categories: [...state.categories, category] })),
