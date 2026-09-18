@@ -27,7 +27,7 @@ export default function CategoryPanel() {
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-2 pb-4">
         <div className="flex flex-col gap-1">
           {categories.map((category) => {
             const isActive = selectedCategoryId === category.id

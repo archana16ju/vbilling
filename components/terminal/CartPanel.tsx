@@ -2,7 +2,7 @@
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { calculateSubtotal, calculateDiscount, calculateTotalTax, calculateGlobalTotal } from "@/lib/calculations"
 import CartItem from "./CartItem"
-import { Trash2, CreditCard, Banknote, Wallet, PauseCircle } from "lucide-react"
+import { Trash2, CreditCard, Banknote, Wallet, PauseCircle, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { recordSale, getNextBillId } from "@/lib/actions/db"
 
@@ -47,7 +47,7 @@ export default function CartPanel() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-zinc-50/50">
+      <div className="flex-1 overflow-y-auto no-scrollbar bg-zinc-50/50">
         {cart.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-zinc-400">
             <ShoppingCartIcon className="mb-2 h-12 w-12 text-zinc-200" />
@@ -116,15 +116,17 @@ export default function CartPanel() {
           {showHeldCarts && heldCarts.length > 0 && (
             <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl z-10">
               <div className="mb-2 flex items-center justify-between px-2 text-sm font-bold text-zinc-800">
-                Held Carts
-                <button onClick={() => setShowHeldCarts(false)} className="text-zinc-400 hover:text-zinc-600">Ã—</button>
+                Hold Carts
+                <button onClick={() => setShowHeldCarts(false)} className="text-zinc-400 hover:text-zinc-600">
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-2">
+              <div className="max-h-48 overflow-y-auto space-y-2 no-scrollbar">
                 {heldCarts.map((h, idx) => (
                   <div key={h.id} className="flex flex-col gap-1 rounded border border-zinc-100 p-2 hover:bg-zinc-50">
                     <div className="flex justify-between text-xs text-zinc-500">
                       <span>{new Date(h.timestamp).toLocaleTimeString()}</span>
-                      <span>{h.items.length} items</span>
+                      <span className="font-semibold text-zinc-700">₹{calculateSubtotal(h.items).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between mt-1">
                       <button 

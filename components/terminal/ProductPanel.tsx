@@ -60,7 +60,7 @@ export default function ProductPanel() {
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto no-scrollbar">
         <div className="grid grid-cols-12 gap-4 border-y border-zinc-100 bg-gray-100/30 px-6 py-3 text-xs font-bold tracking-wider text-zinc-500 uppercase">
           <div className="col-span-7">PRODUCT</div>
           <div className="col-span-2 text-right">PRICE</div>
