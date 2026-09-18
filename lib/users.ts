@@ -31,9 +31,20 @@ async function ensureDataFile(filePath: string) {
   try {
     await fs.access(filePath)
   } catch (e) {
-    // If it doesn't exist, create it in the writable home directory
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(DEFAULT_USERS, null, 2))
+    // If it doesn't exist, create it
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+      await fs.writeFile(filePath, JSON.stringify(DEFAULT_USERS, null, 2))
+    } catch (writeErr) {
+      console.error('Failed to write to primary path, using tmpdir:', writeErr)
+      const fallbackPath = path.join(os.tmpdir(), 'billing-software-users.json')
+      try {
+        await fs.access(fallbackPath)
+      } catch (fallbackAccessErr) {
+        await fs.writeFile(fallbackPath, JSON.stringify(DEFAULT_USERS, null, 2))
+      }
+      return fallbackPath
+    }
   }
   return filePath
 }

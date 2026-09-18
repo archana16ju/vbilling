@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { getAllUsers, createUser, updateUser, deleteUser } from '@/app/login/actions'
-import { User } from '@/lib/users'
+import type { User } from '@/lib/users'
 import { UserPlus, Trash2, Shield, User as UserIcon, Edit2 } from 'lucide-react'
 
 export default function UsersPage() {
