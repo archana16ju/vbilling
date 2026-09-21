@@ -3,6 +3,7 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 import { Category } from "@/lib/mock-data"
 import { Tags, Plus, Edit2, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { createCategory, updateCategory, deleteCategory as deleteCategoryDb } from "@/lib/actions/db"
 
 export default function CategoriesPage() {
   const { categories, addCategory, editCategory, deleteCategory } = useTerminalStore()
@@ -48,22 +49,24 @@ export default function CategoriesPage() {
       }
     }
 
-    if (editingCategory) {
-      editCategory(editingCategory.id, {
-        name: formData.get("name") as string,
-        image: imageUrl,
-      })
-    } else {
-      const newCategory = {
-        id: "c" + Date.now(),
-        name: formData.get("name") as string,
-        image: imageUrl,
+      if (editingCategory) {
+        const updatePayload = {
+          name: formData.get("name") as string,
+          image: imageUrl,
+        };
+        await updateCategory(editingCategory.id, updatePayload);
+        editCategory(editingCategory.id, updatePayload);
+      } else {
+        const newCategoryPayload = {
+          name: formData.get("name") as string,
+          image: imageUrl,
+        };
+        const created = await createCategory(newCategoryPayload);
+        addCategory(created);
       }
-      addCategory(newCategory)
-    }
-    
-    handleCloseForm()
-    setIsUploading(false)
+      
+      handleCloseForm()
+      setIsUploading(false)
   }
 
   return (
@@ -130,7 +133,12 @@ export default function CategoriesPage() {
                   <button onClick={() => handleOpenForm(c)} className="mr-3 text-black hover:text-black">
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => { if(confirm('Delete this category?')) deleteCategory(c.id) }} className="text-red-600 hover:text-red-800">
+                  <button onClick={async () => { 
+                    if(confirm('Delete this category?')) {
+                      await deleteCategoryDb(c.id);
+                      deleteCategory(c.id);
+                    }
+                  }} className="text-red-600 hover:text-red-800">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </td>
