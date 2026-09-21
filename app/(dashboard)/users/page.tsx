@@ -12,8 +12,12 @@ export default function UsersPage() {
   const [error, setError] = useState('')
 
   const fetchUsers = async () => {
-    const data = await getAllUsers()
-    setUsers(data)
+    try {
+      const data = await getAllUsers()
+      setUsers(data)
+    } catch (err: any) {
+      console.error('FETCH USERS ERROR:', err.message || err)
+    }
   }
 
   useEffect(() => {

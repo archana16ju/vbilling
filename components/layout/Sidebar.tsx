@@ -4,14 +4,18 @@ import { usePathname } from "next/navigation"
 import { LayoutDashboard, Monitor, Package, Tags, LogOut, UserCircle, Users, IndianRupee, Settings as SettingsIcon } from "lucide-react"
 
 import { useState, useEffect } from "react"
-import { getUserRole, logout } from "@/app/login/actions"
+import { getUserRole, logout, testAction } from "@/app/login/actions"
 
 export default function Sidebar() {
   const pathname = usePathname()
   const [role, setRole] = useState<string | null>(null)
 
   useEffect(() => {
-    getUserRole().then(r => setRole(r ?? null))
+    testAction().then(res => console.log('TEST ACTION RESULT:', res)).catch(err => console.error('TEST ACTION ERROR:', err));
+    getUserRole().then(r => setRole(r ?? null)).catch(err => {
+      console.error('SIDEBAR ROLE ERROR:', err)
+      setRole(null)
+    })
   }, [])
 
   const navItems = [

@@ -6,14 +6,15 @@ import { getUserRole } from "@/app/login/actions"
 export default function Header() {
   const [role, setRole] = useState<string | null>(null)
 
-  const currentDate = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
+  const [currentDate, setCurrentDate] = useState('')
 
   useEffect(() => {
+    setCurrentDate(new Date().toLocaleDateString('en-IN', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }))
     getUserRole().then(r => setRole(r ?? null))
   }, [])
 

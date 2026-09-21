@@ -1,4 +1,5 @@
 'use server';
+export async function testAction() { return 'HELLO WORLD'; }
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -37,9 +38,16 @@ export async function getUserRole() {
 }
 
 export async function getAllUsers() {
-  const users = await getUsers();
-  // Don't send passwords to the client
-  return users.map(({ password, ...user }) => user);
+  try {
+    const users = await getUsers();
+    console.log('getAllUsers length:', users?.length);
+    if (!users) return [];
+    // Don't send passwords to the client
+    return users.map(({ password, ...user }) => user);
+  } catch(e) {
+    console.error('getAllUsers ERROR:', e);
+    return [];
+  }
 }
 
 export async function createUser(prevState: unknown, formData: FormData) {
