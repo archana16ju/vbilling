@@ -4,7 +4,13 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
-import Database from 'better-sqlite3';
+
+let Database: any = null;
+try {
+  Database = require('better-sqlite3');
+} catch (e) {
+  console.warn("Native better-sqlite3 failed to load. Offline SQLite will be disabled.");
+}
 
 const CONFIG_FILE = path.join(os.homedir(), '.billing-software', 'storage-config.json');
 
@@ -16,6 +22,16 @@ let dbInstance: any = null;
 
 function getDbInstance(location: string) {
   if (dbInstance) return dbInstance;
+  if (!Database) {
+    // Graceful fallback to prevent crashes if native module is broken
+    return {
+      pragma: () => {},
+      exec: () => {},
+      prepare: () => ({ all: () => [], get: () => ({ c: 0 }), run: () => {} }),
+      transaction: (fn: any) => fn
+    };
+  }
+  
   const dbDir = path.join(location, 'database');
   if (!fsSync.existsSync(dbDir)) {
     fsSync.mkdirSync(dbDir, { recursive: true });
