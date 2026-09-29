@@ -36,8 +36,20 @@ function getDbInstance(location: string) {
   if (!fsSync.existsSync(dbDir)) {
     fsSync.mkdirSync(dbDir, { recursive: true });
   }
-  dbInstance = new Database(path.join(dbDir, 'local_storage.db'));
-  dbInstance.pragma('journal_mode = WAL');
+  try {
+    dbInstance = new Database(path.join(dbDir, 'local_storage.db'));
+    dbInstance.pragma('journal_mode = WAL');
+  } catch (e) {
+    console.error("Failed to initialize Database:", e);
+    Database = null; // Disable and return mock
+    return {
+      pragma: () => {},
+      exec: () => {},
+      prepare: () => ({ all: () => [], get: () => ({ c: 0 }), run: () => {} }),
+      transaction: (fn: any) => fn
+    };
+  }
+  
   dbInstance.exec(`
     CREATE TABLE IF NOT EXISTS offline_bills (
       id TEXT PRIMARY KEY,
