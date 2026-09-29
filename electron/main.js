@@ -107,6 +107,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true,
   });
@@ -127,6 +128,63 @@ async function createWindow() {
     mainWindow = null;
   });
 }
+
+// --- Auto Updater Setup ---
+const { autoUpdater } = require('electron-updater');
+const { ipcMain } = require('electron');
+
+// Configure auto updater
+autoUpdater.autoDownload = false; // We want the user to trigger download
+autoUpdater.autoInstallOnAppQuit = false;
+
+// IPC Listeners from React
+ipcMain.on('check-for-updates', () => {
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(err => {
+      if (mainWindow) mainWindow.webContents.send('update-error', err.message);
+    });
+  } else {
+    // Fake response for dev mode
+    setTimeout(() => {
+      if (mainWindow) mainWindow.webContents.send('update-not-available');
+    }, 1000);
+  }
+});
+
+ipcMain.on('download-update', () => {
+  if (app.isPackaged) {
+    autoUpdater.downloadUpdate().catch(err => {
+      if (mainWindow) mainWindow.webContents.send('update-error', err.message);
+    });
+  }
+});
+
+ipcMain.on('install-update', () => {
+  if (app.isPackaged) {
+    autoUpdater.quitAndInstall(false, true);
+  }
+});
+
+// AutoUpdater Event Forwarding
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow) mainWindow.webContents.send('update-available', info);
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  if (mainWindow) mainWindow.webContents.send('update-not-available', info);
+});
+
+autoUpdater.on('error', (err) => {
+  if (mainWindow) mainWindow.webContents.send('update-error', err.message);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  if (mainWindow) mainWindow.webContents.send('download-progress', progressObj);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow) mainWindow.webContents.send('update-downloaded', info);
+});
 
 app.on('ready', createWindow);
 

@@ -5,14 +5,17 @@ import { useState } from "react"
 import { clearAllSales } from "@/lib/actions/db"
 
 export default function SalesPage() {
-  const { sales, clearSales } = useTerminalStore()
+  const { sales, offlineQueue = [], clearSales } = useTerminalStore()
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [resetting, setResetting] = useState(false)
 
-  const totalSales = sales.reduce((sum, sale) => sum + sale.total, 0)
-  const cashSales = sales.filter(s => s.paymentMethod === 'Cash').reduce((sum, sale) => sum + sale.total, 0)
-  const cardSales = sales.filter(s => s.paymentMethod === 'Card').reduce((sum, sale) => sum + sale.total, 0)
-  const upiSales = sales.filter(s => s.paymentMethod === 'UPI').reduce((sum, sale) => sum + sale.total, 0)
+  // Use only sales, because offline bills are already pushed to sales with syncStatus = 'PENDING_SYNC'
+  const allSales = [...sales].sort((a, b) => b.timestamp - a.timestamp)
+
+  const totalSales = allSales.reduce((sum, sale) => sum + sale.total, 0)
+  const cashSales = allSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, sale) => sum + sale.total, 0)
+  const cardSales = allSales.filter(s => s.paymentMethod === 'Card').reduce((sum, sale) => sum + sale.total, 0)
+  const upiSales = allSales.filter(s => s.paymentMethod === 'UPI').reduce((sum, sale) => sum + sale.total, 0)
 
   const handlePrint = (sale: Sale) => {
     const saleDate = new Date(sale.timestamp)
@@ -102,7 +105,7 @@ export default function SalesPage() {
               setResetting(false);
             }
           }}
-          disabled={resetting || sales.length === 0}
+          disabled={resetting || allSales.length === 0}
           className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-40 border border-red-200"
         >
           <Trash2 className="h-4 w-4" />
@@ -125,21 +128,22 @@ export default function SalesPage() {
               <th className="px-6 py-4 font-medium">Date & Time</th>
               <th className="px-6 py-4 font-medium">Items</th>
               <th className="px-6 py-4 font-medium">Payment Method</th>
+              <th className="px-6 py-4 font-medium">Status</th>
               <th className="px-6 py-4 font-medium text-right">Total Amount</th>
               <th className="px-6 py-4 font-medium text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200">
-            {sales.length === 0 ? (
+            {allSales.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
+                <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
                   <Receipt className="mx-auto mb-3 h-8 w-8 text-zinc-300" />
                   No sales recorded yet.
                 </td>
               </tr>
-            ) : sales.map((sale) => (
+            ) : allSales.map((sale, index) => (
               <tr
-                key={sale.id}
+                key={`${sale.id}-${index}`}
                 className="hover:bg-zinc-50 cursor-pointer"
                 onClick={() => setSelectedSale(sale)}
               >
@@ -158,6 +162,17 @@ export default function SalesPage() {
                   }`}>
                     {sale.paymentMethod}
                   </span>
+                </td>
+                <td className="px-6 py-4">
+                  {sale.syncStatus === 'PENDING_SYNC' ? (
+                    <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+                      PENDING
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                      COMPLETED
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-right font-bold text-zinc-900">
                   ₹{sale.total.toFixed(2)}
@@ -184,7 +199,7 @@ export default function SalesPage() {
           onClick={() => setSelectedSale(null)}
         >
           <div
-            className="relative bg-white rounded-xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto"
+            className="relative bg-white rounded-xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto no-scrollbar"
             style={{ width: '340px' }}
             onClick={(e) => e.stopPropagation()}
           >

@@ -1,28 +1,64 @@
 import { NextRequest, NextResponse } from "next/server"
 import { writeFile } from "fs/promises"
 import path from "path"
+import { GridFSBucket } from 'mongodb'
+import { getDb } from '@/lib/actions/db'
+import { ensureStorageDirectories, getStoragePaths } from '@/lib/storage'
+import { Readable } from 'stream'
+import sharp from 'sharp'
 
 export async function POST(request: NextRequest) {
   try {
     const data = await request.formData()
     const file: File | null = data.get("file") as unknown as File
+    const type = data.get("type") as string || "product"
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
     const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    const originalBuffer = Buffer.from(bytes)
+
+    // Compress using sharp to WebP
+    const buffer = await sharp(originalBuffer)
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
 
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-    const ext = path.extname(file.name)
-    const filename = `${uniqueSuffix}${ext}`
+    const filename = `${type}-${uniqueSuffix}.webp`
     
-    // Save to public/media
-    const filepath = path.join(process.cwd(), "public", "media", filename)
+    // Save to local cache FIRST
+    const paths = await getStoragePaths();
+    const filepath = type === 'category' 
+      ? path.join(paths.categoryImages, filename)
+      : path.join(paths.productImages, filename);
+      
     await writeFile(filepath, buffer)
 
-    return NextResponse.json({ url: `/media/${filename}` })
+    // Try Upload to GridFS
+    try {
+      const db = await getDb();
+      const bucket = new GridFSBucket(db, { bucketName: 'images' });
+      
+      const uploadStream = bucket.openUploadStream(filename, {
+        metadata: { contentType: 'image/webp' }
+      });
+      
+      await new Promise<void>((resolve, reject) => {
+        const readable = new Readable();
+        readable.push(buffer);
+        readable.push(null);
+        readable.pipe(uploadStream)
+          .on('error', reject)
+          .on('finish', resolve);
+      });
+    } catch (dbErr) {
+      console.warn("MongoDB upload failed, relying on local cache", dbErr);
+    }
+
+    return NextResponse.json({ url: `/api/media/${filename}` })
   } catch (e) {
     console.error("Upload failed", e)
     return NextResponse.json({ error: "Upload failed" }, { status: 500 })

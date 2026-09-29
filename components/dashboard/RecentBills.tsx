@@ -13,7 +13,7 @@ export default function RecentBills() {
       <div className="border-b border-zinc-200 p-6">
         <h2 className="text-lg font-bold text-zinc-800">Recent Bills</h2>
       </div>
-      <div className="overflow-x-auto p-0">
+      <div className="overflow-x-auto p-0 no-scrollbar">
         <table className="w-full text-left text-sm text-zinc-600">
           <thead className="bg-zinc-50 text-xs uppercase text-zinc-500">
             <tr>

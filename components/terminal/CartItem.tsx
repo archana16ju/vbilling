@@ -1,5 +1,5 @@
 'use client'
-import { CartItemData, calculateItemSubtotal } from "@/lib/calculations"
+import { CartItemData, calculateItemSubtotal, calculateItemDiscount } from "@/lib/calculations"
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Trash2, Minus, Plus } from "lucide-react"
 import { useState, useEffect } from "react"
@@ -53,10 +53,20 @@ export default function CartItem({ item }: { item: CartItemData }) {
           </button>
         </div>
         <div className="mt-1 flex items-center justify-between">
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-zinc-500 flex items-center gap-1">
             {product.unit || 'pc'} × ₹{product.price || 0}
+            {(product.discount || 0) > 0 && (
+              <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded font-medium">-{(product.discount || 0)}%</span>
+            )}
           </span>
-          <span className="font-semibold text-zinc-900">₹{lineSubtotal.toFixed(2)}</span>
+          <div className="flex flex-col items-end">
+            {(product.discount || 0) > 0 && (
+              <span className="text-[10px] text-zinc-400 line-through">₹{lineSubtotal.toFixed(2)}</span>
+            )}
+            <span className="font-semibold text-zinc-900">
+              ₹{(lineSubtotal - calculateItemDiscount(item)).toFixed(2)}
+            </span>
+          </div>
         </div>
         
         <div className="mt-2 flex items-center gap-2">

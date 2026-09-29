@@ -2,10 +2,10 @@
 import { useTerminalStore } from "@/store/useTerminalStore"
 import ProductCard from "./ProductCard"
 import { Search, SlidersHorizontal } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 
 export default function ProductPanel() {
-  const { products, selectedCategoryId = 'all', categories, searchQuery, setSearchQuery } = useTerminalStore()
+  const { products, selectedCategoryId = 'all', categories, searchQuery, setSearchQuery, activeShortcuts } = useTerminalStore()
   
   const safeProducts = products || [];
   const safeCategories = categories || [];
@@ -24,7 +24,39 @@ export default function ProductPanel() {
   })
   
   const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Create string representation of the key event for matching
+      const parts = [];
+      if (e.ctrlKey) parts.push('Ctrl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+      
+      // Normalize key
+      let key = e.key;
+      if (key === ' ') key = 'Space';
+      if (key.length === 1) key = key.toUpperCase(); // Handle letters
+      parts.push(key);
+      const pressedShortcut = parts.join(' + ');
+      
+      const searchKey = activeShortcuts.searchProduct || 'F1';
+      const cancelKey = activeShortcuts.cancel || 'Escape';
+
+      if (pressedShortcut === searchKey) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      } else if (pressedShortcut === cancelKey) {
+        setSearchQuery('')
+        searchInputRef.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setSearchQuery])
 
   if (!mounted) return <div className="flex h-full flex-col bg-white" />
 
@@ -46,6 +78,7 @@ export default function ProductPanel() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 7v10"/><path d="M12 7v10"/><path d="M16 7v10"/></svg>
             </div>
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Scan barcode, enter SKU or search item title..."
               value={searchQuery}

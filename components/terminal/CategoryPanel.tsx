@@ -37,8 +37,23 @@ export default function CategoryPanel() {
       
       <div className="flex-1 overflow-y-auto no-scrollbar px-2 pb-4">
         <div className="flex flex-col gap-1">
+          <button
+            onClick={() => setCategory('all')}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+              selectedCategoryId === 'all' || !selectedCategoryId
+                ? "bg-black text-white" 
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+            }`}
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 shadow-sm border border-orange-200">
+              {/* Using a generic icon or visual for All Items */}
+              <span className="text-xl">🥘</span>
+            </div>
+            <span className="text-base font-semibold">All Items</span>
+          </button>
+          
           {safeCategories.map((category) => {
-            if (!category) return null;
+            if (!category || category.id === 'all') return null;
             const isActive = selectedCategoryId === category.id
             
             return (

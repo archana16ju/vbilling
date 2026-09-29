@@ -11,11 +11,8 @@ export default function Sidebar() {
   const [role, setRole] = useState<string | null>(null)
 
   useEffect(() => {
-    testAction().then(res => console.log('TEST ACTION RESULT:', res)).catch(err => console.error('TEST ACTION ERROR:', err));
-    getUserRole().then(r => setRole(r ?? null)).catch(err => {
-      console.error('SIDEBAR ROLE ERROR:', err)
-      setRole(null)
-    })
+    const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
+    setRole(match ? match[2] : null);
   }, [])
 
   const navItems = [
@@ -23,6 +20,7 @@ export default function Sidebar() {
     { name: "Terminal", href: "/terminal", icon: Monitor },
     { name: "Sales & Bills", href: "/sales", icon: IndianRupee },
     { name: "Products", href: "/products", icon: Package },
+    { name: "Raw Materials", href: "/raw-materials", icon: Tags },
     { name: "Categories", href: "/categories", icon: Tags },
     { name: "Users", href: "/users", icon: Users },
     { name: "Settings", href: "/settings", icon: SettingsIcon },
@@ -42,7 +40,7 @@ export default function Sidebar() {
         Billing Software
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4 no-scrollbar">
         {filteredNavItems.map((item) => {
           const isActive = pathname === item.href
           return (
@@ -61,22 +59,22 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-zinc-800 p-4">
-        <div className="flex items-center gap-3">
-          <UserCircle className="h-10 w-10 text-zinc-400" />
-          <div className="flex flex-1 flex-col">
-            <span className="text-sm font-medium capitalize">{role || 'Loading...'}</span>
-            <span className="text-xs text-zinc-400">User Role</span>
-          </div>
-          <form action={logout}>
+          <div className="flex items-center justify-between border-t border-zinc-800 p-6">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium capitalize">{role || 'Loading...'}</span>
+              <span className="text-xs text-zinc-400">User Role</span>
+            </div>
             <button 
-              type="submit"
+              onClick={() => {
+                document.cookie = 'auth_role=; Max-Age=0; path=/;';
+                window.location.href = '/login';
+              }}
               className="text-zinc-400 hover:text-white" 
               title="Logout"
             >
               <LogOut className="h-5 w-5" />
             </button>
-          </form>
-        </div>
+          </div>
       </div>
     </aside>
   )

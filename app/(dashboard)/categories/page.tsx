@@ -35,6 +35,7 @@ export default function CategoriesPage() {
     if (file && file.size > 0) {
       const uploadData = new FormData()
       uploadData.append("file", file)
+      uploadData.append("type", "category")
       try {
         const res = await fetch("/api/upload", {
           method: "POST",

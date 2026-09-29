@@ -3,6 +3,7 @@
   "appId": "com.billing.software",
   "productName": "Billing Software",
   "copyright": "Copyright © 2026 Billing Software",
+  "npmRebuild": false,
   "asar": false,
   "directories": {
     "output": "dist",
@@ -10,8 +11,10 @@
   },
   "files": [
     "**/*",
+    ".env",
     "!node_modules/next/dist/docs/**/*",
-    "!.next/cache/**/*"
+    "!.next/cache/**/*",
+    "!.next/dev/**/*"
   ],
   "extraMetadata": {
     "main": "electron/main.js"
@@ -30,5 +33,12 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Billing Software"
-  }
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "archana16ju",
+      "repo": "vbilling"
+    }
+  ]
 }

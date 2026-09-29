@@ -15,7 +15,8 @@ export default function Header() {
       month: 'long',
       day: 'numeric'
     }))
-    getUserRole().then(r => setRole(r ?? null))
+    const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
+    setRole(match ? match[2] : null);
   }, [])
 
   return (

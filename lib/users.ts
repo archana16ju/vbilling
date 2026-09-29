@@ -10,6 +10,7 @@ export interface User {
   password?: string
   role: UserRole
   createdAt: number
+  shortcuts?: Record<string, string>
 }
 
 function getDataFilePath() {

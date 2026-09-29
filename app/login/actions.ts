@@ -14,7 +14,8 @@ export async function login(prevState: unknown, formData: FormData) {
 
   if (user) {
     const cookieStore = await cookies();
-    cookieStore.set('auth_role', user.role, { httpOnly: true, path: '/' });
+    cookieStore.set('auth_role', user.role, { path: '/' });
+    cookieStore.set('auth_id', user.id, { path: '/' });
     
     if (user.role === 'admin') {
       redirect('/dashboard');
@@ -29,7 +30,35 @@ export async function login(prevState: unknown, formData: FormData) {
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete('auth_role');
+  cookieStore.delete('auth_id');
   redirect('/login');
+}
+
+export async function getLoggedInUserId() {
+  const cookieStore = await cookies();
+  return cookieStore.get('auth_id')?.value;
+}
+
+export async function saveUserShortcuts(shortcuts: Record<string, string>) {
+  const userId = await getLoggedInUserId();
+  if (!userId) return { success: false, error: 'Not logged in' };
+  
+  const users = await getUsers();
+  const userIndex = users.findIndex(u => u.id === userId);
+  if (userIndex === -1) return { success: false, error: 'User not found' };
+  
+  users[userIndex].shortcuts = shortcuts;
+  await saveUsers(users);
+  return { success: true };
+}
+
+export async function getUserShortcuts() {
+  const userId = await getLoggedInUserId();
+  if (!userId) return null;
+  
+  const users = await getUsers();
+  const user = users.find(u => u.id === userId);
+  return user?.shortcuts || null;
 }
 
 export async function getUserRole() {

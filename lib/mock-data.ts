@@ -1,3 +1,5 @@
+import { RecipeItem, ProductUnit } from '@/types/product';
+
 export type Product = {
   id: string
   name: string
@@ -11,6 +13,7 @@ export type Product = {
   image?: string
   tax?: number
   discount?: number
+  rawMaterials?: RecipeItem[]
 }
 
 export type Category = {

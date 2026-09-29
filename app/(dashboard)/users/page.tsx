@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { getAllUsers, createUser, updateUser, deleteUser } from '@/app/login/actions'
 import type { User } from '@/lib/users'
 import { UserPlus, Trash2, Shield, User as UserIcon, Edit2 } from 'lucide-react'
 
@@ -13,10 +12,16 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const data = await getAllUsers()
-      setUsers(data)
+      const res = await fetch('/api/users');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setUsers(data)
+      } else {
+        setError('Failed to load users: Invalid data received.')
+      }
     } catch (err: any) {
       console.error('FETCH USERS ERROR:', err.message || err)
+      setError(`Failed to load users: ${err.message || 'API Error'}`)
     }
   }
 
@@ -45,16 +50,23 @@ export default function UsersPage() {
     setIsSaving(true)
     
     const formData = new FormData(e.currentTarget)
+    const payload = {
+      username: formData.get('username') as string,
+      password: formData.get('password') as string,
+      role: formData.get('role') as string,
+      id: editingUser ? editingUser.id : undefined
+    }
     
     try {
-      let result
-      if (editingUser) {
-        result = await updateUser(editingUser.id, null, formData)
-      } else {
-        result = await createUser(null, formData)
-      }
+      const method = editingUser ? 'PUT' : 'POST';
+      const res = await fetch('/api/users', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
       
-      if (result?.error) {
+      if (result.error) {
         setError(result.error)
       } else {
         handleCloseForm()
@@ -70,8 +82,12 @@ export default function UsersPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this user?")) {
-      await deleteUser(id)
-      fetchUsers()
+      try {
+        await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
+        fetchUsers();
+      } catch (err) {
+        alert("Failed to delete user");
+      }
     }
   }
 
@@ -87,12 +103,13 @@ export default function UsersPage() {
         </button>
       </div>
 
+      {error && <div className="mb-4 rounded bg-red-50 p-4 text-sm text-red-600 border border-red-200">{error}</div>}
+
       {isFormOpen && (
         <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-bold text-zinc-900">
             {editingUser ? "Edit User" : "New User"}
           </h2>
-          {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
           <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700">Username</label>

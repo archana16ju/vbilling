@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import DataLoader from "@/components/layout/DataLoader";
+import OfflineSyncManager from "@/components/terminal/OfflineSyncManager";
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <DataLoader />
+        <OfflineSyncManager />
         {children}
       </body>
     </html>
