@@ -240,8 +240,10 @@ export default function ProductsPage() {
                         className="flex-1 min-w-0 bg-transparent text-xs text-zinc-900 focus:outline-none py-1"
                       >
                         <option value="">Select...</option>
-                        {availableMaterials.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
+                        {availableMaterials
+                          .filter(m => !currentRecipe.some((r, i) => i !== index && r.rawMaterialId === m.id))
+                          .map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
                         ))}
                       </select>
                       
@@ -258,7 +260,7 @@ export default function ProductsPage() {
                           className="w-full bg-transparent text-xs text-right text-zinc-900 focus:outline-none" 
                           placeholder="0" 
                         />
-                        <span className="ml-1 text-[10px] font-medium text-zinc-500">{item.unit || material?.unit || '-'}</span>
+                        <span className="ml-1 text-xs font-semibold text-zinc-500">{item.unit || material?.unit || '-'}</span>
                       </div>
                       
                       <button type="button" onClick={() => {

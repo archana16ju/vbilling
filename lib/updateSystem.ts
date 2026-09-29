@@ -239,9 +239,33 @@ export async function downloadUpdate(version: string, downloadUrl: string): Prom
     const { GridFSBucket } = await import('mongodb');
     const bucket = new GridFSBucket(db, { bucketName: 'updates' });
     
+    // Get total file size for percentage
+    const files = await db.collection('updates.files').find({ filename }).toArray();
+    const totalBytes = files.length > 0 ? files[0].length : 0;
+    
     await new Promise((resolve, reject) => {
       const downloadStream = bucket.openDownloadStreamByName(filename);
       const writeStream = fsSync.createWriteStream(targetExePath);
+      
+      let downloadedBytes = 0;
+      let lastPercent = 0;
+      
+      downloadStream.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        if (totalBytes > 0) {
+          const percent = Math.floor((downloadedBytes / totalBytes) * 100);
+          if (percent > lastPercent) {
+            lastPercent = percent;
+            // Only update file every 5% to keep disk I/O incredibly fast
+            if (percent % 5 === 0 || percent === 100) {
+              saveUpdateState({ 
+                status: 'DOWNLOADING', 
+                message: `Downloading update v${version} (${percent}%)...` 
+              }).catch(() => {});
+            }
+          }
+        }
+      });
       
       downloadStream.pipe(writeStream)
         .on('error', reject)
