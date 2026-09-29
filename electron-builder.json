@@ -6,7 +6,7 @@
   "npmRebuild": false,
   "asar": false,
   "directories": {
-    "output": "dist",
+    "output": "dist2",
     "buildResources": "public"
   },
   "files": [
