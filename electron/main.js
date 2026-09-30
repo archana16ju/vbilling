@@ -6,19 +6,28 @@ const fs = require('fs');
 const os = require('os');
 
 function ensureOfflineStorageFolders() {
-  const configPath = path.join(os.homedir(), '.billing-software', 'storage-config.json');
-  let location = path.join(os.homedir(), '.billing-software', 'BillingOfflineStorage');
+  const legacyConfigPath = path.join(os.homedir(), '.billing-software', 'storage-config.json');
+  const legacyLocation = path.join(os.homedir(), '.billing-software', 'BillingOfflineStorage');
+  const appDataLocation = path.join(app.getPath('userData'), 'BillingOfflineStorage');
   
+  let location = appDataLocation;
+
   try {
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (fs.existsSync(legacyConfigPath)) {
+      const config = JSON.parse(fs.readFileSync(legacyConfigPath, 'utf8'));
       if (config && config.location) {
         location = config.location;
       }
+    } else if (fs.existsSync(legacyLocation)) {
+      // Preserve existing data if it was already created at the legacy path
+      location = legacyLocation;
     }
   } catch (err) {
     console.error('Failed to read storage config in main:', err);
   }
+
+  // Store the resolved location so Next.js can use the exact same path
+  process.env.OFFLINE_STORAGE_PATH = location;
 
   const dirs = [
     path.join(location, 'cache', 'products', 'images'),
@@ -102,7 +111,8 @@ function startNextServer() {
         ...process.env, 
         ELECTRON_RUN_AS_NODE: '1', 
         NODE_ENV: 'production', 
-        PORT: String(PORT) 
+        PORT: String(PORT),
+        OFFLINE_STORAGE_PATH: process.env.OFFLINE_STORAGE_PATH
       },
       stdio: ['pipe', 'pipe', 'pipe']
     });

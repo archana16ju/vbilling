@@ -12,7 +12,6 @@ try {
   console.warn("Native better-sqlite3 failed to load. Offline SQLite will be disabled.");
 }
 
-const CONFIG_FILE = path.join(os.homedir(), '.billing-software', 'storage-config.json');
 
 export interface StorageConfig {
   location: string;
@@ -166,11 +165,21 @@ async function migrateJsonToSqlite(location: string) {
 }
 
 export async function getStorageConfig(): Promise<StorageConfig> {
+  const legacyConfig = path.join(os.homedir(), '.billing-software', 'storage-config.json');
+  const newConfig = process.env.OFFLINE_STORAGE_PATH ? path.join(process.env.OFFLINE_STORAGE_PATH, 'storage-config.json') : null;
+
   try {
-    const data = await fs.readFile(CONFIG_FILE, 'utf8');
+    if (newConfig && fsSync.existsSync(newConfig)) {
+      const data = await fs.readFile(newConfig, 'utf8');
+      return JSON.parse(data);
+    }
+    const data = await fs.readFile(legacyConfig, 'utf8');
     return JSON.parse(data);
   } catch (err) {
-    // Default location
+    // Priority 1: Electron User Data Path. Priority 2: Fallback to homedir.
+    if (process.env.OFFLINE_STORAGE_PATH) {
+      return { location: process.env.OFFLINE_STORAGE_PATH };
+    }
     return { location: path.join(os.homedir(), '.billing-software', 'BillingOfflineStorage') };
   }
 }
@@ -186,9 +195,10 @@ export async function setStorageLocation(newLocation: string): Promise<{ success
     await fs.mkdir(newLocation, { recursive: true });
     
     // Create config dir if not exists
-    await fs.mkdir(path.dirname(CONFIG_FILE), { recursive: true });
+    const configPath = process.env.OFFLINE_STORAGE_PATH ? path.join(process.env.OFFLINE_STORAGE_PATH, 'storage-config.json') : path.join(os.homedir(), '.billing-software', 'storage-config.json');
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
     
-    await fs.writeFile(CONFIG_FILE, JSON.stringify({ location: newLocation }));
+    await fs.writeFile(configPath, JSON.stringify({ location: newLocation }));
     
     // reset db instance to let it reinitialize at new location
     dbInstance = null;
@@ -214,7 +224,11 @@ export async function ensureStorageDirectories(basePath?: string) {
   ];
 
   for (const dir of dirs) {
-    await fs.mkdir(dir, { recursive: true });
+    try {
+      await fs.mkdir(dir, { recursive: true });
+    } catch (e) {
+      console.warn(`Failed to create directory ${dir}:`, e);
+    }
   }
   
   await migrateJsonToSqlite(location);
