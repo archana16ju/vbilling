@@ -41,7 +41,7 @@ async function run() {
     }
 
     const files = fs.readdirSync(distPath);
-    const exeFile = files.find(f => f.endsWith('.exe') && !f.includes('Setup'));
+    const exeFile = files.find(f => f.endsWith('.exe') && f.includes('Setup') && f.includes(currentVersion));
     if (!exeFile) {
       console.error("Error: Could not find .exe file in dist directory.");
       process.exit(1);
