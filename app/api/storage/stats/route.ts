@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getStorageStats } from '@/lib/storage';
-import clientPromise from '@/lib/mongodb';
+import { getMongoClient } from '@/lib/mongodb';
 
 export async function GET() {
   try {
@@ -8,11 +8,11 @@ export async function GET() {
     
     let isMongoConnected = false;
     try {
-      const client = await clientPromise;
+      const client = await getMongoClient();
       if (client) {
         await Promise.race([
           client.db('admin').command({ ping: 1 }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
         ]);
         isMongoConnected = true;
       }

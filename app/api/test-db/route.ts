@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
+import { getMongoClient } from '@/lib/mongodb';
 
 export async function GET() {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClient();
     if (!client) throw new Error('MongoDB is offline/disconnected');
     // Ping the database to ensure connection is working
     const db = client.db();

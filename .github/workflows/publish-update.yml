@@ -1,4 +1,4 @@
-name: Publish Update to MongoDB
+name: Publish Update to GitHub Releases
 
 on:
   push:
@@ -8,12 +8,12 @@ on:
 jobs:
   build-and-publish:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2 # needed for commit messages
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,14 +23,7 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      - name: Build Electron app
-        run: npm run electron:build
+      - name: Build & Publish Electron app to GitHub
+        run: npm run electron:publish
         env:
-          NODE_ENV: production
-
-      - name: Publish Update to MongoDB
-        run: node scripts/publish-update.js
-        env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          GITHUB_SHA: ${{ github.sha }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

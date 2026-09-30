@@ -1,12 +1,12 @@
 'use server';
 
-import clientPromise from '@/lib/mongodb';
+import { getMongoClient } from '@/lib/mongodb';
 import { Product, Category, PRODUCTS, CATEGORIES } from '@/lib/mock-data';
 import { getLocalProducts, getLocalCategories, addDashboardSyncAction, cacheDashboardData } from '@/lib/storage';
 import { calculateRecipeDeduction, getRawMaterials, processStockTransactions } from '@/lib/actions/inventory';
 
 export async function getDb() {
-  const client = await clientPromise;
+  const client = await getMongoClient();
   if (!client) throw new Error('MongoDB is offline/disconnected');
   return client.db('billing_software');
 }

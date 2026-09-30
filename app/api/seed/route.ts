@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { seedDatabase } from '@/lib/actions/db';
-import clientPromise from '@/lib/mongodb';
+import { getMongoClient } from '@/lib/mongodb';
 import { PRODUCTS, CATEGORIES } from '@/lib/mock-data';
 
 export async function GET() {
   try {
-    const client = await clientPromise;
+    const client = await getMongoClient();
     if (!client) throw new Error('MongoDB is offline/disconnected');
     const db = client.db('billing_software');
     
