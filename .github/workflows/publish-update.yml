@@ -1,0 +1,36 @@
+name: Publish Update to MongoDB
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # needed for commit messages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build Electron app
+        run: npm run electron:build
+        env:
+          NODE_ENV: production
+
+      - name: Publish Update to MongoDB
+        run: node scripts/publish-update.js
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          GITHUB_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}

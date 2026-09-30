@@ -26,8 +26,6 @@ export default function SoftwareUpdatesPanel() {
   const [isUpdateReady, setIsUpdateReady] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState<any>(null)
   const [selectedRelease, setSelectedRelease] = useState<Release | null>(null)
-  
-  const CURRENT_VERSION = '1.1.0'
 
   const fetchData = async () => {
     try {
@@ -117,9 +115,10 @@ export default function SoftwareUpdatesPanel() {
   }
 
   const getReleaseStatus = (release: Release) => {
-    if (release.version === CURRENT_VERSION) return 'Current';
+    const currentVersion = state?.currentVersion || '0.1.0';
+    if (release.version === currentVersion) return 'Current';
     // Simplified logic: anything newer than current is Available, older is Previous
-    const currParts = CURRENT_VERSION.split('.').map(Number);
+    const currParts = currentVersion.split('.').map(Number);
     const relParts = release.version.split('.').map(Number);
     for (let i = 0; i < 3; i++) {
       if ((relParts[i] || 0) > (currParts[i] || 0)) return 'Available';
@@ -145,7 +144,7 @@ export default function SoftwareUpdatesPanel() {
         <div className="flex gap-6 items-center bg-white border border-zinc-200 p-4 rounded-lg shadow-sm">
           <div>
             <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Current Version</div>
-            <div className="text-lg font-bold text-zinc-900">{CURRENT_VERSION}</div>
+            <div className="text-lg font-bold text-zinc-900">{state.currentVersion || 'Unknown'}</div>
           </div>
           <div className="h-8 w-px bg-zinc-200"></div>
           <div>

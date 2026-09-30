@@ -1,98 +1,98 @@
+const { MongoClient, GridFSBucket } = require('mongodb');
 const fs = require('fs');
 const path = require('path');
-const { MongoClient, GridFSBucket } = require('mongodb');
-const { execSync } = require('child_process');
+const crypto = require('crypto');
 
-require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
-
-async function publishUpdate() {
+async function run() {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    console.error("Missing MONGODB_URI in .env.local");
+    console.error("Error: MONGODB_URI is not set.");
     process.exit(1);
   }
 
-  // 1. Get package info
-  const pkgPath = path.join(__dirname, '../package.json');
+  // 1. Get current version from package.json
+  const pkgPath = path.join(process.cwd(), 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  const version = pkg.version;
+  const currentVersion = pkg.version;
+  console.log(`Publishing release for version: ${currentVersion}`);
 
-  // 2. Get git info
-  let commit = 'unknown';
-  try {
-    commit = execSync('git rev-parse --short HEAD').toString().trim();
-  } catch (e) {
-    console.warn("Could not read git commit. Ensure git is installed.");
-  }
-
-  // 3. Find the built .exe
-  const distDir = path.join(__dirname, '../dist');
-  const exePath = path.join(distDir, `Billing Software Setup ${version}.exe`);
-
-  if (!fs.existsSync(exePath)) {
-    console.error(`Missing built .exe at ${exePath}`);
-    console.error(`Please run 'npm run electron:build' first.`);
-    process.exit(1);
-  }
-
-  console.log(`Publishing v${version} (Commit: ${commit})...`);
-  console.log(`Found executable: ${exePath}`);
-  const fileSize = fs.statSync(exePath).size / (1024 * 1024);
-  console.log(`File size: ${fileSize.toFixed(2)} MB`);
+  const commitSha = process.env.GITHUB_SHA || require('child_process').execSync('git rev-parse HEAD').toString().trim();
+  const commitMessage = process.env.COMMIT_MESSAGE || require('child_process').execSync('git log -1 --pretty=%B').toString().trim();
+  console.log(`Commit SHA: ${commitSha}`);
 
   const client = new MongoClient(uri);
   try {
     await client.connect();
-    const db = client.db('billing_software');
+    // Connect to the specific database 'skbriyani' (or get from URI)
+    const db = client.db('skbriyani'); 
 
-    // 4. Upload exe to GridFS
-    const bucket = new GridFSBucket(db, { bucketName: 'updates' });
-    const filename = `billing-software-v${version}.exe`;
-
-    // Remove existing file with the same name if we are re-publishing
-    const existingFiles = await db.collection('updates.files').find({ filename }).toArray();
-    for (const file of existingFiles) {
-      await bucket.delete(file._id);
-      console.log(`Removed previous upload of ${filename}`);
+    // 2. Check for duplicate release
+    const existingRelease = await db.collection('releases').findOne({ version: currentVersion });
+    if (existingRelease) {
+      console.log(`Version ${currentVersion} is already published in MongoDB. Skipping to prevent duplicates.`);
+      process.exit(0);
     }
 
-    console.log("Uploading .exe to MongoDB GridFS. This may take a moment...");
-    const uploadStream = bucket.openUploadStream(filename);
-    const readStream = fs.createReadStream(exePath);
+    // 3. Find the compiled .exe
+    const distPath = path.join(process.cwd(), 'dist');
+    if (!fs.existsSync(distPath)) {
+      console.error("Error: dist directory not found. Did the build run?");
+      process.exit(1);
+    }
+
+    const files = fs.readdirSync(distPath);
+    const exeFile = files.find(f => f.endsWith('.exe') && !f.includes('Setup'));
+    if (!exeFile) {
+      console.error("Error: Could not find .exe file in dist directory.");
+      process.exit(1);
+    }
+
+    const exePath = path.join(distPath, exeFile);
+    console.log(`Found executable: ${exeFile}`);
+
+    // Calculate SHA256
+    const fileBuffer = fs.readFileSync(exePath);
+    const hashSum = crypto.createHash('sha256');
+    hashSum.update(fileBuffer);
+    const hex = hashSum.digest('hex');
+
+    // 4. Upload to GridFS
+    const bucket = new GridFSBucket(db, { bucketName: 'updates' });
+    const gridfsFilename = `billing-software-${currentVersion}-${commitSha.substring(0,7)}.exe`;
+    
+    console.log(`Uploading ${exeFile} to GridFS as ${gridfsFilename}...`);
     
     await new Promise((resolve, reject) => {
-      readStream.pipe(uploadStream)
+      fs.createReadStream(exePath)
+        .pipe(bucket.openUploadStream(gridfsFilename))
         .on('error', reject)
         .on('finish', resolve);
     });
 
-    console.log(`Upload complete! GridFS ID: ${uploadStream.id}`);
+    console.log(`Upload complete.`);
 
-    // 5. Update releases collection
+    // 5. Insert Release Metadata
     const releaseData = {
-      version,
-      commit,
-      commitMessage: `Release v${version}`,
+      version: currentVersion,
+      commit: commitSha,
+      commitMessage: commitMessage,
+      previousVersion: "unknown", // can be calculated if needed
       releaseDate: new Date().toISOString(),
-      releaseNotes: ["Automated update published via GridFS."],
-      downloadUrl: `gridfs://${filename}`, // Custom protocol to signify GridFS download
+      releaseNotes: [commitMessage],
+      downloadUrl: `gridfs://${gridfsFilename}`,
+      sha256: hex,
       mandatory: false
     };
 
-    await db.collection('releases').updateOne(
-      { version: releaseData.version },
-      { $set: releaseData },
-      { upsert: true }
-    );
+    await db.collection('releases').insertOne(releaseData);
+    console.log(`Successfully published release metadata to MongoDB for v${currentVersion}.`);
 
-    console.log(`Successfully published release document for v${version}.`);
-    console.log(`Other computers will now detect and download this update automatically!`);
-
-  } catch (err) {
-    console.error("Error publishing update:", err);
+  } catch (error) {
+    console.error("Error publishing update:", error);
+    process.exit(1);
   } finally {
     await client.close();
   }
 }
 
-publishUpdate();
+run();

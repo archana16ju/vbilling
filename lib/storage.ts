@@ -209,7 +209,8 @@ export async function ensureStorageDirectories(basePath?: string) {
     path.join(location, 'offline', 'pending-bills'),
     path.join(location, 'sync', 'queue'),
     path.join(location, 'metadata'),
-    path.join(location, 'database')
+    path.join(location, 'database'),
+    path.join(location, 'updates')
   ];
 
   for (const dir of dirs) {

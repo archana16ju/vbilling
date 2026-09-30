@@ -34,6 +34,7 @@ export interface UpdateState {
   lastChecked?: number;
   message?: string;
   currentCommit?: string;
+  currentVersion?: string;
   history: Array<{
     version: string;
     commit?: string;
@@ -52,6 +53,7 @@ export async function getUpdateState(): Promise<UpdateState> {
     const initialState: UpdateState = {
       status: 'IDLE',
       currentCommit: 'unknown',
+      currentVersion: CURRENT_VERSION,
       history: [{ version: CURRENT_VERSION, commit: 'unknown', date: new Date().toISOString(), status: 'Installed' }]
     };
     await fs.writeFile(statePath, JSON.stringify(initialState, null, 2));
@@ -60,12 +62,15 @@ export async function getUpdateState(): Promise<UpdateState> {
 
   try {
     const raw = await fs.readFile(statePath, 'utf8');
-    return JSON.parse(raw);
+    const state = JSON.parse(raw);
+    state.currentVersion = CURRENT_VERSION;
+    return state;
   } catch (parseError) {
     console.error("Corrupted update_state.json, resetting...", parseError);
     const initialState: UpdateState = {
       status: 'IDLE',
       currentCommit: 'unknown',
+      currentVersion: CURRENT_VERSION,
       history: [{ version: CURRENT_VERSION, commit: 'unknown', date: new Date().toISOString(), status: 'Installed' }]
     };
     await fs.writeFile(statePath, JSON.stringify(initialState, null, 2));

@@ -2,9 +2,9 @@ import { MongoClient } from 'mongodb'
 
 const uri = process.env.MONGODB_URI || ''
 const options = {
-  serverSelectionTimeoutMS: 500, // Fail extremely fast if offline (instant fallback)
-  connectTimeoutMS: 500,
-  socketTimeoutMS: 1000
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 5000,
+  socketTimeoutMS: 5000
 }
 
 let client

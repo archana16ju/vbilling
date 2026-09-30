@@ -2,6 +2,58 @@ const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+const fs = require('fs');
+const os = require('os');
+
+function ensureOfflineStorageFolders() {
+  const configPath = path.join(os.homedir(), '.billing-software', 'storage-config.json');
+  let location = path.join(os.homedir(), '.billing-software', 'BillingOfflineStorage');
+  
+  try {
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config && config.location) {
+        location = config.location;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to read storage config in main:', err);
+  }
+
+  const dirs = [
+    path.join(location, 'cache', 'products', 'images'),
+    path.join(location, 'cache', 'categories', 'images'),
+    path.join(location, 'offline', 'pending-bills'),
+    path.join(location, 'sync', 'queue'),
+    path.join(location, 'metadata'),
+    path.join(location, 'database'),
+    path.join(location, 'updates')
+  ];
+
+  dirs.forEach(dir => {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch (err) {
+      console.error(`Failed to create directory ${dir}:`, err);
+    }
+  });
+
+  // Ensure update_state.json exists
+  const statePath = path.join(location, 'update_state.json');
+  if (!fs.existsSync(statePath)) {
+    try {
+      fs.writeFileSync(statePath, JSON.stringify({
+        status: 'IDLE',
+        currentCommit: 'unknown',
+        history: []
+      }, null, 2));
+    } catch (e) {
+      console.error('Failed to init update_state.json:', e);
+    }
+  }
+}
 
 let mainWindow;
 let nextServerProcess;
@@ -186,7 +238,10 @@ autoUpdater.on('update-downloaded', (info) => {
   if (mainWindow) mainWindow.webContents.send('update-downloaded', info);
 });
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  ensureOfflineStorageFolders();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (nextServerProcess) {
