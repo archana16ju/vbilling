@@ -26,7 +26,7 @@ async function publishUpdate() {
   }
 
   // 3. Find the built .exe
-  const distDir = path.join(__dirname, '../dist2');
+  const distDir = path.join(__dirname, '../dist3');
   const exePath = path.join(distDir, `Billing Software Setup ${version}.exe`);
 
   if (!fs.existsSync(exePath)) {

@@ -3,10 +3,9 @@
   "appId": "com.billing.software",
   "productName": "Billing Software",
   "copyright": "Copyright © 2026 Billing Software",
-  "npmRebuild": false,
   "asar": false,
   "directories": {
-    "output": "dist2",
+    "output": "dist3",
     "buildResources": "public"
   },
   "files": [
