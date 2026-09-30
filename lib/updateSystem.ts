@@ -93,9 +93,16 @@ export async function checkForUpdates(): Promise<UpdateState> {
   await saveUpdateState({ status: 'CHECKING' });
   
   try {
-    const releases = await getAllReleases();
+    let db;
+    try {
+      db = await getDb();
+    } catch (e) {
+      throw new Error('Update server (Database) is unreachable. You are offline.');
+    }
+
+    const latestReleaseDoc = await db.collection('releases').find({}).sort({ releaseDate: -1 }).limit(1).toArray();
     
-    if (releases.length === 0) {
+    if (latestReleaseDoc.length === 0) {
       return await saveUpdateState({
         status: 'IDLE',
         message: 'No updates published yet.',
@@ -103,7 +110,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
       });
     }
 
-    const latestRelease = releases[0];
+    const latestRelease = latestReleaseDoc[0] as unknown as UpdateMetadata;
     
     // Compare versions (simple string compare or semver logic)
     // If we have 1.0.1 in DB and 1.0.0 locally, it's an update.
@@ -133,27 +140,11 @@ export async function checkForUpdates(): Promise<UpdateState> {
 
 export async function getAllReleases(): Promise<UpdateMetadata[]> {
   try {
-    const res = await fetch('https://api.github.com/repos/archana16ju/vbilling/releases', {
-      headers: { 'Accept': 'application/vnd.github.v3+json' }
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.map((r: any) => {
-      const exeAsset = r.assets.find((a: any) => a.name.endsWith('.exe'));
-      return {
-        version: r.tag_name.replace('v', ''),
-        commit: 'github',
-        commitMessage: r.name,
-        previousVersion: 'unknown',
-        releaseDate: r.published_at,
-        releaseNotes: [r.body || ''],
-        downloadUrl: exeAsset ? exeAsset.browser_download_url : '',
-        sha256: 'unknown',
-        mandatory: false
-      };
-    });
+    const db = await getDb();
+    const releases = await db.collection('releases').find({}).sort({ releaseDate: -1 }).toArray();
+    return releases as unknown as UpdateMetadata[];
   } catch (e) {
-    console.error("Failed to fetch releases from GitHub", e);
+    console.error("Failed to fetch releases from DB", e);
     return [];
   }
 }
@@ -233,10 +224,11 @@ export async function downloadUpdate(version: string, downloadUrl: string): Prom
   try {
     await saveUpdateState({ status: 'DOWNLOADING', message: `Downloading update v${version}...` });
     
-    if (!downloadUrl) {
-      throw new Error('No download URL provided');
+    if (!downloadUrl.startsWith('gridfs://')) {
+      throw new Error('Unsupported download source. Must use GridFS.');
     }
 
+    const filename = downloadUrl.replace('gridfs://', '');
     const paths = await getStoragePaths();
     
     // Ensure updates folder exists
@@ -245,33 +237,31 @@ export async function downloadUpdate(version: string, downloadUrl: string): Prom
       await fs.mkdir(updatesDir, { recursive: true });
     }
     
-    const filename = downloadUrl.split('/').pop() || `update-${version}.exe`;
     const targetExePath = path.join(updatesDir, filename);
 
-    // Download directly from GitHub Release
-    const res = await fetch(downloadUrl);
-    if (!res.ok) throw new Error(`Failed to download: ${res.statusText}`);
-
-    const totalBytes = Number(res.headers.get('content-length')) || 0;
-    const writeStream = fsSync.createWriteStream(targetExePath);
+    // Download from MongoDB GridFS
+    const db = await getDb();
+    const { GridFSBucket } = await import('mongodb');
+    const bucket = new GridFSBucket(db, { bucketName: 'updates' });
     
-    if (res.body) {
-      const reader = res.body.getReader();
+    // Get total file size for percentage
+    const files = await db.collection('updates.files').find({ filename }).toArray();
+    const totalBytes = files.length > 0 ? files[0].length : 0;
+    
+    await new Promise((resolve, reject) => {
+      const downloadStream = bucket.openDownloadStreamByName(filename);
+      const writeStream = fsSync.createWriteStream(targetExePath);
+      
       let downloadedBytes = 0;
       let lastPercent = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        writeStream.write(Buffer.from(value));
-        downloadedBytes += value.length;
-
+      
+      downloadStream.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
         if (totalBytes > 0) {
           const percent = Math.floor((downloadedBytes / totalBytes) * 100);
           if (percent > lastPercent) {
             lastPercent = percent;
-            // Only update file every 5%
+            // Only update file every 5% to keep disk I/O incredibly fast
             if (percent % 5 === 0 || percent === 100) {
               saveUpdateState({ 
                 status: 'DOWNLOADING', 
@@ -280,11 +270,12 @@ export async function downloadUpdate(version: string, downloadUrl: string): Prom
             }
           }
         }
-      }
-      writeStream.end();
-    } else {
-      throw new Error("Response body is null");
-    }
+      });
+      
+      downloadStream.pipe(writeStream)
+        .on('error', reject)
+        .on('finish', () => resolve(true));
+    });
 
     await saveUpdateState({ status: 'READY_TO_UPDATE', message: `Update downloaded to ${targetExePath}` });
     return { success: true, message: targetExePath };

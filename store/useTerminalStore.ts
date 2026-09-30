@@ -166,7 +166,7 @@ export const useTerminalStore = create<TerminalState>()(
       syncInterval: 30,
       activeShortcuts: DEFAULT_SHORTCUTS,
       heldCarts: [],
-      isBackendOnline: false,
+      isBackendOnline: true,
       enableDiscount: true,
       bluetoothPrinter: null,
       wifiPrinter: null,
@@ -457,9 +457,6 @@ ${formatLine('TOTAL', String(saleData.total.toFixed(2)))}
 {
   name: 'terminal-storage',
   version: 2,
-  partialize: (state) => Object.fromEntries(
-    Object.entries(state).filter(([key]) => !['isBackendOnline'].includes(key))
-  ),
   migrate: (persistedState: any, version: number) => {
     if (version < 2 || version === undefined) {
       // One-time migration: force all stuck pending sales to COMPLETED
