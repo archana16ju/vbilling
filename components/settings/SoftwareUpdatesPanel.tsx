@@ -17,6 +17,7 @@ interface UpdateState {
   status: string;
   message?: string;
   currentCommit?: string;
+  currentVersion?: string;
 }
 
 export default function SoftwareUpdatesPanel() {
