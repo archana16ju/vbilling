@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    MONGODB_URI: process.env.MONGODB_URI,
+  },
   serverExternalPackages: ['better-sqlite3', 'mongodb'],
   experimental: {
     serverActions: {
