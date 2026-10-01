@@ -27,6 +27,7 @@ jobs:
         run: npm run electron:build
         env:
           NODE_ENV: production
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
 
       - name: Publish Update to MongoDB
         run: node scripts/publish-update.js
