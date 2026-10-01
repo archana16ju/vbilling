@@ -10,8 +10,10 @@ export async function GET() {
     try {
       const client = await clientPromise;
       if (client) {
+        const pingPromise = client.db('admin').command({ ping: 1 });
+        pingPromise.catch(() => {}); // Prevent unhandled rejection if it fails after timeout
         await Promise.race([
-          client.db('admin').command({ ping: 1 }),
+          pingPromise,
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
         ]);
         isMongoConnected = true;

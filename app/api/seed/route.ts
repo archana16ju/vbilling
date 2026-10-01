@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const client = await clientPromise;
     if (!client) throw new Error('MongoDB is offline/disconnected');
-    const db = client.db('billing_software');
+    const db = client.db();
     
     // Clear existing just in case (if user wants a fresh start)
     await db.collection('products').deleteMany({});

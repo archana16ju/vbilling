@@ -5,7 +5,7 @@ async function cleanGridFS() {
   const client = new MongoClient(process.env.MONGODB_URI);
   try {
     await client.connect();
-    const db = client.db('billing_software');
+    const db = client.db('skbriyani');
     const bucket = new GridFSBucket(db, { bucketName: 'updates' });
     
     // Find all files in GridFS
