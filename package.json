@@ -50,7 +50,8 @@
                             ],
                   "extraResources":  [
                                          ".env"
-                                     ]
+                                     ],
+                  "npmRebuild":  false
               }
 }
 
