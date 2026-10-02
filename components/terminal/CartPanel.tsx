@@ -151,7 +151,7 @@ export default function CartPanel() {
         };
         
         addOfflineSale(offlineSale);
-        fetch('/api/storage/pendingBills', {
+        fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/storage/' : '/api/storage/') + 'pendingBills', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(offlineSale)

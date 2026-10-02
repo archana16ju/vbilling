@@ -153,10 +153,33 @@ function startNextServer() {
   });
 }
 
+async function checkInternet() {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(false);
+      }
+    }, 2000);
+    require('dns').resolve('skbriyani.vseyal.com', (err) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(!err);
+      }
+    });
+  });
+}
+
 async function createWindow() {
   const isDev = !app.isPackaged;
   const baseUrl = `http://localhost:${PORT}`;
-  const startUrl = process.env.ELECTRON_START_URL || `${baseUrl}/dashboard`;
+  const liveUrl = 'https://skbriyani.vseyal.com';
+  
+  // Set default to live if online, else local
+  const isOnline = await checkInternet();
+  const startUrl = process.env.ELECTRON_START_URL || (isOnline ? `${liveUrl}/dashboard` : `${baseUrl}/dashboard`);
 
   if (!isDev) {
     try {
@@ -172,14 +195,10 @@ async function createWindow() {
     }
   }
 
-  // Pre-set admin authentication session cookie so app opens directly logged in as Admin
+  // Pre-set admin authentication session cookie so app opens directly logged in as Admin for both local and live
   try {
-    await session.defaultSession.cookies.set({
-      url: baseUrl,
-      name: 'auth_role',
-      value: 'admin',
-      path: '/'
-    });
+    await session.defaultSession.cookies.set({ url: baseUrl, name: 'auth_role', value: 'admin', path: '/' });
+    await session.defaultSession.cookies.set({ url: liveUrl, name: 'auth_role', value: 'admin', path: '/' });
   } catch (cookieErr) {
     console.error('Failed to set auto-login cookie:', cookieErr);
   }
@@ -199,21 +218,44 @@ async function createWindow() {
     autoHideMenuBar: true,
   });
 
-  // Ensure window title is always Billy - Billing Software
   mainWindow.on('page-title-updated', (e) => {
     e.preventDefault();
   });
 
   mainWindow.loadURL(startUrl);
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Failed to load URL:', errorCode, errorDescription);
-    mainWindow.loadURL(`data:text/html,<h2>Starting Billy...</h2><p>Please wait...</p>`);
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Failed to load URL:', validatedURL, errorCode, errorDescription);
+    // If live URL fails, fallback to local immediately
+    if (validatedURL.includes('vseyal.com')) {
+      const fallbackUrl = validatedURL.replace(liveUrl, baseUrl);
+      mainWindow.loadURL(fallbackUrl);
+    } else {
+      mainWindow.loadURL(`data:text/html,<h2>Starting Billy...</h2><p>Please wait...</p>`);
+    }
   });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Auto-switch between live and local based on internet availability
+  setInterval(async () => {
+    if (!mainWindow) return;
+    
+    const currentlyOnline = await checkInternet();
+    const currentUrlObj = new URL(mainWindow.webContents.getURL());
+    const isCurrentlyLive = currentUrlObj.hostname === 'skbriyani.vseyal.com';
+    const isCurrentlyLocal = currentUrlObj.hostname === 'localhost' || currentUrlObj.hostname === '127.0.0.1';
+    
+    if (currentlyOnline && isCurrentlyLocal) {
+      // Internet is back, switch to live API
+      mainWindow.loadURL(`${liveUrl}${currentUrlObj.pathname}${currentUrlObj.search}`);
+    } else if (!currentlyOnline && isCurrentlyLive) {
+      // Internet lost, switch to local offline API
+      mainWindow.loadURL(`${baseUrl}${currentUrlObj.pathname}${currentUrlObj.search}`);
+    }
+  }, 5000);
 }
 
 // --- Auto Updater Setup ---
