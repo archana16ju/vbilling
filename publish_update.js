@@ -18,7 +18,7 @@ async function publishUpdate() {
     const db = client.db();
     
     const version = packageJson.version;
-    const exeName = `Billing Software Setup ${version}.exe`;
+    const exeName = `billing-software Setup ${version}.exe`;
     const exePath = path.join(__dirname, 'dist', exeName);
 
     if (!fs.existsSync(exePath)) {
@@ -84,3 +84,4 @@ async function publishUpdate() {
 }
 
 publishUpdate();
+
