@@ -14,7 +14,43 @@ export async function POST() {
     try {
       db = await getDb();
     } catch (e) {
-      return NextResponse.json({ success: false, message: 'MongoDB is offline' });
+      // If MongoDB is offline locally, we try to push to the Live API!
+      const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+      if (liveApiUrl) {
+        const pendingBills = await getPendingOfflineBills();
+        const pendingActions = await getPendingDashboardActions();
+        
+        if (pendingBills.length === 0 && pendingActions.length === 0) {
+           return NextResponse.json({ success: true, message: 'Nothing to sync' });
+        }
+        
+        try {
+          const res = await fetch(`${liveApiUrl}/api/storage/sync-receive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bills: pendingBills, actions: pendingActions })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              // Clear local queues
+              for (const id of data.syncedBillIds || []) {
+                await markOfflineBillSynced(id);
+              }
+              // For actions, since sync-receive doesn't return syncedActionIds yet, we just assume all were synced for now
+              // Or we can just remove all pending actions if success is true
+              for (const action of pendingActions) {
+                await removeDashboardAction(action.id);
+              }
+              return NextResponse.json(data);
+            }
+          }
+        } catch (fetchErr) {
+          console.error("Failed to forward sync to live API", fetchErr);
+        }
+      }
+      return NextResponse.json({ success: false, message: 'MongoDB is offline and Live API is unreachable' });
     }
 
     // 1. Sync Offline Bills

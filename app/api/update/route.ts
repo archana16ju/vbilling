@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, details: error.stack || error.toString() }, { status: 500 });
   }
 }
 
@@ -46,6 +46,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, details: error.stack || error.toString() }, { status: 500 });
   }
 }

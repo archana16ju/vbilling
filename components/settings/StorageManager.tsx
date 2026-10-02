@@ -27,7 +27,7 @@ export default function StorageManager() {
     } catch (e: any) {
       console.error(e);
       setMessage({ type: 'error', text: 'Error loading storage stats. Please restart the software.' });
-      setStats({ error: true }); // Prevent infinite null loading
+      setStats({ error: true, details: e.message || 'Unknown network error' }); // Prevent infinite null loading
     }
   }
 
@@ -98,7 +98,15 @@ export default function StorageManager() {
   }
   
   if (!stats) return <div className="p-8 text-center text-zinc-500 animate-pulse">Loading local storage data...</div>;
-  if (stats.error) return <div className="p-8 text-center text-red-500 border border-red-200 bg-red-50 rounded-lg">Failed to load storage data. The internal backend server may have crashed. Please close and reopen the software.</div>;
+  if (stats.error) return (
+    <div className="p-8 text-center text-red-500 border border-red-200 bg-red-50 rounded-lg">
+      <div className="font-bold mb-2">Failed to load storage data. The internal backend server may have crashed.</div>
+      <div className="text-sm font-mono text-left bg-white/50 p-4 rounded border border-red-100 overflow-auto">
+        Error Details: {stats.details || 'Check network connection or permissions'}
+      </div>
+      <div className="mt-4 text-sm text-red-600">Please take a screenshot of this error and share it.</div>
+    </div>
+  );
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">

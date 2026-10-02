@@ -27,24 +27,30 @@ export default function TerminalHeader() {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
     
-    // Ping backend to check true reachability and MongoDB status
+    // Ping live API to check true reachability
     const pingBackend = async () => {
       try {
-        const res = await fetch('/api/storage/stats', { method: 'GET', cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          // Backend is up, but is MongoDB up?
-          setIsBackendOnline(data.isMongoConnected === true);
-        } else {
-          setIsBackendOnline(false);
-        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+        
+        // We ping the test-db endpoint on the live API which returns 200 if MongoDB is up
+        const res = await fetch(`${apiUrl}/api/test-db`, { 
+          method: 'GET', 
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        setIsBackendOnline(res.ok);
       } catch (e) {
         setIsBackendOnline(false);
       }
     };
     
     pingBackend();
-    const pingInterval = setInterval(pingBackend, 5000);
+    const pingInterval = setInterval(pingBackend, 10000);
 
     return () => {
       window.removeEventListener('online', handleOnline)

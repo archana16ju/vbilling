@@ -93,15 +93,31 @@ export async function checkForUpdates(): Promise<UpdateState> {
   await saveUpdateState({ status: 'CHECKING' });
   
   try {
-    let db;
+    let latestReleaseDoc: any[] = [];
+    
     try {
-      db = await getDb();
+      const db = await getDb();
+      latestReleaseDoc = await db.collection('releases').find({}).sort({ releaseDate: -1 }).limit(1).toArray();
     } catch (e) {
-      throw new Error('Update server (Database) is unreachable. You are offline.');
+      // If MongoDB is offline, fetch from live API
+      const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+      if (liveApiUrl) {
+        try {
+          const res = await fetch(`${liveApiUrl}/api/update?action=releases`);
+          if (res.ok) {
+            const releases = await res.json();
+            if (releases && releases.length > 0) {
+              latestReleaseDoc = [releases[0]];
+            }
+          }
+        } catch (fetchErr) {
+          throw new Error('Update server (Live API) is unreachable. You are offline.');
+        }
+      } else {
+        throw new Error('Update server (Database) is unreachable. You are offline.');
+      }
     }
 
-    const latestReleaseDoc = await db.collection('releases').find({}).sort({ releaseDate: -1 }).limit(1).toArray();
-    
     if (latestReleaseDoc.length === 0) {
       return await saveUpdateState({
         status: 'IDLE',
@@ -144,7 +160,16 @@ export async function getAllReleases(): Promise<UpdateMetadata[]> {
     const releases = await db.collection('releases').find({}).sort({ releaseDate: -1 }).toArray();
     return releases as unknown as UpdateMetadata[];
   } catch (e) {
-    console.error("Failed to fetch releases from DB", e);
+    const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+    if (liveApiUrl) {
+      try {
+        const res = await fetch(`${liveApiUrl}/api/update?action=releases`);
+        if (res.ok) {
+          return await res.json() as UpdateMetadata[];
+        }
+      } catch (fetchErr) {}
+    }
+    console.error("Failed to fetch releases from DB or Live API", e);
     return [];
   }
 }
@@ -239,43 +264,55 @@ export async function downloadUpdate(version: string, downloadUrl: string): Prom
     
     const targetExePath = path.join(updatesDir, filename);
 
-    // Download from MongoDB GridFS
-    const db = await getDb();
-    const { GridFSBucket } = await import('mongodb');
-    const bucket = new GridFSBucket(db, { bucketName: 'updates' });
-    
-    // Get total file size for percentage
-    const files = await db.collection('updates.files').find({ filename }).toArray();
-    const totalBytes = files.length > 0 ? files[0].length : 0;
-    
-    await new Promise((resolve, reject) => {
-      const downloadStream = bucket.openDownloadStreamByName(filename);
-      const writeStream = fsSync.createWriteStream(targetExePath);
+    try {
+      // Download from MongoDB GridFS
+      const db = await getDb();
+      const { GridFSBucket } = await import('mongodb');
+      const bucket = new GridFSBucket(db, { bucketName: 'updates' });
       
-      let downloadedBytes = 0;
-      let lastPercent = 0;
+      // Get total file size for percentage
+      const files = await db.collection('updates.files').find({ filename }).toArray();
+      const totalBytes = files.length > 0 ? files[0].length : 0;
       
-      downloadStream.on('data', (chunk) => {
-        downloadedBytes += chunk.length;
-        if (totalBytes > 0) {
-          const percent = Math.floor((downloadedBytes / totalBytes) * 100);
-          if (percent > lastPercent) {
-            lastPercent = percent;
-            // Only update file every 5% to keep disk I/O incredibly fast
-            if (percent % 5 === 0 || percent === 100) {
-              saveUpdateState({ 
-                status: 'DOWNLOADING', 
-                message: `Downloading update v${version} (${percent}%)...` 
-              }).catch(() => {});
+      await new Promise((resolve, reject) => {
+        const downloadStream = bucket.openDownloadStreamByName(filename);
+        const writeStream = fsSync.createWriteStream(targetExePath);
+        
+        let downloadedBytes = 0;
+        let lastPercent = 0;
+        
+        downloadStream.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+          if (totalBytes > 0) {
+            const percent = Math.floor((downloadedBytes / totalBytes) * 100);
+            if (percent > lastPercent) {
+              lastPercent = percent;
+              // Only update file every 5% to keep disk I/O incredibly fast
+              if (percent % 5 === 0 || percent === 100) {
+                saveUpdateState({ 
+                  status: 'DOWNLOADING', 
+                  message: `Downloading update v${version} (${percent}%)...` 
+                }).catch(() => {});
+              }
             }
           }
-        }
+        });
+        
+        downloadStream.pipe(writeStream)
+          .on('error', reject)
+          .on('finish', () => resolve(true));
       });
+    } catch (dbErr) {
+      console.warn("MongoDB offline, falling back to HTTP download from live API", dbErr);
+      const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+      if (!liveApiUrl) throw new Error("No live API URL configured for fallback download");
       
-      downloadStream.pipe(writeStream)
-        .on('error', reject)
-        .on('finish', () => resolve(true));
-    });
+      const response = await fetch(`${liveApiUrl}/api/update/download-file?filename=${filename}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status} from live API`);
+      
+      const buffer = await response.arrayBuffer();
+      await fs.writeFile(targetExePath, Buffer.from(buffer));
+    }
 
     await saveUpdateState({ status: 'READY_TO_UPDATE', message: `Update downloaded to ${targetExePath}` });
     return { success: true, message: targetExePath };

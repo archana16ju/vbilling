@@ -21,20 +21,30 @@ if (!uri) {
     }
 
     if (!globalWithMongo._mongoClientPromise) {
-      client = new MongoClient(uri, options)
-      globalWithMongo._mongoClientPromise = client.connect().catch(err => {
-        console.error("Failed to connect to MongoDB in dev:", err);
-        return null;
-      }) as Promise<MongoClient | null>;
+      try {
+        client = new MongoClient(uri, options)
+        globalWithMongo._mongoClientPromise = client.connect().catch(err => {
+          console.error("Failed to connect to MongoDB in dev:", err);
+          return null;
+        }) as Promise<MongoClient | null>;
+      } catch (err) {
+        console.error("Invalid MONGODB_URI in dev:", err);
+        globalWithMongo._mongoClientPromise = Promise.resolve(null);
+      }
     }
     clientPromise = globalWithMongo._mongoClientPromise as Promise<MongoClient | null>
   } else {
-    client = new MongoClient(uri, options)
-    clientPromise = client.connect().catch(err => {
-      console.error("Failed to connect to MongoDB:", err);
-      // Resolve to null so that getDb() can throw a controlled error instead of crashing the server
-      return null;
-    }) as Promise<MongoClient | null>;
+    try {
+      client = new MongoClient(uri, options)
+      clientPromise = client.connect().catch(err => {
+        console.error("Failed to connect to MongoDB:", err);
+        // Resolve to null so that getDb() can throw a controlled error instead of crashing the server
+        return null;
+      }) as Promise<MongoClient | null>;
+    } catch (err) {
+      console.error("Invalid MONGODB_URI:", err);
+      clientPromise = Promise.resolve(null);
+    }
   }
 }
 

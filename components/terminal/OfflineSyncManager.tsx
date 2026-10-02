@@ -34,12 +34,14 @@ export default function OfflineSyncManager() {
           }
         }
 
+        const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+        
         // Also sync old localStorage-based offline bills to clear the old queue
         const oldBills = useTerminalStore.getState().offlineQueue;
         for (const sale of oldBills) {
           if (sale.syncStatus === 'COMPLETED') continue;
           try {
-            const recordRes = await withTimeout(fetch('/api/db/recordSale', {
+            const recordRes = await withTimeout(fetch(`${liveApiUrl}/api/db/recordSale`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...sale, syncStatus: 'COMPLETED' })

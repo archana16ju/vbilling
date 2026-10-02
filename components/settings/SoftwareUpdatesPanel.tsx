@@ -35,10 +35,20 @@ export default function SoftwareUpdatesPanel() {
         fetch('/api/update?action=status'),
         fetch('/api/update?action=releases')
       ])
-      if (statusRes.ok) setState(await statusRes.json())
-      if (releasesRes.ok) setReleases(await releasesRes.json())
-    } catch (e) {
+      
+      if (statusRes.ok) {
+        setState(await statusRes.json())
+      } else {
+        const errData = await statusRes.json().catch(() => ({}));
+        setState({ status: 'FAILED', message: `Server Error: ${errData.details || errData.error || 'Failed to fetch'}` } as UpdateState)
+      }
+      
+      if (releasesRes.ok) {
+        setReleases(await releasesRes.json())
+      }
+    } catch (e: any) {
       console.error(e)
+      setState({ status: 'FAILED', message: `Network Error: ${e.message}` } as UpdateState)
     } finally {
       setLoading(false)
     }

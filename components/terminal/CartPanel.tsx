@@ -107,7 +107,8 @@ export default function CartPanel() {
 
       if (isOnline && isBackendOnline) {
         try {
-          const res = await withTimeout(fetch('/api/db/recordSale', {
+          const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+          const res = await withTimeout(fetch(`${liveApiUrl}/api/db/recordSale`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...fullSaleData, id: billId, timestamp: Date.now() })

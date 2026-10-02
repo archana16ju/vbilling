@@ -23,7 +23,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ ...stats, isMongoConnected });
-  } catch (err) {
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Failed', details: err.message || err.toString() }, { status: 500 });
   }
 }

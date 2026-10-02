@@ -49,67 +49,78 @@ function getDbInstance(location: string) {
     };
   }
   
-  dbInstance.exec(`
-    CREATE TABLE IF NOT EXISTS offline_bills (
-      id TEXT PRIMARY KEY,
-      data TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      payment_method TEXT,
-      total REAL,
-      sync_status TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS local_categories (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      image TEXT
-    );
-    CREATE TABLE IF NOT EXISTS local_products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      price REAL NOT NULL,
-      stock INTEGER NOT NULL,
-      category TEXT NOT NULL,
-      image TEXT,
-      quantityStep INTEGER DEFAULT 1,
-      recipeYield REAL,
-      recipeUnit TEXT,
-      rawMaterials TEXT
-    );
-    CREATE TABLE IF NOT EXISTS local_raw_materials (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      unit TEXT NOT NULL,
-      currentStock REAL NOT NULL,
-      minimumStock REAL NOT NULL,
-      isActive INTEGER NOT NULL,
-      lastUpdated INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS local_stock_transactions (
-      id TEXT PRIMARY KEY,
-      rawMaterialId TEXT NOT NULL,
-      type TEXT NOT NULL,
-      quantityBefore REAL NOT NULL,
-      quantityChanged REAL NOT NULL,
-      quantityAfter REAL NOT NULL,
-      date INTEGER NOT NULL,
-      reason TEXT,
-      referenceId TEXT
-    );
-    CREATE TABLE IF NOT EXISTS dashboard_sync_queue (
-      id TEXT PRIMARY KEY,
-      action TEXT NOT NULL,
-      entity_type TEXT NOT NULL,
-      entity_id TEXT NOT NULL,
-      data TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      status TEXT NOT NULL
-    );
-  `);
-  
-  // Safe migrations for existing DBs
-  try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeYield REAL;"); } catch (e) {}
-  try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeUnit TEXT;"); } catch (e) {}
-  try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN rawMaterials TEXT;"); } catch (e) {}
+  try {
+    dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS offline_bills (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        payment_method TEXT,
+        total REAL,
+        sync_status TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS local_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        image TEXT
+      );
+      CREATE TABLE IF NOT EXISTS local_products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        stock INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        image TEXT,
+        quantityStep INTEGER DEFAULT 1,
+        recipeYield REAL,
+        recipeUnit TEXT,
+        rawMaterials TEXT
+      );
+      CREATE TABLE IF NOT EXISTS local_raw_materials (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        currentStock REAL NOT NULL,
+        minimumStock REAL NOT NULL,
+        isActive INTEGER NOT NULL,
+        lastUpdated INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS local_stock_transactions (
+        id TEXT PRIMARY KEY,
+        rawMaterialId TEXT NOT NULL,
+        type TEXT NOT NULL,
+        quantityBefore REAL NOT NULL,
+        quantityChanged REAL NOT NULL,
+        quantityAfter REAL NOT NULL,
+        date INTEGER NOT NULL,
+        reason TEXT,
+        referenceId TEXT
+      );
+      CREATE TABLE IF NOT EXISTS dashboard_sync_queue (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        status TEXT NOT NULL
+      );
+    `);
+    
+    // Safe migrations for existing DBs
+    try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeYield REAL;"); } catch (e) {}
+    try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeUnit TEXT;"); } catch (e) {}
+    try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN rawMaterials TEXT;"); } catch (e) {}
+  } catch (e) {
+    console.error("Failed to initialize database tables:", e);
+    Database = null; // Disable and return mock
+    return {
+      pragma: () => {},
+      exec: () => {},
+      prepare: () => ({ all: () => [], get: () => ({ c: 0 }), run: () => {} }),
+      transaction: (fn: any) => fn
+    };
+  }
   
   return dbInstance;
 }

@@ -105,10 +105,35 @@ function startNextServer() {
     const appPath = app.getAppPath();
     const nextBin = path.join(appPath, 'node_modules', 'next', 'dist', 'bin', 'next');
 
+    // Parse the .env file explicitly so the packaged app can read the database password
+    let customEnv = { ...process.env };
+    try {
+      const envPath = path.join(appPath, '.env');
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        envContent.split('\n').forEach(line => {
+          const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+          if (match) {
+            const key = match[1];
+            let value = match[2] || '';
+            if (value.startsWith('"') && value.endsWith('"')) {
+              value = value.slice(1, -1);
+            }
+            if (customEnv[key] === undefined) {
+              customEnv[key] = value;
+            }
+          }
+        });
+        console.log('Successfully loaded .env file in production build');
+      }
+    } catch (err) {
+      console.error('Failed to parse .env file:', err);
+    }
+
     nextServerProcess = spawn(process.execPath, [nextBin, 'start', '-p', String(PORT)], {
       cwd: appPath,
       env: { 
-        ...process.env, 
+        ...customEnv, 
         ELECTRON_RUN_AS_NODE: '1', 
         NODE_ENV: 'production', 
         PORT: String(PORT),
