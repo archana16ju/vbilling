@@ -244,16 +244,31 @@ async function createWindow() {
     if (!mainWindow) return;
     
     const currentlyOnline = await checkInternet();
-    const currentUrlObj = new URL(mainWindow.webContents.getURL());
-    const isCurrentlyLive = currentUrlObj.hostname === 'skbriyani.vseyal.com';
-    const isCurrentlyLocal = currentUrlObj.hostname === 'localhost' || currentUrlObj.hostname === '127.0.0.1';
+    const currentUrl = mainWindow.webContents.getURL();
     
-    if (currentlyOnline && isCurrentlyLocal) {
-      // Internet is back, switch to live API
-      mainWindow.loadURL(`${liveUrl}${currentUrlObj.pathname}${currentUrlObj.search}`);
-    } else if (!currentlyOnline && isCurrentlyLive) {
-      // Internet lost, switch to local offline API
-      mainWindow.loadURL(`${baseUrl}${currentUrlObj.pathname}${currentUrlObj.search}`);
+    let isCurrentlyLive = false;
+    let isCurrentlyLocal = false;
+    let isErrorPage = false;
+    let pathAndSearch = '/dashboard';
+
+    try {
+      const currentUrlObj = new URL(currentUrl);
+      isCurrentlyLive = currentUrlObj.hostname === 'skbriyani.vseyal.com';
+      isCurrentlyLocal = currentUrlObj.hostname === 'localhost' || currentUrlObj.hostname === '127.0.0.1';
+      if (isCurrentlyLive || isCurrentlyLocal) {
+        pathAndSearch = currentUrlObj.pathname + currentUrlObj.search;
+      }
+      isErrorPage = currentUrlObj.protocol === 'data:';
+    } catch (e) {
+      isErrorPage = true;
+    }
+    
+    if (currentlyOnline && (isCurrentlyLocal || isErrorPage)) {
+      // Internet is back or recovering from error, switch to live API
+      mainWindow.loadURL(`${liveUrl}${pathAndSearch}`);
+    } else if (!currentlyOnline && (isCurrentlyLive || isErrorPage)) {
+      // Internet lost or recovering from error, switch to local offline API
+      mainWindow.loadURL(`${baseUrl}${pathAndSearch}`);
     }
   }, 5000);
 }
