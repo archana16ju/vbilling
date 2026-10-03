@@ -130,7 +130,8 @@ function startNextServer() {
       console.error('Failed to parse .env file:', err);
     }
 
-    nextServerProcess = spawn(process.execPath, [nextBin, 'start', '-p', String(PORT)], {
+    const nodePath = app.isPackaged ? path.join(process.resourcesPath, 'node.exe') : process.execPath;
+  nextServerProcess = spawn(nodePath, [nextBin, 'start', '-p', String(PORT)], {
       cwd: appPath,
       env: { 
         ...customEnv, 
@@ -350,4 +351,5 @@ app.on('will-quit', () => {
     nextServerProcess.kill();
   }
 });
+
 
