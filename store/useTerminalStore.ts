@@ -449,9 +449,7 @@ ${formatLine('TOTAL', String(saleData.total.toFixed(2)))}
   })),
 
   markSaleCompleted: (id) => set((state) => ({
-    sales: state.sales.map(s => 
-      s.id === id ? { ...s, syncStatus: 'COMPLETED' } : s
-    )
+    sales: state.sales.filter(s => s.id !== id)
   }))
 }),
 {
@@ -475,3 +473,4 @@ ${formatLine('TOTAL', String(saleData.total.toFixed(2)))}
   }
 }
 ))
+
