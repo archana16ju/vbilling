@@ -1,16 +1,16 @@
 {
     "name":  "billing-software",
-    "version":  "1.2.8",
+    "version":  "1.2.9",
     "private":  true,
     "main":  "electron/main.js",
     "scripts":  {
                     "dev":  "next dev",
-                    "build":  "next build",
+                    "build":  "next build --webpack",
                     "start":  "next start",
                     "lint":  "eslint",
                     "electron:dev":  "concurrently \"next dev\" \"wait-on http://localhost:3000 \u0026\u0026 electron .\"",
-                    "electron:build":  "node scripts/copy-node.js \u0026\u0026 next build \u0026\u0026 electron-builder",
-                    "electron:publish":  "node scripts/copy-node.js \u0026\u0026 next build \u0026\u0026 electron-builder -p always"
+                    "electron:build":  "node scripts/copy-node.js \u0026\u0026 next build --webpack \u0026\u0026 electron-builder",
+                    "electron:publish":  "node scripts/copy-node.js \u0026\u0026 next build --webpack \u0026\u0026 electron-builder -p always"
                 },
     "dependencies":  {
                          "better-sqlite3":  "^13.0.3",
