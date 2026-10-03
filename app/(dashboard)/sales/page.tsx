@@ -1,16 +1,27 @@
 'use client'
 import { useTerminalStore, Sale } from "@/store/useTerminalStore"
 import { IndianRupee, CreditCard, Banknote, Wallet, Receipt, X, Printer, Trash2 } from "lucide-react"
-import { useState } from "react"
-import { clearAllSales } from "@/lib/actions/db"
+import { useState, useEffect } from "react"
+import { clearAllSales, getLiveSales } from "@/lib/actions/db"
 
 export default function SalesPage() {
   const { sales, offlineQueue = [], clearSales } = useTerminalStore()
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [resetting, setResetting] = useState(false)
+  const [liveSales, setLiveSales] = useState<Sale[]>([])
+
+  useEffect(() => {
+    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+    if (!isElectron) {
+      getLiveSales().then(res => setLiveSales(res as Sale[]));
+    }
+  }, []);
+
+  const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+  const baseSales = isElectron ? sales : liveSales;
 
   // Use only sales, because offline bills are already pushed to sales with syncStatus = 'PENDING_SYNC'
-  const allSales = [...sales].sort((a, b) => b.timestamp - a.timestamp)
+  const allSales = [...baseSales].sort((a, b) => b.timestamp - a.timestamp)
 
   const totalSales = allSales.reduce((sum, sale) => sum + sale.total, 0)
   const cashSales = allSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, sale) => sum + sale.total, 0)
@@ -300,3 +311,4 @@ function SummaryCard({ title, value, icon: Icon, color }: { title: string, value
     </div>
   )
 }
+

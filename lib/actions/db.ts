@@ -344,3 +344,14 @@ export async function clearAllSales() {
     return false;
   }
 }
+
+export async function getLiveSales() {
+  try {
+    const db = await getDb();
+    const sales = await db.collection('sales').find().sort({ timestamp: -1 }).limit(200).toArray();
+    return sales.map(s => ({ ...s, _id: s._id.toString() }));
+  } catch (e) {
+    console.error("Failed to fetch live sales", e);
+    return [];
+  }
+}
