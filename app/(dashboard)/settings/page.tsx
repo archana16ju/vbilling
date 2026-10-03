@@ -9,12 +9,17 @@ import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 const TABS = [
   { id: 'printer', label: 'Printer Settings' },
   { id: 'terminal', label: 'Terminal Settings' },
-  { id: 'shortcuts', label: 'Keyboard Shortcuts' },
-  { id: 'storage', label: 'Local Storage' },
-  { id: 'updates', label: 'Software Updates' }
+  { id: 'shortcuts', label: 'Keyboard Shortcuts' }
 ]
 
 export default function SettingsPage() {
+  const isElectron = typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+  const allTabs = isElectron ? [
+    ...TABS,
+    { id: 'storage', label: 'Local Storage' },
+    { id: 'updates', label: 'Software Updates' }
+  ] : TABS;
+
   const { printerType, setPrinterType, enableCashChange, setEnableCashChange, syncInterval, setSyncInterval, enableDiscount, setEnableDiscount, bluetoothPrinter, setBluetoothPrinter, wifiPrinter, setWifiPrinter } = useTerminalStore()
   const [activeTab, setActiveTab] = useState(allTabs[0].id)
   const [isScanning, setIsScanning] = useState(false)
