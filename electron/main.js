@@ -131,6 +131,14 @@ function startNextServer() {
     }
 
     const nodePath = app.isPackaged ? path.join(process.resourcesPath, 'node.exe') : process.execPath;
+  
+  try {
+    const envSource = require('path').join(process.resourcesPath, '.env');
+    const envDest = require('path').join(appPath, '.env');
+    if (require('fs').existsSync(envSource)) {
+      require('fs').copyFileSync(envSource, envDest);
+    }
+  } catch(e){}
   nextServerProcess = spawn(nodePath, [nextBin, 'start', '-p', String(PORT)], {
       cwd: appPath,
       env: { 
