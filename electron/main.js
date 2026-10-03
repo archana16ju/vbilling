@@ -242,17 +242,16 @@ async function createWindow() {
   });
 
   // Auto-switch between live and local based on internet availability
+    let lastOnlineState = null;
+  let retryCount = 0;
   setInterval(async () => {
     if (!mainWindow) return;
-    
     const currentlyOnline = await checkInternet();
     const currentUrl = mainWindow.webContents.getURL();
-    
     let isCurrentlyLive = false;
     let isCurrentlyLocal = false;
     let isErrorPage = false;
     let pathAndSearch = '/dashboard';
-
     try {
       const currentUrlObj = new URL(currentUrl);
       isCurrentlyLive = currentUrlObj.hostname === 'skbriyani.vseyal.com';
@@ -264,13 +263,21 @@ async function createWindow() {
     } catch (e) {
       isErrorPage = true;
     }
-    
-    if (currentlyOnline && (isCurrentlyLocal || isErrorPage)) {
-      // Internet is back or recovering from error, switch to live API
-      mainWindow.loadURL(`${liveUrl}${pathAndSearch}`);
-    } else if (!currentlyOnline && (isCurrentlyLive || isErrorPage)) {
-      // Internet lost or recovering from error, switch to local offline API
-      mainWindow.loadURL(`${baseUrl}${pathAndSearch}`);
+    let shouldReload = false;
+    if (currentlyOnline !== lastOnlineState) {
+      shouldReload = true;
+      retryCount = 0;
+      lastOnlineState = currentlyOnline;
+    } else if (isErrorPage && retryCount < 5) {
+      shouldReload = true;
+      retryCount++;
+    }
+    if (shouldReload) {
+      if (currentlyOnline) {
+        mainWindow.loadURL(liveUrl + pathAndSearch);
+      } else {
+        mainWindow.loadURL(baseUrl + pathAndSearch);
+      }
     }
   }, 5000);
 }
