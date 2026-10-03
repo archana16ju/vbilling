@@ -16,7 +16,7 @@ const TABS = [
 
 export default function SettingsPage() {
   const { printerType, setPrinterType, enableCashChange, setEnableCashChange, syncInterval, setSyncInterval, enableDiscount, setEnableDiscount, bluetoothPrinter, setBluetoothPrinter, wifiPrinter, setWifiPrinter } = useTerminalStore()
-  const [activeTab, setActiveTab] = useState(TABS[0].id)
+  const [activeTab, setActiveTab] = useState(allTabs[0].id)
   const [isScanning, setIsScanning] = useState(false)
   const [wifiIp, setWifiIp] = useState(wifiPrinter?.ip || '')
   const [wifiPort, setWifiPort] = useState(wifiPrinter?.port || '9100')
@@ -72,7 +72,7 @@ export default function SettingsPage() {
         {/* Left Sidebar */}
         <div className="w-full md:w-64 shrink-0">
           <nav className="space-y-1">
-            {TABS.map((tab) => (
+            {allTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
