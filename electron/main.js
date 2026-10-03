@@ -66,7 +66,7 @@ function ensureOfflineStorageFolders() {
 
 let mainWindow;
 let nextServerProcess;
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3015;
 
 function checkServerReady(url, timeout = 30000) {
   const start = Date.now();
@@ -351,5 +351,6 @@ app.on('will-quit', () => {
     nextServerProcess.kill();
   }
 });
+
 
 
