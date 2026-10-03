@@ -32,8 +32,8 @@ export default function SoftwareUpdatesPanel() {
     try {
       setLoading(true)
       const [statusRes, releasesRes] = await Promise.all([
-        fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/update' : '/api/update') + '?action=status'),
-        fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/update' : '/api/update') + '?action=releases')
+        fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/update' : '/api/update') + '?action=status'),
+        fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/update' : '/api/update') + '?action=releases')
       ])
       
       if (statusRes.ok) {
@@ -72,7 +72,7 @@ export default function SoftwareUpdatesPanel() {
   const runBeforeUpdate = async () => {
     setLoading(true)
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/update' : '/api/update') + '', {
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/update' : '/api/update') + '', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'before' })
@@ -89,7 +89,7 @@ export default function SoftwareUpdatesPanel() {
   const handleDownload = async (release: Release = selectedRelease!) => {
     setState(prev => prev ? { ...prev, status: 'DOWNLOADING', message: 'Downloading package...' } : null);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/update' : '/api/update') + '', {
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/update' : '/api/update') + '', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'download', version: release.version, downloadUrl: release.downloadUrl })
@@ -114,7 +114,7 @@ export default function SoftwareUpdatesPanel() {
     if (!exePath) return alert('Error: downloaded installer path not found.');
     
     try {
-      await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/update' : '/api/update') + '', {
+      await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/update' : '/api/update') + '', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'install', exePath })
@@ -388,4 +388,5 @@ export default function SoftwareUpdatesPanel() {
     </div>
   )
 }
+
 

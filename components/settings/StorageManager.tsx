@@ -19,7 +19,7 @@ export default function StorageManager() {
 
   const loadStats = async () => {
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/storage/' : '/api/storage/') + 'stats');
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'stats');
       if (!res.ok) throw new Error('Failed to load storage data');
       const data = await res.json();
       setStats(data);
@@ -39,7 +39,7 @@ export default function StorageManager() {
     if (!newLocation.trim()) return;
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/storage/' : '/api/storage/') + 'config', {
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: newLocation })
@@ -63,7 +63,7 @@ export default function StorageManager() {
     if (!confirm('Are you sure? This will delete cached images but pending bills will be safe.')) return;
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/storage/' : '/api/storage/') + 'clear', { method: 'POST' });
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'clear', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setMessage({ type: 'success', text: 'Cache cleared successfully.' })
@@ -85,7 +85,7 @@ export default function StorageManager() {
     }
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3000/api/storage/' : '/api/storage/') + 'allBills');
+      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'allBills');
       const data = await res.json();
       setBills(data);
       setIsViewingBills(true);
@@ -417,4 +417,5 @@ export default function StorageManager() {
     </div>
   )
 }
+
 

@@ -24,7 +24,7 @@ export default function OfflineSyncManager() {
       
       try {
         const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-        const syncUrl = isElectron ? 'http://localhost:3000/api/storage/sync' : '/api/storage/sync';
+        const syncUrl = isElectron ? 'http://localhost:3015/api/storage/sync' : '/api/storage/sync';
         const syncRes = await fetch(syncUrl, { method: 'POST' });
         if (syncRes.ok) {
           const result = await syncRes.json();
@@ -124,3 +124,4 @@ export default function OfflineSyncManager() {
 
   return null
 }
+
