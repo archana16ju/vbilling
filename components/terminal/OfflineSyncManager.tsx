@@ -13,6 +13,33 @@ export default function OfflineSyncManager() {
   const { offlineQueue, removeOfflineSale, markSaleCompleted, syncInterval } = useTerminalStore()
   const isSyncingRef = useRef(false)
 
+  // Check SQLite directly to clear ghost bills from localStorage
+  useEffect(() => {
+    const cleanupGhostBills = async () => {
+      try {
+        const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+        const baseUrl = isElectron ? 'http://localhost:3015' : '';
+        const res = await fetch(baseUrl + '/api/storage/pendingBills');
+        if (res.ok) {
+          const data = await res.json();
+          const pendingIds = data.map((b: any) => b.id);
+          
+          const state = useTerminalStore.getState();
+          for (const bill of state.offlineQueue) {
+            // If the bill is in our localStorage but NO LONGER in SQLite pending bills,
+            // it means it was successfully synced by the Live Website!
+            if (!pendingIds.includes(bill.id)) {
+              state.removeOfflineSale(bill.id);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to cleanup ghost bills", e);
+      }
+    };
+    cleanupGhostBills();
+  }, []);
+
   useEffect(() => {
     let syncIntervalId: NodeJS.Timeout;
 
