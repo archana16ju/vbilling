@@ -9,19 +9,14 @@ import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 const TABS = [
   { id: 'printer', label: 'Printer Settings' },
   { id: 'terminal', label: 'Terminal Settings' },
-  { id: 'shortcuts', label: 'Keyboard Shortcuts' }
+  { id: 'shortcuts', label: 'Keyboard Shortcuts' },
+  { id: 'storage', label: 'Local Storage' },
+  { id: 'updates', label: 'Software Updates' }
 ]
 
 export default function SettingsPage() {
-  const isElectron = typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-  const allTabs = isElectron ? [
-    ...TABS,
-    { id: 'storage', label: 'Local Storage' },
-    { id: 'updates', label: 'Software Updates' }
-  ] : TABS;
-
   const { printerType, setPrinterType, enableCashChange, setEnableCashChange, syncInterval, setSyncInterval, enableDiscount, setEnableDiscount, bluetoothPrinter, setBluetoothPrinter, wifiPrinter, setWifiPrinter } = useTerminalStore()
-  const [activeTab, setActiveTab] = useState(allTabs[0].id)
+  const [activeTab, setActiveTab] = useState(TABS[0].id)
   const [isScanning, setIsScanning] = useState(false)
   const [wifiIp, setWifiIp] = useState(wifiPrinter?.ip || '')
   const [wifiPort, setWifiPort] = useState(wifiPrinter?.port || '9100')
@@ -77,7 +72,7 @@ export default function SettingsPage() {
         {/* Left Sidebar */}
         <div className="w-full md:w-64 shrink-0">
           <nav className="space-y-1">
-            {allTabs.map((tab) => (
+            {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}

@@ -56,7 +56,7 @@ export async function getUpdateState(): Promise<UpdateState> {
       currentVersion: CURRENT_VERSION,
       history: [{ version: CURRENT_VERSION, commit: 'unknown', date: new Date().toISOString(), status: 'Installed' }]
     };
-    await fs.writeFile(statePath, JSON.stringify(initialState, null, 2));
+    try { await fs.writeFile(statePath, JSON.stringify(initialState, null, 2)); } catch(e) {}
     return initialState;
   }
 
@@ -73,7 +73,7 @@ export async function getUpdateState(): Promise<UpdateState> {
       currentVersion: CURRENT_VERSION,
       history: [{ version: CURRENT_VERSION, commit: 'unknown', date: new Date().toISOString(), status: 'Installed' }]
     };
-    await fs.writeFile(statePath, JSON.stringify(initialState, null, 2));
+    try { await fs.writeFile(statePath, JSON.stringify(initialState, null, 2)); } catch(e) {}
     return initialState;
   }
 }
@@ -83,7 +83,7 @@ export async function saveUpdateState(state: Partial<UpdateState>) {
   const newState = { ...currentState, ...state };
   const paths = await getStoragePaths();
   const statePath = path.join(paths.base, UPDATE_STATE_FILE);
-  await fs.writeFile(statePath, JSON.stringify(newState, null, 2));
+  try { await fs.writeFile(statePath, JSON.stringify(newState, null, 2)); } catch(e) {}
   return newState;
 }
 
