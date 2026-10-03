@@ -345,7 +345,7 @@ export async function clearAllSales() {
   }
 }
 
-export async function getLiveSales() {
+export async function getLiveSales(): Promise<any[]> {
   try {
     const db = await getDb();
     const sales = await db.collection('sales').find().sort({ timestamp: -1 }).limit(200).toArray();
@@ -355,3 +355,5 @@ export async function getLiveSales() {
     return [];
   }
 }
+
+
