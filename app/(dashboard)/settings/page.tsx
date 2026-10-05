@@ -4,10 +4,11 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 import { Monitor, Printer, Bluetooth, Wifi, Search, CheckCircle2 } from "lucide-react"
 import KeyboardShortcutsManager from "@/components/terminal/KeyboardShortcutsManager"
 import StorageManager from "@/components/settings/StorageManager"
+import PrinterDesignPanel from '@/components/settings/PrinterDesignPanel';
 import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 
 const TABS = [
-  { id: 'printer', label: 'Printer Settings' },
+  { id: 'printer', label: 'Printer Settings' }, { id: 'printer-design', label: 'Printer Design' }, { id: 'printer-design', label: 'Printer Design' },
   { id: 'terminal', label: 'Terminal Settings' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts' },
   { id: 'storage', label: 'Local Storage' },
@@ -90,6 +91,8 @@ export default function SettingsPage() {
 
         {/* Right Content Area */}
         <div className="flex-1 max-w-4xl">
+          {activeTab === 'printer-design' && <PrinterDesignPanel />}
+          {activeTab === 'printer-design' && <PrinterDesignPanel />}
           {activeTab === 'printer' && (
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-zinc-900 flex items-center gap-2">

@@ -1,3 +1,5 @@
+import { usePrinterDesignStore } from './usePrinterDesignStore';
+import { generateReceiptHtml } from '@/lib/printSystem';
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Product, PRODUCTS, Category, CATEGORIES } from '@/lib/mock-data'
@@ -342,63 +344,8 @@ ${formatLine('TOTAL', String(saleData.total.toFixed(2)))}
           *** Thank You, Visit Again! ***       
 `;
 
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Receipt</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Courier New', Courier, monospace; font-size: 14px; width: 80mm; max-width: 80mm; margin: 0 auto; padding: 2mm 0; color: #000; background: #fff; }
-    .restaurant-name { font-size: 20px; font-weight: bold; text-align: center; letter-spacing: 0.5px; margin-bottom: 2px; }
-    .sub-title { font-size: 12px; text-align: center; margin-bottom: 6px; color: #333; }
-    .divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-    .divider-solid { border: none; border-top: 1px solid #000; margin: 6px 0; }
-    .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: 14px; }
-    .row .name { flex: 1; padding-right: 4px; word-break: break-word; }
-    .row .qty { width: 30px; text-align: center; }
-    .row .price { width: 70px; text-align: right; }
-    .header-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding-bottom: 4px; margin-bottom: 4px; }
-    .totals-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 14px; }
-    .grand-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; padding: 4px 0; margin-top: 4px; }
-    .inv-info { font-size: 12px; display: flex; justify-content: space-between; margin: 3px 0; }
-    .footer { font-size: 12px; text-align: center; margin-top: 10px; color: #333; }
-    @media print { 
-      body { width: 80mm; margin: 0 auto; display: flex; flex-direction: column; align-items: stretch; justify-content: center; } 
-      @page { margin: 0 auto; size: 80mm auto; } 
-    }
-  </style>
-</head>
-<body>
-  <div class="restaurant-name">SK BIRYANI</div>
-  <div class="sub-title">Restaurant & Fast Food</div>
-  <hr class="divider-solid">
-  <div class="inv-info"><span>BILL NO-${seqPart}</span><span>${dateStr}</span></div>
-  <div class="inv-info"><span>Payment: ${saleData.paymentMethod}</span><span>${timeStr}</span></div>
-  <hr class="divider">
-  <div class="header-row"><span style="flex:1">ITEM</span><span style="width:30px;text-align:center">QTY</span><span style="width:60px;text-align:right">AMT</span></div>
-  ${saleData.items.map(item => `
-  <div class="row">
-    <span class="name">${item.product.name}</span>
-    <span class="qty">${item.quantity}</span>
-    <span class="price">₹${(item.quantity * item.product.price).toFixed(2)}</span>
-  </div>`).join('')}
-  <hr class="divider">
-  <div class="totals-row"><span>Subtotal</span><span>₹${saleData.subtotal.toFixed(2)}</span></div>
-  ${saleData.discount > 0 ? `<div class="totals-row"><span>Discount</span><span>-₹${saleData.discount.toFixed(2)}</span></div>` : ''}
-  ${saleData.tax > 0 ? `<div class="totals-row"><span>Tax</span><span>₹${saleData.tax.toFixed(2)}</span></div>` : ''}
-  <hr class="divider-solid">
-  <div class="grand-total"><span>TOTAL</span><span>₹${saleData.total.toFixed(2)}</span></div>
-  ${saleData.paymentMethod === 'Cash' && saleData.amountReceived !== undefined ? `
-  <div class="totals-row"><span>Received</span><span>₹${saleData.amountReceived.toFixed(2)}</span></div>
-  <div class="totals-row"><span>Change</span><span>₹${(saleData.changeAmount || 0).toFixed(2)}</span></div>
-  ` : ''}
-  <hr class="divider">
-  <div class="footer">*** Thank You, Visit Again! ***<br></div>
-  <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 1000); }</script>
-</body>
-</html>`;
+    const design = usePrinterDesignStore.getState();
+    const htmlContent = generateReceiptHtml({ ...saleData, id: fullBillId, timestamp: Date.now() }, design);
 
     // Always create a print job
     const jobId = "PRINT-" + Date.now();

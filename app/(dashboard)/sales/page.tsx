@@ -1,4 +1,6 @@
 'use client'
+import { usePrinterDesignStore } from '@/store/usePrinterDesignStore';
+import { generateReceiptHtml } from '@/lib/printSystem';
 import { useTerminalStore, Sale } from "@/store/useTerminalStore"
 import { IndianRupee, CreditCard, Banknote, Wallet, Receipt, X, Printer, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
@@ -234,53 +236,13 @@ export default function SalesPage() {
             </div>
 
             {/* Thermal Receipt Preview */}
-            <div style={{ fontFamily: "'Courier New', Courier, monospace", fontSize: '12px', color: '#000' }}>
-              <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', letterSpacing: '1px', marginBottom: '2px' }}>SK BIRYANI</div>
-              <div style={{ textAlign: 'center', fontSize: '10px', color: '#555', marginBottom: '8px' }}>Restaurant & Fast Food</div>
-              <hr style={{ borderTop: '1px solid #000', margin: '6px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '2px' }}>
-                <span>BILL NO-{selectedSale.id.includes('-') ? selectedSale.id.split('-').pop() : selectedSale.id}</span>
-                <span>{new Date(selectedSale.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                <span>Payment: {selectedSale.paymentMethod}</span>
-                <span>{new Date(selectedSale.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-              </div>
-              <hr style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11px', borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '4px' }}>
-                <span style={{ flex: 1 }}>ITEM</span>
-                <span style={{ width: '30px', textAlign: 'center' }}>QTY</span>
-                <span style={{ width: '65px', textAlign: 'right' }}>AMT</span>
-              </div>
-              {selectedSale.items.map((item, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '12px' }}>
-                  <span style={{ flex: 1, paddingRight: '4px', wordBreak: 'break-word' }}>{item.product.name}</span>
-                  <span style={{ width: '30px', textAlign: 'center' }}>{item.quantity}</span>
-                  <span style={{ width: '65px', textAlign: 'right' }}>₹{(item.quantity * item.product.price).toFixed(2)}</span>
-                </div>
-              ))}
-              <hr style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px' }}>
-                <span>Subtotal</span><span>₹{selectedSale.subtotal.toFixed(2)}</span>
-              </div>
-              {selectedSale.discount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px' }}>
-                  <span>Discount</span><span>-₹{selectedSale.discount.toFixed(2)}</span>
-                </div>
-              )}
-              {selectedSale.tax > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '2px' }}>
-                  <span>Tax</span><span>₹{selectedSale.tax.toFixed(2)}</span>
-                </div>
-              )}
-              <hr style={{ borderTop: '1px solid #000', margin: '6px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '17px', fontWeight: 'bold', padding: '2px 0' }}>
-                <span>TOTAL</span><span>₹{selectedSale.total.toFixed(2)}</span>
-              </div>
-              <hr style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
-              <div style={{ textAlign: 'center', fontSize: '11px', color: '#444', marginTop: '6px' }}>
-                *** Thank You, Visit Again! ***
-              </div>
+            <div className="bg-white overflow-hidden shadow-sm" style={{ width: '80mm', minHeight: '300px', margin: '0 auto', border: '1px solid #e4e4e7' }}>
+              <iframe
+                 title="Receipt Preview"
+                 srcDoc={generateReceiptHtml(selectedSale, usePrinterDesignStore())}
+                 className="w-full h-full border-0"
+                 style={{ minHeight: '400px' }}
+               />
             </div>
           </div>
         </div>
