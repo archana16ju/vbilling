@@ -35,12 +35,12 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
 
   const footerLines = design.footerText.split('\n').filter(Boolean);
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${saleData.id || ''}</title>
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${(saleData.id || saleData.billId) || ''}</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: 'Courier New', Courier, monospace; font-size: ${baseFontSize}px; width: ${paperWidth}; max-width: ${paperWidth}; margin: 0 auto; padding: 2mm 0; color: #000; background: #fff; text-align: ${design.textAlignment}; }
+      body { font-family: 'Courier New', Courier, monospace; font-size: ${baseFontSize}px; width: ${paperWidth}; max-width: ${paperWidth}; margin: 0 auto; padding: 2mm 5mm; color: #000; background: #fff; text-align: ${design.textAlignment}; }
       .restaurant-name { font-size: ${baseFontSize * 1.4}px; font-weight: ${design.companyNameBold ? 'bold' : 'normal'}; text-align: center; margin-bottom: 2px; }
-      .sub-title { font-size: ${baseFontSize * 0.85}px; text-align: center; margin-bottom: 6px; white-space: pre-line; }
+      .sub-title { font-size: ${baseFontSize * 0.85}px; text-align: center; margin-bottom: 6px;  }
       .divider { border-top: 1px dashed #000; margin: 6px 0; }
       .divider-solid { border-top: 1px solid #000; margin: 6px 0; }
       .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: ${baseFontSize}px; text-align: left; }
@@ -55,16 +55,10 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       @media print { body { width: ${paperWidth}; margin: 0 auto; display: flex; flex-direction: column; align-items: stretch; justify-content: center; } @page { margin: 0 auto; size: ${paperWidth} auto; } }
     </style></head><body>
     ${design.showCompanyName ? `<div class="restaurant-name">${design.companyName}</div>` : ''}
-    <div class="sub-title">
-      ${design.showLocation && design.location ? design.location + '<br>' : ''}
-      ${design.showPhoneNumber && design.phoneNumber ? 'Ph: ' + design.phoneNumber + '<br>' : ''}
-      ${design.showEmail && design.email ? 'Email: ' + design.email + '<br>' : ''}
-      ${design.showWebsite && design.website ? 'Web: ' + design.website + '<br>' : ''}
-      ${design.showGstNumber && design.gstNumber ? 'GST: ' + design.gstNumber : ''}
-    </div>
+    ${(design.showLocation && design.location) || (design.showPhoneNumber && design.phoneNumber) || (design.showEmail && design.email) || (design.showWebsite && design.website) || (design.showGstNumber && design.gstNumber) ? `<div class="sub-title">${design.showLocation && design.location ? design.location.replace(/\n/g, '<br>') + '<br>' : ''}${design.showPhoneNumber && design.phoneNumber ? 'Ph: ' + design.phoneNumber + '<br>' : ''}${design.showEmail && design.email ? 'Email: ' + design.email + '<br>' : ''}${design.showWebsite && design.website ? 'Web: ' + design.website + '<br>' : ''}${design.showGstNumber && design.gstNumber ? 'GST: ' + design.gstNumber : ''}</div>` : ''}
     ${design.showHeader && design.customHeaderText ? `<div class="sub-title" style="font-weight: bold;">${design.customHeaderText}</div>` : ''}
     <hr class="divider">
-    ${design.showBillId ? `<div class="inv-info"><span>Bill No:</span><span>${saleData.id || ''}</span></div>` : ''}
+    ${design.showBillId ? `<div class="inv-info"><span>Bill No:</span><span>${(saleData.id || saleData.billId) || ''}</span></div>` : ''}
     ${design.showDate || design.showTime ? `<div class="inv-info"><span>Date:</span><span>${design.showDate ? formattedDate : ''} ${design.showTime ? formattedTime : ''}</span></div>` : ''}
     <hr class="divider">
     <div class="header-row"><div class="name">Item</div>${design.showQuantity ? `<div class="qty">Qty</div>` : ''}${design.showRate ? `<div class="price">Rate</div>` : ''}${design.showItemTotal ? `<div class="price">Total</div>` : ''}</div>

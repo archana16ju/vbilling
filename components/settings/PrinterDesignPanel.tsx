@@ -151,10 +151,7 @@ export default function PrinterDesignPanel() {
                   </div>
                 </div>
 
-                {/* Logo placeholder */}
                 <div className="flex items-center justify-between mt-4 border-t pt-4">
-                  <label className="text-sm font-medium text-zinc-700">Show Company Logo</label>
-                  <input type="checkbox" checked={design.showLogo} onChange={e => design.updateDesign({ showLogo: e.target.checked })} className="w-4 h-4" />
                 </div>
               </div>
             )}
