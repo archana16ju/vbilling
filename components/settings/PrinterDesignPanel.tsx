@@ -120,7 +120,7 @@ export default function PrinterDesignPanel() {
                 <div className="grid grid-cols-2 gap-4 mt-4">
                   <div className="space-y-2 border p-3 rounded-md">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Show Phone</label>
+                      <label className="text-sm font-medium text-zinc-900">Show Phone</label>
                       <input type="checkbox" checked={design.showPhoneNumber} onChange={e => design.updateDesign({ showPhoneNumber: e.target.checked })} />
                     </div>
                     {design.showPhoneNumber && <input type="text" value={design.phoneNumber} onChange={e => design.updateDesign({ phoneNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
@@ -128,7 +128,7 @@ export default function PrinterDesignPanel() {
                   
                   <div className="space-y-2 border p-3 rounded-md">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Show GST No</label>
+                      <label className="text-sm font-medium text-zinc-900">Show GST No</label>
                       <input type="checkbox" checked={design.showGstNumber} onChange={e => design.updateDesign({ showGstNumber: e.target.checked })} />
                     </div>
                     {design.showGstNumber && <input type="text" value={design.gstNumber} onChange={e => design.updateDesign({ gstNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
@@ -136,7 +136,7 @@ export default function PrinterDesignPanel() {
 
                   <div className="space-y-2 border p-3 rounded-md">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Show Email</label>
+                      <label className="text-sm font-medium text-zinc-900">Show Email</label>
                       <input type="checkbox" checked={design.showEmail} onChange={e => design.updateDesign({ showEmail: e.target.checked })} />
                     </div>
                     {design.showEmail && <input type="text" value={design.email} onChange={e => design.updateDesign({ email: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
@@ -144,7 +144,7 @@ export default function PrinterDesignPanel() {
 
                   <div className="space-y-2 border p-3 rounded-md">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Show Website</label>
+                      <label className="text-sm font-medium text-zinc-900">Show Website</label>
                       <input type="checkbox" checked={design.showWebsite} onChange={e => design.updateDesign({ showWebsite: e.target.checked })} />
                     </div>
                     {design.showWebsite && <input type="text" value={design.website} onChange={e => design.updateDesign({ website: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
