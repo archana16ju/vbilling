@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Save, RotateCcw } from "lucide-react"
+import { Save, RotateCcw, Eye, X } from "lucide-react"
 import { usePrinterDesignStore } from "@/store/usePrinterDesignStore"
 import { generateReceiptHtml } from "@/lib/printSystem"
 import { useTerminalStore } from "@/store/useTerminalStore"
@@ -9,6 +9,7 @@ import { useTerminalStore } from "@/store/useTerminalStore"
 export default function PrinterDesignPanel() {
   const design = usePrinterDesignStore()
   const [activeTab, setActiveTab] = useState("company")
+  const [showPreview, setShowPreview] = useState(false)
   const state = useTerminalStore()
   const role = (state as any).role // for preview data
 
@@ -42,12 +43,15 @@ export default function PrinterDesignPanel() {
   const previewHtml = generateReceiptHtml(previewData, design)
 
   return (
-    <div className="flex h-[calc(100vh-140px)] gap-6">
+    <div className="flex justify-center h-[calc(100vh-140px)] gap-6 w-full max-w-4xl mx-auto">
       {/* Settings Panel */}
       <div className="flex-1 flex flex-col bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
         <div className="p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
           <h2 className="text-lg font-semibold text-zinc-800">Printer Design Settings</h2>
           <div className="flex gap-2">
+            <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors">
+              <Eye className="w-4 h-4" /> Live Preview
+            </button>
             <button onClick={handleReset} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors">
               <RotateCcw className="w-4 h-4" /> Reset
             </button>
@@ -312,23 +316,29 @@ export default function PrinterDesignPanel() {
         </div>
       </div>
 
-      {/* Live Preview Panel */}
-      <div className="w-[400px] bg-white border border-zinc-200 rounded-lg shadow-sm flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-zinc-200 bg-zinc-50">
-          <h2 className="text-lg font-semibold text-zinc-800">Live Preview</h2>
-        </div>
-        <div className="flex-1 bg-zinc-100 p-6 flex justify-center overflow-y-auto">
-          {/* Paper container */}
-          <div className="bg-white shadow-md border" style={{ width: design.paperSize === '58mm' ? '58mm' : design.paperSize === '80mm' ? '80mm' : '210mm', minHeight: '100px' }}>
-             <iframe
-               title="Receipt Preview"
-               srcDoc={previewHtml}
-               className="w-full h-full border-0"
-               style={{ minHeight: '500px' }}
-             />
+      {/* Overlay Modal for Live Preview */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-4 py-3 border-b flex justify-between items-center bg-zinc-50">
+              <h3 className="font-bold text-zinc-800">Receipt Live Preview</h3>
+              <button onClick={() => setShowPreview(false)} className="p-1 hover:bg-zinc-200 rounded-md transition-colors text-zinc-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 bg-zinc-100 flex-1 overflow-y-auto flex justify-center">
+              <div className="bg-white shadow-md border" style={{ width: design.paperSize === '58mm' ? '58mm' : design.paperSize === '80mm' ? '80mm' : '210mm', minHeight: '100px' }}>
+                <iframe
+                  title="Receipt Preview"
+                  srcDoc={previewHtml}
+                  className="w-full h-full border-0"
+                  style={{ minHeight: '500px' }}
+                />
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

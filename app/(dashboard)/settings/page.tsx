@@ -8,7 +8,7 @@ import PrinterDesignPanel from '@/components/settings/PrinterDesignPanel';
 import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 
 const TABS = [
-  { id: 'printer', label: 'Printer Settings' }, { id: 'printer-design', label: 'Printer Design' }, { id: 'printer-design', label: 'Printer Design' },
+  { id: 'printer', label: 'Printer Settings' }, { id: 'printer-design', label: 'Printer Design' },
   { id: 'terminal', label: 'Terminal Settings' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts' },
   { id: 'storage', label: 'Local Storage' },
