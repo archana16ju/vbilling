@@ -98,7 +98,7 @@ export default function PrinterDesignPanel() {
                   <div className="pl-6 space-y-3 border-l-2 border-indigo-100 pb-2">
                     <div>
                       <label className="block text-xs text-zinc-500 mb-1">Company / Shop Name</label>
-                      <input type="text" value={design.companyName} onChange={e => design.updateDesign({ companyName: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm" />
+                      <input type="text" value={design.companyName} onChange={e => design.updateDesign({ companyName: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
                     </div>
                     <div className="flex items-center gap-2">
                       <input type="checkbox" checked={design.companyNameBold} onChange={e => design.updateDesign({ companyNameBold: e.target.checked })} />
@@ -113,7 +113,7 @@ export default function PrinterDesignPanel() {
                 </div>
                 {design.showLocation && (
                   <div className="pl-6">
-                    <textarea value={design.location} onChange={e => design.updateDesign({ location: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm" rows={2} />
+                    <textarea value={design.location} onChange={e => design.updateDesign({ location: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" rows={2} />
                   </div>
                 )}
 
@@ -123,7 +123,7 @@ export default function PrinterDesignPanel() {
                       <label className="text-sm font-medium">Show Phone</label>
                       <input type="checkbox" checked={design.showPhoneNumber} onChange={e => design.updateDesign({ showPhoneNumber: e.target.checked })} />
                     </div>
-                    {design.showPhoneNumber && <input type="text" value={design.phoneNumber} onChange={e => design.updateDesign({ phoneNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />}
+                    {design.showPhoneNumber && <input type="text" value={design.phoneNumber} onChange={e => design.updateDesign({ phoneNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
                   </div>
                   
                   <div className="space-y-2 border p-3 rounded-md">
@@ -131,7 +131,7 @@ export default function PrinterDesignPanel() {
                       <label className="text-sm font-medium">Show GST No</label>
                       <input type="checkbox" checked={design.showGstNumber} onChange={e => design.updateDesign({ showGstNumber: e.target.checked })} />
                     </div>
-                    {design.showGstNumber && <input type="text" value={design.gstNumber} onChange={e => design.updateDesign({ gstNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />}
+                    {design.showGstNumber && <input type="text" value={design.gstNumber} onChange={e => design.updateDesign({ gstNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
                   </div>
 
                   <div className="space-y-2 border p-3 rounded-md">
@@ -139,7 +139,7 @@ export default function PrinterDesignPanel() {
                       <label className="text-sm font-medium">Show Email</label>
                       <input type="checkbox" checked={design.showEmail} onChange={e => design.updateDesign({ showEmail: e.target.checked })} />
                     </div>
-                    {design.showEmail && <input type="text" value={design.email} onChange={e => design.updateDesign({ email: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />}
+                    {design.showEmail && <input type="text" value={design.email} onChange={e => design.updateDesign({ email: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
                   </div>
 
                   <div className="space-y-2 border p-3 rounded-md">
@@ -147,7 +147,7 @@ export default function PrinterDesignPanel() {
                       <label className="text-sm font-medium">Show Website</label>
                       <input type="checkbox" checked={design.showWebsite} onChange={e => design.updateDesign({ showWebsite: e.target.checked })} />
                     </div>
-                    {design.showWebsite && <input type="text" value={design.website} onChange={e => design.updateDesign({ website: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />}
+                    {design.showWebsite && <input type="text" value={design.website} onChange={e => design.updateDesign({ website: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
                   </div>
                 </div>
 
@@ -169,7 +169,7 @@ export default function PrinterDesignPanel() {
                 {design.showHeader && (
                   <div>
                     <label className="block text-xs text-zinc-500 mb-1">Custom Header Text</label>
-                    <input type="text" value={design.customHeaderText} onChange={e => design.updateDesign({ customHeaderText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm" />
+                    <input type="text" value={design.customHeaderText} onChange={e => design.updateDesign({ customHeaderText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
                   </div>
                 )}
               </div>
@@ -199,7 +199,7 @@ export default function PrinterDesignPanel() {
                 <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Date & Time Formats</h3>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-2">Date Format</label>
-                  <select value={design.dateFormat} onChange={e => design.updateDesign({ dateFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm">
+                  <select value={design.dateFormat} onChange={e => design.updateDesign({ dateFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
                     <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                     <option value="DD-MM-YYYY">DD-MM-YYYY</option>
                     <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -208,7 +208,7 @@ export default function PrinterDesignPanel() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-2">Time Format</label>
-                  <select value={design.timeFormat} onChange={e => design.updateDesign({ timeFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm">
+                  <select value={design.timeFormat} onChange={e => design.updateDesign({ timeFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
                     <option value="12-hour">12-hour (e.g. 03:30 PM)</option>
                     <option value="24-hour">24-hour (e.g. 15:30)</option>
                   </select>
@@ -282,7 +282,7 @@ export default function PrinterDesignPanel() {
                 {design.showFooter && (
                   <div>
                     <label className="block text-sm font-medium text-zinc-700 mb-2">Custom Footer Text</label>
-                    <textarea value={design.footerText} onChange={e => design.updateDesign({ footerText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm" rows={3} />
+                    <textarea value={design.footerText} onChange={e => design.updateDesign({ footerText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" rows={3} />
                     <div className="flex gap-2 mt-2">
                       {["Thank You!", "Visit Again", "Thank You for Shopping"].map(t => (
                         <button key={t} onClick={() => design.updateDesign({ footerText: t })} className="px-2 py-1 bg-zinc-100 border text-xs rounded hover:bg-zinc-200">
@@ -300,7 +300,7 @@ export default function PrinterDesignPanel() {
                 <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Receipt Size / Layout</h3>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-2">Paper Size</label>
-                  <select value={design.paperSize} onChange={e => design.updateDesign({ paperSize: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm">
+                  <select value={design.paperSize} onChange={e => design.updateDesign({ paperSize: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
                     <option value="58mm">58mm Thermal</option>
                     <option value="80mm">80mm Thermal</option>
                     <option value="A4">A4 Size</option>
@@ -308,7 +308,7 @@ export default function PrinterDesignPanel() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-2">Base Font Size (px)</label>
-                  <input type="number" value={design.fontSize} onChange={e => design.updateDesign({ fontSize: parseInt(e.target.value) || 14 })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm" />
+                  <input type="number" value={design.fontSize} onChange={e => design.updateDesign({ fontSize: parseInt(e.target.value) || 14 })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
                 </div>
               </div>
             )}
