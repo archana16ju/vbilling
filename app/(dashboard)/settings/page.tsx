@@ -92,7 +92,6 @@ export default function SettingsPage() {
         {/* Right Content Area */}
         <div className="flex-1 max-w-4xl">
           {activeTab === 'printer-design' && <PrinterDesignPanel />}
-          {activeTab === 'printer-design' && <PrinterDesignPanel />}
           {activeTab === 'printer' && (
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-zinc-900 flex items-center gap-2">
