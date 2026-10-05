@@ -151,8 +151,7 @@ export const useTerminalStore = create<TerminalState>()(
         
         set({ billSequence: { date: todayStr, count: nextCount } })
         
-        const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-        return `BILL-${todayStr}-${String(nextCount).padStart(3, '0')}-${randomSuffix}`
+        return `BILL-${todayStr}-${String(nextCount).padStart(3, '0')}`
       },
       products: PRODUCTS,
       categories: CATEGORIES,
