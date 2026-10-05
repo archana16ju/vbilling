@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Monitor, Printer, Bluetooth, Wifi, Search, CheckCircle2 } from "lucide-react"
 import KeyboardShortcutsManager from "@/components/terminal/KeyboardShortcutsManager"
