@@ -16,6 +16,9 @@ const TABS = [
 ]
 
 export default function SettingsPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const { printerType, setPrinterType, enableCashChange, setEnableCashChange, syncInterval, setSyncInterval, enableDiscount, setEnableDiscount, bluetoothPrinter, setBluetoothPrinter, wifiPrinter, setWifiPrinter } = useTerminalStore()
   const [activeTab, setActiveTab] = useState(TABS[0].id)
   const [isScanning, setIsScanning] = useState(false)
@@ -61,6 +64,9 @@ export default function SettingsPage() {
     setWifiPrinter({ name: wifiName, ip: wifiIp, port: wifiPort });
     alert("WiFi Printer Saved!");
   };
+
+  
+  if (!mounted) return null;
 
   return (
     <div>

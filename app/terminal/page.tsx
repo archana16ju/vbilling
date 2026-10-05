@@ -1,9 +1,17 @@
+'use client';
+import { useState, useEffect } from 'react';
 import TerminalHeader from "@/components/terminal/TerminalHeader"
 import CategoryPanel from "@/components/terminal/CategoryPanel"
 import ProductPanel from "@/components/terminal/ProductPanel"
 import CartPanel from "@/components/terminal/CartPanel"
 
 export default function TerminalPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  
+  if (!mounted) return null;
+
   return (
     <main className="flex h-screen flex-col bg-zinc-100 overflow-hidden">
       <TerminalHeader />

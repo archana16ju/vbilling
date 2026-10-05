@@ -7,6 +7,9 @@ import { useState, useEffect } from "react"
 import { clearAllSales, getLiveSales } from "@/lib/actions/db"
 
 export default function SalesPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const { sales, offlineQueue = [], clearSales } = useTerminalStore()
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [resetting, setResetting] = useState(false)
@@ -97,6 +100,9 @@ export default function SalesPage() {
       printWindow.document.close()
     }
   }
+
+  
+  if (!mounted) return null;
 
   return (
     <div>
