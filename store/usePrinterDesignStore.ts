@@ -22,23 +22,33 @@ export interface PrinterDesignState {
 }
 
 const initialState: Omit<PrinterDesignState, 'updateDesign' | 'resetDesign'> = {
-  companyName: 'MY SHOP', showCompanyName: true, companyNameBold: true,
-  location: '123 Main Street\nCity, State', showLocation: true,
-  phoneNumber: '9876543210', showPhoneNumber: true,
-  email: 'contact@myshop.com', showEmail: false,
-  gstNumber: 'GSTIN123456789', showGstNumber: false,
-  website: 'www.myshop.com', showWebsite: false,
+  companyName: 'SK Briyani', showCompanyName: true, companyNameBold: true,
+  location: '', showLocation: false,
+  phoneNumber: '', showPhoneNumber: false,
+  email: '', showEmail: false,
+  gstNumber: '', showGstNumber: false,
+  website: '', showWebsite: false,
   logoUrl: '', showLogo: false, logoSize: 50,
   customHeaderText: 'Welcome to our Store', showHeader: true,
-  showBillId: true, showDate: true, showTime: true, showCashierName: true, showTableNumber: false, showOrderNumber: false,
+  showBillId: true, showDate: true, showTime: true, showCashierName: false, showTableNumber: false, showOrderNumber: false,
   dateFormat: 'DD/MM/YYYY', timeFormat: '12-hour',
-  showPaymentMethod: true, showAmountPaid: true, showChange: true, showTransactionId: false,
+  showPaymentMethod: true, showAmountPaid: false, showChange: false, showTransactionId: false,
   showItemName: true, showSku: false, showQuantity: true, showUnit: false, showRate: true, showItemDiscount: false, showItemTax: false, showItemTotal: true,
-  showSubtotal: true, showBillDiscount: true, showBillTax: true, showRoundOff: true, showGrandTotal: true,
-  showFooter: true, footerText: 'Thank You!\nVisit Again',
-  paperSize: '80mm', fontSize: 14, textAlignment: 'center',
+  showSubtotal: true, showBillDiscount: false, showBillTax: false, showRoundOff: false, showGrandTotal: true,
+  showFooter: true, footerText: '*****Thank You! Visit Again*****',
+  paperSize: '80mm', fontSize: 12, textAlignment: 'center',
 };
 
 export const usePrinterDesignStore = create<PrinterDesignState>()(persist((set) => ({
   ...initialState, updateDesign: (updates) => set((state) => ({ ...state, ...updates })), resetDesign: () => set(initialState),
-}), { name: 'printer-design-storage' }));
+}), { 
+  name: 'printer-design-storage',
+  version: 1,
+  migrate: (persistedState: any, version: number) => {
+    if (version === 0) {
+      // Force update the old state with the new desired initial state
+      return { ...persistedState, ...initialState };
+    }
+    return persistedState;
+  }
+}));

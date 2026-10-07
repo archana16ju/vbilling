@@ -10,23 +10,22 @@ export default function SalesPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const { sales, offlineQueue = [], clearSales } = useTerminalStore()
+  const printerDesign = usePrinterDesignStore();
+  const { sales, clearSales } = useTerminalStore()
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [resetting, setResetting] = useState(false)
   const [liveSales, setLiveSales] = useState<Sale[]>([])
 
   useEffect(() => {
-    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-    if (!isElectron) {
-      getLiveSales().then(res => setLiveSales(res as Sale[]));
-    }
+    getLiveSales().then(res => setLiveSales(res as Sale[]));
   }, []);
 
-  const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-  const baseSales = isElectron ? sales : liveSales;
-
-  // Use only sales, because offline bills are already pushed to sales with syncStatus = 'PENDING_SYNC'
-  const allSales = [...baseSales].sort((a, b) => b.timestamp - a.timestamp)
+  // Merge live database sales with local sales (which update instantly upon sync)
+  const allSalesMap = new Map<string, Sale>();
+  sales.forEach(s => allSalesMap.set(s.id, s));
+  liveSales.forEach(s => allSalesMap.set(s.id, s));
+  
+  const allSales = Array.from(allSalesMap.values()).sort((a, b) => b.timestamp - a.timestamp)
 
   const totalSales = allSales.reduce((sum, sale) => sum + sale.total, 0)
   const cashSales = allSales.filter(s => s.paymentMethod === 'Cash').reduce((sum, sale) => sum + sale.total, 0)
@@ -245,7 +244,7 @@ export default function SalesPage() {
             <div className="bg-white overflow-hidden shadow-sm" style={{ width: '80mm', minHeight: '300px', margin: '0 auto', border: '1px solid #e4e4e7' }}>
               <iframe
                  title="Receipt Preview"
-                 srcDoc={generateReceiptHtml(selectedSale, usePrinterDesignStore())}
+                 srcDoc={generateReceiptHtml(selectedSale, printerDesign)}
                  className="w-full h-full border-0"
                  style={{ minHeight: '400px' }}
                />

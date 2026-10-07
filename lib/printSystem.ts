@@ -44,7 +44,7 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       .divider { border-top: 1px dashed #000; margin: 6px 0; }
       .divider-solid { border-top: 1px solid #000; margin: 6px 0; }
       .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: ${baseFontSize}px; text-align: left; }
-      .row .name { flex: 1; padding-right: 4px; word-break: break-word; }
+      .row .name { flex: 1; padding-right: 4px; word-wrap: break-word; overflow-wrap: break-word; word-break: normal; }
       .row .qty { width: 30px; text-align: center; }
       .row .price { width: 70px; text-align: right; }
       .header-row { display: flex; justify-content: space-between; font-size: ${baseFontSize * 0.85}px; font-weight: bold; padding-bottom: 4px; margin-bottom: 4px; text-align: left; }
@@ -63,7 +63,7 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
     <hr class="divider">
     <div class="header-row"><div class="name">Item</div>${design.showQuantity ? `<div class="qty">Qty</div>` : ''}${design.showRate ? `<div class="price">Rate</div>` : ''}${design.showItemTotal ? `<div class="price">Total</div>` : ''}</div>
     ${itemsHtml}
-    <hr class="divider-solid">
+    <hr class="divider">
     ${design.showSubtotal ? `<div class="totals-row"><span>Subtotal</span><span>₹${saleData.subtotal || 0}</span></div>` : ''}
     ${design.showBillDiscount && saleData.discount > 0 ? `<div class="totals-row"><span>Discount</span><span>-₹${saleData.discount}</span></div>` : ''}
     ${design.showBillTax && saleData.tax > 0 ? `<div class="totals-row"><span>Tax</span><span>+₹${saleData.tax}</span></div>` : ''}
