@@ -3,7 +3,7 @@ import { writeFile } from "fs/promises"
 import path from "path"
 import { GridFSBucket } from 'mongodb'
 import { getDb } from '@/lib/actions/db'
-import { ensureStorageDirectories, getStoragePaths } from '@/lib/storage'
+import { ensureStorageDirectories, getStoragePaths, addMediaSyncAction } from '@/lib/storage'
 import { Readable } from 'stream'
 import sharp from 'sharp'
 
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
           .on('finish', resolve);
       });
     } catch (dbErr) {
-      console.warn("MongoDB upload failed, relying on local cache", dbErr);
+      console.warn("MongoDB upload failed, relying on local cache and queuing for sync", dbErr);
+      await addMediaSyncAction(filename, type.toUpperCase() as 'CATEGORY' | 'PRODUCT', null, filepath);
     }
 
     return NextResponse.json({ url: `/api/media/${filename}` })

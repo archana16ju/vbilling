@@ -3,8 +3,8 @@ import { getNextBillId } from '@/lib/actions/db';
 
 export async function GET() {
   try {
-    const id = await getNextBillId();
-    return new Response(JSON.stringify({ id }), {
+    const data = await getNextBillId();
+    return new Response(JSON.stringify(data), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

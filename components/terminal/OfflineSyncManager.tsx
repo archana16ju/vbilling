@@ -38,6 +38,32 @@ export default function OfflineSyncManager() {
       }
     };
     cleanupGhostBills();
+
+    const initializeSequence = async () => {
+      try {
+        const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+        const baseUrl = isElectron ? 'http://localhost:3015' : '';
+        const now = new Date();
+        const todayStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getFullYear()).slice(-2);
+        const res = await fetch(`${baseUrl}/api/storage/sequence?date=${todayStr}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data.count === 'number' && data.count > 0) {
+            const state = useTerminalStore.getState();
+            if (state.billSequence.date === todayStr) {
+               if (data.count > state.billSequence.count) {
+                 state.reconcileBillSequence(data.count);
+               }
+            } else {
+               state.reconcileBillSequence(data.count);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to initialize sequence from sqlite", e);
+      }
+    };
+    initializeSequence();
   }, []);
 
   useEffect(() => {
@@ -65,6 +91,28 @@ export default function OfflineSyncManager() {
 
         const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
         
+        // Reconcile sequence
+        try {
+          const idRes = await fetch(`${liveApiUrl}/api/db/getNextBillId`);
+          if (idRes.ok) {
+             const data = await idRes.json();
+             if (data && data.count !== undefined) {
+               state.reconcileBillSequence(data.count);
+               
+               // Also backup to SQLite immediately
+               const now = new Date();
+               const todayStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getFullYear()).slice(-2);
+               fetch(`${isElectron ? 'http://localhost:3015' : ''}/api/storage/sequence`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ date: todayStr, count: data.count })
+               }).catch(e => console.error("SQLite seq backup fail", e));
+             }
+          }
+        } catch(e) {
+          console.error('Failed to reconcile bill sequence', e);
+        }
+
         // Also sync old localStorage-based offline bills to clear the old queue
         const oldBills = useTerminalStore.getState().offlineQueue;
         for (const sale of oldBills) {

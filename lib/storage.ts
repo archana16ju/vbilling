@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { promises as fs } from 'fs';
 import fsSync from 'fs';
@@ -51,6 +51,10 @@ function getDbInstance(location: string) {
   
   try {
     dbInstance.exec(`
+      CREATE TABLE IF NOT EXISTS local_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS offline_bills (
         id TEXT PRIMARY KEY,
         data TEXT NOT NULL,
@@ -104,6 +108,16 @@ function getDbInstance(location: string) {
         data TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         status TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS media_sync_queue (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        filepath TEXT NOT NULL,
+        status TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        retries INTEGER DEFAULT 0
       );
     `);
     
@@ -433,6 +447,21 @@ export async function savePendingBill(bill: any) {
       'PENDING_SYNC'
     );
 
+        // Atomically backup the sequence
+    if (bill.id && typeof bill.id === 'string' && bill.id.startsWith('BILL-')) {
+      const parts = bill.id.split('-');
+      if (parts.length === 3) {
+        const dateStr = parts[1];
+        const count = parseInt(parts[2], 10);
+        if (!isNaN(count)) {
+          const existing = db.prepare('SELECT value FROM local_config WHERE key = ?').get('seq_' + dateStr);
+          const currentMax = existing ? parseInt(existing.value, 10) : 0;
+          if (count > currentMax) {
+            db.prepare('INSERT OR REPLACE INTO local_config (key, value) VALUES (?, ?)').run('seq_' + dateStr, count.toString());
+          }
+        }
+      }
+    }
     // Deduct offline stock
     try {
       const { calculateRecipeDeduction, processStockTransactions } = await import('@/lib/actions/inventory');
@@ -733,3 +762,63 @@ export async function verifyOfflineBillsTable(): Promise<boolean> {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {name: string}[];
   return tables.some(t => t.name === 'offline_bills');
 }
+
+export async function addMediaSyncAction(filename: string, entityType: 'CATEGORY' | 'PRODUCT', entityId: string | null, filepath: string) {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    db.prepare('DELETE FROM media_sync_queue WHERE filename = ?').run(filename);
+    const insert = db.prepare('INSERT INTO media_sync_queue (id, filename, entity_type, entity_id, filepath, status, timestamp, retries) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    insert.run('media-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9), filename, entityType, entityId, filepath, 'PENDING', Date.now(), 0);
+    return true;
+  } catch (e) {
+    console.error('addMediaSyncAction error', e);
+    return false;
+  }
+}
+
+export async function getPendingMediaActions() {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    return db.prepare("SELECT * FROM media_sync_queue WHERE status = 'PENDING' ORDER BY timestamp ASC").all() as any[];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function removeMediaAction(id: string) {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    db.prepare('DELETE FROM media_sync_queue WHERE id = ?').run(id);
+  } catch (e) {}
+}
+
+export async function updateMediaActionRetries(id: string) {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    db.prepare('UPDATE media_sync_queue SET retries = retries + 1 WHERE id = ?').run(id);
+  } catch (e) {}
+}
+
+
+export async function getLocalConfig(key: string): Promise<string | null> {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    const result = db.prepare('SELECT value FROM local_config WHERE key = ?').get(key) as {value: string} | undefined;
+    return result ? result.value : null;
+  } catch (e) { return null; }
+}
+export async function setLocalConfig(key: string, value: string) {
+  const paths = await getStoragePaths();
+  try {
+    const db = getDbInstance(paths.base);
+    db.prepare('INSERT OR REPLACE INTO local_config (key, value) VALUES (?, ?)').run(key, value);
+  } catch (e) {}
+}
+
+
+

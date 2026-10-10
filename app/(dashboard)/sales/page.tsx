@@ -22,8 +22,8 @@ export default function SalesPage() {
 
   // Merge live database sales with local sales (which update instantly upon sync)
   const allSalesMap = new Map<string, Sale>();
-  sales.forEach(s => allSalesMap.set(s.id, s));
-  liveSales.forEach(s => allSalesMap.set(s.id, s));
+  sales.forEach(s => allSalesMap.set((s as any)._id || `${s.id}-${s.timestamp}`, s));
+  liveSales.forEach(s => allSalesMap.set((s as any)._id || `${s.id}-${s.timestamp}`, s));
   
   const allSales = Array.from(allSalesMap.values()).sort((a, b) => b.timestamp - a.timestamp)
 

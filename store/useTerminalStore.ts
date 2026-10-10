@@ -118,6 +118,7 @@ type TerminalState = {
 
   billSequence: { date: string, count: number }
   generateNextBillId: () => string
+  reconcileBillSequence: (serverCount: number) => void
 }
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {
@@ -136,6 +137,22 @@ export const useTerminalStore = create<TerminalState>()(
   persist(
     (set, get) => ({
       billSequence: { date: '', count: 0 },
+      reconcileBillSequence: (serverCount: number) => {
+        const state = get()
+        const now = new Date()
+        const dd = String(now.getDate()).padStart(2, '0')
+        const mm = String(now.getMonth() + 1).padStart(2, '0')
+        const yy = String(now.getFullYear()).slice(-2)
+        const todayStr = `${dd}${mm}${yy}`
+        
+        if (state.billSequence.date === todayStr) {
+          if (serverCount > state.billSequence.count) {
+            set({ billSequence: { date: todayStr, count: serverCount } })
+          }
+        } else {
+          set({ billSequence: { date: todayStr, count: serverCount } })
+        }
+      },
       generateNextBillId: () => {
         const state = get()
         const now = new Date()

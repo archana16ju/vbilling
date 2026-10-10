@@ -375,6 +375,7 @@ export default function StorageManager() {
               </thead>
               <tbody className="divide-y divide-zinc-200 bg-white">
                 {bills
+                  .filter(b => b.sync_status !== 'COMPLETED')
                   .filter(b => b.id.toLowerCase().includes(searchQuery.toLowerCase()))
                   .filter(b => {
                     if (!dateFilter) return true;

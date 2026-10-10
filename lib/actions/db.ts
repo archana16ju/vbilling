@@ -194,7 +194,7 @@ export async function seedDatabase() {
   }
 }
 
-export async function getNextBillId(): Promise<string> {
+export async function getNextBillId(): Promise<{ id: string, count: number }> {
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -203,17 +203,26 @@ export async function getNextBillId(): Promise<string> {
 
   try {
     const db = await getDb();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const endOfDay   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    const todayCount = await db.collection('sales').countDocuments({
-      timestamp: { $gte: startOfDay.getTime(), $lte: endOfDay.getTime() }
-    });
+    
+    // Find the latest bill for today to get the true max sequence (handles deleted bills safely)
+    const latestSale = await db.collection('sales').find({ 
+      id: { $regex: `^BILL-${datePrefix}-` }
+    }).sort({ id: -1 }).limit(1).toArray();
+    
+    let todayCount = 0;
+    if (latestSale.length > 0) {
+      const parts = latestSale[0].id.split('-');
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        todayCount = lastSeq;
+      }
+    }
 
-    const seq = String(todayCount + 1).padStart(3, '0');
-    return `${datePrefix}-${seq}`;
+    const seq = todayCount + 1;
+    return { id: `BILL-${datePrefix}-${String(seq).padStart(3, '0')}`, count: todayCount };
   } catch (err) {
     console.error('getNextBillId error:', err);
-    return `${datePrefix}-${String(Math.floor(Math.random() * 900) + 100)}`;
+    return { id: `BILL-${datePrefix}-${String(Math.floor(Math.random() * 900) + 100)}`, count: 0 };
   }
 }
 
@@ -329,6 +338,18 @@ export async function recordSale(sale: any) {
 
     return { success: true, sale: finalSale };
   } catch (err: any) {
+    if (err.code === 11000) {
+      // Race condition caught by MongoDB unique _id index. 
+      // Ensure it's actually the same sale before treating it as successful sync.
+      try {
+        const db = await getDb();
+        const existingSale = await db.collection('sales').findOne({ _id: sale.id as any });
+        if (existingSale && existingSale.total === sale.total) {
+          return { success: true, sale: { ...existingSale, _id: existingSale._id.toString() } };
+        }
+      } catch(e) {}
+      return { success: false, error: 'Bill ID collision: A different sale already exists with this ID.' };
+    }
     console.error('recordSale error:', err);
     return { success: false, error: err.message };
   }

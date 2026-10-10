@@ -3,9 +3,15 @@ import {
   getPendingOfflineBills, 
   markOfflineBillSynced, 
   getPendingDashboardActions, 
-  removeDashboardAction 
+  removeDashboardAction,
+  getPendingMediaActions,
+  removeMediaAction,
+  updateMediaActionRetries
 } from '@/lib/storage';
 import { getDb } from '@/lib/actions/db';
+import { GridFSBucket } from 'mongodb';
+import { readFile } from 'fs/promises';
+import { Readable } from 'stream';
 
 export async function POST() {
   try {
@@ -19,9 +25,36 @@ export async function POST() {
       if (liveApiUrl) {
         const pendingBills = await getPendingOfflineBills();
         const pendingActions = await getPendingDashboardActions();
+        const pendingMedia = await getPendingMediaActions();
+        
+        // Push Media first if any
+        for (const media of pendingMedia) {
+          if (media.retries > 10) continue;
+          try {
+            const buffer = await readFile(media.filepath);
+            const formData = new FormData();
+            const blob = new Blob([buffer], { type: 'image/webp' });
+            formData.append('file', blob as any, media.filename);
+            formData.append('type', media.entity_type.toLowerCase());
+            
+            const mediaRes = await fetch(`${liveApiUrl}/api/upload`, {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (mediaRes.ok) {
+              await removeMediaAction(media.id);
+            } else {
+              await updateMediaActionRetries(media.id);
+            }
+          } catch (err) {
+            console.error("Failed to forward media to live API", err);
+            await updateMediaActionRetries(media.id);
+          }
+        }
         
         if (pendingBills.length === 0 && pendingActions.length === 0) {
-           return NextResponse.json({ success: true, message: 'Nothing to sync' });
+           return NextResponse.json({ success: true, message: 'Media synced, nothing else to sync' });
         }
         
         try {
@@ -38,8 +71,6 @@ export async function POST() {
               for (const id of data.syncedBillIds || []) {
                 await markOfflineBillSynced(id);
               }
-              // For actions, since sync-receive doesn't return syncedActionIds yet, we just assume all were synced for now
-              // Or we can just remove all pending actions if success is true
               for (const action of pendingActions) {
                 await removeDashboardAction(action.id);
               }
@@ -131,12 +162,51 @@ export async function POST() {
       }
     }
 
+    // 3. Sync Media Actions
+    const pendingMedia = await getPendingMediaActions();
+    let syncedMedia = 0;
+    
+    for (const media of pendingMedia) {
+      if (media.retries > 10) continue; // Give up after 10 tries
+      
+      try {
+        const buffer = await readFile(media.filepath);
+        
+        // Try uploading directly to GridFS if we have direct DB access
+        const bucket = new GridFSBucket(db, { bucketName: 'images' });
+        
+        // Check if exists
+        const existing = await db.collection('images.files').findOne({ filename: media.filename });
+        if (!existing) {
+          const uploadStream = bucket.openUploadStream(media.filename, {
+            metadata: { contentType: 'image/webp' }
+          });
+          
+          await new Promise<void>((resolve, reject) => {
+            const readable = new Readable();
+            readable.push(buffer);
+            readable.push(null);
+            readable.pipe(uploadStream)
+              .on('error', reject)
+              .on('finish', resolve);
+          });
+        }
+        
+        await removeMediaAction(media.id);
+        syncedMedia++;
+      } catch (err) {
+        console.error(`Failed to sync media ${media.filename}`, err);
+        await updateMediaActionRetries(media.id);
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
       syncedBills,
       syncedActions,
+      syncedMedia,
       syncedBillIds,
-      message: `Synced ${syncedBills} bills and ${syncedActions} dashboard changes.`
+      message: `Synced ${syncedBills} bills, ${syncedActions} changes, and ${syncedMedia} images.`
     });
 
   } catch (e: any) {
