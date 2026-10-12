@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useState, useEffect } from 'react'
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Monitor, Printer, Bluetooth, Wifi, Search, CheckCircle2 } from "lucide-react"
@@ -8,7 +8,7 @@ import PrinterDesignPanel from '@/components/settings/PrinterDesignPanel';
 import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 
 const TABS = [
-  { id: 'printer', label: 'Printer Settings' }, { id: 'printer-design', label: 'Printer Design' },
+  { id: 'printer', label: 'Printer Settings' }, { id: 'printer-design', label: 'Receipt Design' },
   { id: 'terminal', label: 'Terminal Settings' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts' },
   { id: 'storage', label: 'Local Storage' },
@@ -237,7 +237,7 @@ export default function SettingsPage() {
                 
                 <label className="flex items-center justify-between rounded-lg border border-zinc-200 p-4 cursor-pointer hover:bg-zinc-50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-6 w-6 items-center justify-center font-bold text-zinc-400 text-xl">Ø</div>
+                    <div className="flex h-6 w-6 items-center justify-center font-bold text-zinc-400 text-xl">Ã˜</div>
                     <div>
                       <div className="font-semibold text-zinc-900">No Printer</div>
                       <div className="text-sm text-zinc-500">Do not print bills automatically</div>
@@ -259,7 +259,7 @@ export default function SettingsPage() {
           {activeTab === 'terminal' && (
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-zinc-900 flex items-center gap-2">
-                <span className="text-xl">⚙️</span> Terminal Settings
+                <Monitor className="h-5 w-5" /> Terminal Settings
               </h2>
               
               <div className="space-y-4">

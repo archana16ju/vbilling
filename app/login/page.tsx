@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -25,7 +25,11 @@ export default function LoginPage() {
       const data = await res.json()
       
       if (data.success) {
-        router.push('/dashboard')
+        if (data.role === 'cashier') {
+          router.push('/terminal')
+        } else {
+          router.push('/dashboard')
+        }
         router.refresh()
       } else {
         setError(data.error || 'Invalid credentials')

@@ -25,13 +25,60 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       let itemNameStr = design.showItemName ? item.product.name : '';
       if (design.showSku && item.product.sku) itemNameStr += ` [${item.product.sku}]`;
       let itemLine = `<div class="row"><div class="name">${itemNameStr}</div>`;
-      if (design.showQuantity) itemLine += `<div class="qty">${item.quantity}${design.showUnit && item.product.unit ? ' ' + item.product.unit : ''}</div>`;
       if (design.showRate) itemLine += `<div class="price">₹${item.rate || item.product.price}</div>`;
+      if (design.showQuantity) itemLine += `<div class="qty">${item.quantity}</div>`;
       if (design.showItemTotal) itemLine += `<div class="price">₹${item.total || (item.quantity * item.product.price).toFixed(2)}</div>`;
       itemLine += `</div>`;
       return itemLine;
     }).join('');
   }
+
+  // Calculate CGST and SGST divided equally from product tax rates
+  const taxGroups: { rate: number; taxable: number; cgstAmount: number; sgstAmount: number }[] = [];
+  if (Array.isArray(saleData.items) && saleData.items.length > 0) {
+    const rateMap = new Map<number, number>();
+    saleData.items.forEach((item: any) => {
+      const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
+      if (fullTaxRate > 0) {
+        const qty = item.quantity || 1;
+        const price = parseFloat(item.rate || (item.product && item.product.price) || 0);
+        const itemSubtotal = price * qty;
+        const discRate = (item.product && item.product.discount) || 0;
+        const itemDisc = itemSubtotal * (discRate / 100);
+        const taxable = itemSubtotal - itemDisc;
+        rateMap.set(fullTaxRate, (rateMap.get(fullTaxRate) || 0) + taxable);
+      }
+    });
+
+    rateMap.forEach((taxable, fullTaxRate) => {
+      const dividedRate = fullTaxRate / 2; // e.g. 2% -> 1%, 5.4% -> 2.7%
+      taxGroups.push({
+        rate: dividedRate,
+        taxable,
+        cgstAmount: taxable * (dividedRate / 100),
+        sgstAmount: taxable * (dividedRate / 100),
+      });
+    });
+  }
+
+  // Fallback if no item product tax was explicitly found, but bill has tax
+  if (taxGroups.length === 0 && (saleData.tax || 0) > 0 && (saleData.subtotal || 0) > 0) {
+    const taxable = (saleData.subtotal || 0) - (saleData.discount || 0);
+    const effectiveFullRate = taxable > 0 ? ((saleData.tax / taxable) * 100) : 0;
+    const dividedRate = effectiveFullRate / 2;
+    const halfTax = saleData.tax / 2;
+    taxGroups.push({
+      rate: dividedRate,
+      taxable,
+      cgstAmount: halfTax,
+      sgstAmount: halfTax,
+    });
+  }
+
+  const formatTaxRate = (rate: number) => parseFloat(rate.toFixed(2)).toString();
+  const totalCgst = taxGroups.reduce((sum, g) => sum + g.cgstAmount, 0);
+  const totalSgst = taxGroups.reduce((sum, g) => sum + g.sgstAmount, 0);
+  const totalTaxAmount = totalCgst + totalSgst;
 
   const footerLines = design.footerText.split('\n').filter(Boolean);
 
@@ -44,9 +91,9 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       .divider { border-top: 1px dashed #000; margin: 6px 0; }
       .divider-solid { border-top: 1px solid #000; margin: 6px 0; }
       .row { display: flex; justify-content: space-between; margin: 3px 0; font-size: ${baseFontSize}px; text-align: left; }
-      .row .name { flex: 1; padding-right: 4px; word-wrap: break-word; overflow-wrap: break-word; word-break: normal; }
-      .row .qty { width: 30px; text-align: center; }
-      .row .price { width: 70px; text-align: right; }
+      .name { flex: 1; padding-right: 4px; word-wrap: break-word; overflow-wrap: break-word; word-break: normal; }
+      .qty { width: 40px; text-align: center; }
+      .price { width: 60px; text-align: right; }
       .header-row { display: flex; justify-content: space-between; font-size: ${baseFontSize * 0.85}px; font-weight: bold; padding-bottom: 4px; margin-bottom: 4px; text-align: left; }
       .totals-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: ${baseFontSize}px; }
       .grand-total { display: flex; justify-content: space-between; font-size: ${baseFontSize * 1.3}px; font-weight: bold; margin-top: 4px; }
@@ -60,15 +107,19 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
     <hr class="divider">
     ${design.showBillId ? `<div class="inv-info"><span>Bill No:</span><span>${(saleData.id || saleData.billId) || ''}</span></div>` : ''}
     ${design.showDate || design.showTime ? `<div class="inv-info"><span>Date:</span><span>${design.showDate ? formattedDate : ''} ${design.showTime ? formattedTime : ''}</span></div>` : ''}
+    ${design.showPaymentMethod ? `<div class="inv-info"><span>Payment:</span><span>${saleData.paymentMethod || 'Cash'}</span></div>` : ''}
     <hr class="divider">
-    <div class="header-row"><div class="name">Item</div>${design.showQuantity ? `<div class="qty">Qty</div>` : ''}${design.showRate ? `<div class="price">Rate</div>` : ''}${design.showItemTotal ? `<div class="price">Total</div>` : ''}</div>
+    <div class="header-row"><div class="name">Item</div>${design.showRate ? `<div class="price">Price</div>` : ''}${design.showQuantity ? `<div class="qty">Qty</div>` : ''}${design.showItemTotal ? `<div class="price">Total</div>` : ''}</div>
     ${itemsHtml}
     <hr class="divider">
-    ${design.showSubtotal ? `<div class="totals-row"><span>Subtotal</span><span>₹${saleData.subtotal || 0}</span></div>` : ''}
-    ${design.showBillDiscount && saleData.discount > 0 ? `<div class="totals-row"><span>Discount</span><span>-₹${saleData.discount}</span></div>` : ''}
-    ${design.showBillTax && saleData.tax > 0 ? `<div class="totals-row"><span>Tax</span><span>+₹${saleData.tax}</span></div>` : ''}
-    ${design.showGrandTotal ? `<hr class="divider"><div class="grand-total"><span>TOTAL</span><span>₹${saleData.total || 0}</span></div><hr class="divider">` : ''}
-    ${design.showPaymentMethod ? `<div class="inv-info"><span>Payment:</span><span>${saleData.paymentMethod || 'Cash'}</span></div>` : ''}
+    ${design.showSubtotal ? `<div class="totals-row"><span>Sub Total :</span><span>₹${(saleData.subtotal || 0).toFixed(2)}</span></div>` : ''}
+    ${design.showBillDiscount && saleData.discount > 0 ? `<div class="totals-row"><span>Discount :</span><span>-₹${(saleData.discount || 0).toFixed(2)}</span></div>` : ''}
+    ${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? `<div class="totals-row"><span>Tax :</span><span>+₹${(saleData.tax || 0).toFixed(2)}</span></div>` : ''}
+    ${design.showCgstSgst && taxGroups.length > 0 ? taxGroups.map(g => `
+      <div class="totals-row"><span>CGST @ ${formatTaxRate(g.rate)}% On ₹${g.taxable.toFixed(2)} :</span><span>₹${g.cgstAmount.toFixed(2)}</span></div>
+      <div class="totals-row"><span>SGST @ ${formatTaxRate(g.rate)}% On ₹${g.taxable.toFixed(2)} :</span><span>₹${g.sgstAmount.toFixed(2)}</span></div>
+    `).join('') : ''}
+    ${design.showGrandTotal ? `<hr class="divider-solid"><div class="grand-total"><span>Total :</span><span>₹${((saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0))).toFixed(2)}</span></div><hr class="divider-solid">` : ''}
     ${design.showFooter ? `<div class="footer">${footerLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
     <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 1000); }</script>
   </body></html>`;

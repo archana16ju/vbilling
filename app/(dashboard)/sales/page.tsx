@@ -33,69 +33,9 @@ export default function SalesPage() {
   const upiSales = allSales.filter(s => s.paymentMethod === 'UPI').reduce((sum, sale) => sum + sale.total, 0)
 
   const handlePrint = (sale: Sale) => {
-    const saleDate = new Date(sale.timestamp)
-    const dateStr = saleDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const timeStr = saleDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-    const seqPart = sale.id.includes('-') ? sale.id.split('-').pop()! : sale.id
-
     const printWindow = window.open('', '_blank', 'width=340,height=700')
     if (printWindow) {
-      printWindow.document.write(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Receipt</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 80mm; max-width: 80mm; padding: 4mm 4mm; color: #000; background: #fff; }
-    .restaurant-name { font-size: 18px; font-weight: bold; text-align: center; letter-spacing: 1px; margin-bottom: 2px; }
-    .sub-title { font-size: 10px; text-align: center; margin-bottom: 6px; color: #333; }
-    .divider { border: none; border-top: 1px dashed #000; margin: 5px 0; }
-    .divider-solid { border: none; border-top: 1px solid #000; margin: 5px 0; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px; }
-    .row .name { flex: 1; padding-right: 4px; word-break: break-word; }
-    .row .qty { width: 24px; text-align: center; }
-    .row .price { width: 56px; text-align: right; }
-    .header-row { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; margin-bottom: 3px; }
-    .totals-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; }
-    .grand-total { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; padding: 4px 0; margin-top: 2px; }
-    .inv-info { font-size: 10px; display: flex; justify-content: space-between; margin: 2px 0; }
-    .footer { font-size: 10px; text-align: center; margin-top: 8px; color: #333; }
-    @media print { body { width: 80mm; } @page { margin: 0; size: 80mm auto; } }
-  </style>
-</head>
-<body>
-  <div class="restaurant-name">SK BIRYANI</div>
-  <div class="sub-title">Restaurant & Fast Food</div>
-  <hr class="divider-solid">
-  <div class="inv-info"><span>BILL NO-${seqPart}</span><span>${dateStr}</span></div>
-  <div class="inv-info"><span>Payment: ${sale.paymentMethod}</span><span>${timeStr}</span></div>
-  <hr class="divider">
-  <div class="header-row">
-    <span style="flex:1">ITEM</span>
-    <span style="width:24px;text-align:center">QTY</span>
-    <span style="width:56px;text-align:right">AMT</span>
-  </div>
-  ${sale.items.map(item => `
-  <div class="row">
-    <span class="name">${item.product.name}</span>
-    <span class="qty">${item.quantity}</span>
-    <span class="price">₹${(item.quantity * item.product.price).toFixed(2)}</span>
-  </div>`).join('')}
-  <hr class="divider">
-  <div class="totals-row"><span>Subtotal</span><span>₹${sale.subtotal.toFixed(2)}</span></div>
-  ${sale.discount > 0 ? `<div class="totals-row"><span>Discount</span><span>-₹${sale.discount.toFixed(2)}</span></div>` : ''}
-  ${sale.tax > 0 ? `<div class="totals-row"><span>Tax</span><span>₹${sale.tax.toFixed(2)}</span></div>` : ''}
-  <hr class="divider-solid">
-  <div class="grand-total"><span>TOTAL</span><span>₹${sale.total.toFixed(2)}</span></div>
-  <hr class="divider">
-  <div class="footer">*** Thank You, Visit Again! ***</div>
-  <script>
-    window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 1000); }
-  </script>
-</body>
-</html>`)
+      printWindow.document.write(generateReceiptHtml(sale, printerDesign));
       printWindow.document.close()
     }
   }

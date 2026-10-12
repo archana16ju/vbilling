@@ -338,29 +338,91 @@ export const useTerminalStore = create<TerminalState>()(
     const dateStr = new Date().toLocaleDateString('en-GB');
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }).toLowerCase();
 
+    const design = usePrinterDesignStore.getState();
+
+    // Calculate CGST and SGST divided equally from product tax rates
+    const taxGroups: { rate: number; taxable: number; cgstAmount: number; sgstAmount: number }[] = [];
+    if (Array.isArray(saleData.items) && saleData.items.length > 0) {
+      const rateMap = new Map<number, number>();
+      saleData.items.forEach((item: any) => {
+        const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
+        if (fullTaxRate > 0) {
+          const qty = item.quantity || 1;
+          const price = parseFloat(item.rate || (item.product && item.product.price) || 0);
+          const itemSubtotal = price * qty;
+          const discRate = (item.product && item.product.discount) || 0;
+          const itemDisc = itemSubtotal * (discRate / 100);
+          const taxable = itemSubtotal - itemDisc;
+          rateMap.set(fullTaxRate, (rateMap.get(fullTaxRate) || 0) + taxable);
+        }
+      });
+
+      rateMap.forEach((taxable, fullTaxRate) => {
+        const dividedRate = fullTaxRate / 2; // e.g. 2% -> 1%, 5.4% -> 2.7%
+        taxGroups.push({
+          rate: dividedRate,
+          taxable,
+          cgstAmount: taxable * (dividedRate / 100),
+          sgstAmount: taxable * (dividedRate / 100),
+        });
+      });
+    }
+
+    if (taxGroups.length === 0 && (saleData.tax || 0) > 0 && (saleData.subtotal || 0) > 0) {
+      const taxable = (saleData.subtotal || 0) - (saleData.discount || 0);
+      const effectiveFullRate = taxable > 0 ? ((saleData.tax / taxable) * 100) : 0;
+      const dividedRate = effectiveFullRate / 2;
+      const halfTax = saleData.tax / 2;
+      taxGroups.push({
+        rate: dividedRate,
+        taxable,
+        cgstAmount: halfTax,
+        sgstAmount: halfTax,
+      });
+    }
+
+    const formatTaxRate = (rate: number) => parseFloat(rate.toFixed(2)).toString();
+    const totalCgst = taxGroups.reduce((sum, g) => sum + g.cgstAmount, 0);
+    const totalSgst = taxGroups.reduce((sum, g) => sum + g.sgstAmount, 0);
+    const totalTaxAmount = totalCgst + totalSgst;
+    const finalGrandTotal = (saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0));
+
     const rawText = `
-                  SK BIRYANI                  
-            Restaurant & Fast Food            
+${design.showCompanyName ? formatLine(' '.repeat(Math.floor((48 - design.companyName.length) / 2)) + design.companyName, '') : ''}
+${design.showLocation && design.location ? formatLine(' '.repeat(Math.floor((48 - design.location.length) / 2)) + design.location, '') : ''}
+${design.showPhoneNumber && design.phoneNumber ? formatLine(' '.repeat(Math.floor((48 - ('Ph: ' + design.phoneNumber).length) / 2)) + 'Ph: ' + design.phoneNumber, '') : ''}
+${design.showEmail && design.email ? formatLine(' '.repeat(Math.floor((48 - ('Email: ' + design.email).length) / 2)) + 'Email: ' + design.email, '') : ''}
+${design.showGstNumber && design.gstNumber ? formatLine(' '.repeat(Math.floor((48 - ('GST: ' + design.gstNumber).length) / 2)) + 'GST: ' + design.gstNumber, '') : ''}
+${design.showHeader && design.customHeaderText ? formatLine(' '.repeat(Math.floor((48 - design.customHeaderText.length) / 2)) + design.customHeaderText, '') : ''}
 ------------------------------------------------
 ${formatLine(`BILL NO-${seqPart}`, dateStr)}
 ${formatLine(`Payment: ${saleData.paymentMethod}`, timeStr)}
 ------------------------------------------------
-${"ITEM".padEnd(30)} ${"QTY".padStart(5)} ${"AMT".padStart(11)}
+${"ITEM".padEnd(20)} ${"PRICE".padStart(8)} ${"QTY".padStart(5)} ${"TOTAL".padStart(11)}
 ${saleData.items.map(item => {
-  const name = item.product.name.substring(0, 30).padEnd(30);
+  let name = item.product.name;
+  const price = String(parseFloat((item as any).rate || item.product.price || 0).toFixed(2)).padStart(8);
   const qty = String(item.quantity).padStart(5);
-  const amt = String((item.quantity * item.product.price).toFixed(2)).padStart(11);
-  return `${name} ${qty} ${amt}`;
+  const amt = String((item.quantity * parseFloat((item as any).rate || item.product.price || 0)).toFixed(2)).padStart(11);
+  
+  if (name.length <= 20) {
+    return `${name.padEnd(20)} ${price} ${qty} ${amt}`;
+  } else {
+    let lines = [];
+    lines.push(`${name.substring(0, 20)} ${price} ${qty} ${amt}`);
+    let remaining = name.substring(20);
+    while (remaining.length > 0) {
+      lines.push(remaining.substring(0, 20).padEnd(20));
+      remaining = remaining.substring(20);
+    }
+    return lines.join('\n');
+  }
 }).join('\n')}
 ------------------------------------------------
-${formatLine('Subtotal', String(saleData.subtotal.toFixed(2)))}
-${saleData.discount > 0 ? formatLine('Discount', '-' + String(saleData.discount.toFixed(2))) + '\n' : ''}${saleData.tax > 0 ? formatLine('Tax', String(saleData.tax.toFixed(2))) + '\n' : ''}------------------------------------------------
-${formatLine('TOTAL', String(saleData.total.toFixed(2)))}
-------------------------------------------------
+${design.showSubtotal ? formatLine('Sub Total :', String(saleData.subtotal.toFixed(2))) + '\n' : ''}${design.showBillDiscount && saleData.discount > 0 ? formatLine('Discount :', '-' + String(saleData.discount.toFixed(2))) + '\n' : ''}${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? formatLine('Tax :', '+' + String(saleData.tax.toFixed(2))) + '\n' : ''}${design.showCgstSgst && taxGroups.length > 0 ? taxGroups.map(g => formatLine(`CGST @ ${formatTaxRate(g.rate)}% On Rs${g.taxable.toFixed(2)} :`, String(g.cgstAmount.toFixed(2))) + '\n' + formatLine(`SGST @ ${formatTaxRate(g.rate)}% On Rs${g.taxable.toFixed(2)} :`, String(g.sgstAmount.toFixed(2)))).join('\n') + '\n' : ''}------------------------------------------------
+${design.showGrandTotal ? formatLine('Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
           *** Thank You, Visit Again! ***       
-`;
-
-    const design = usePrinterDesignStore.getState();
+`.replace(/\n\n+/g, '\n');
     const htmlContent = generateReceiptHtml({ ...saleData, id: fullBillId, timestamp: Date.now() }, design);
 
     // Always create a print job

@@ -15,6 +15,7 @@ export interface PrinterDesignState {
   showPaymentMethod: boolean; showAmountPaid: boolean; showChange: boolean; showTransactionId: boolean;
   showItemName: boolean; showSku: boolean; showQuantity: boolean; showUnit: boolean; showRate: boolean; showItemDiscount: boolean; showItemTax: boolean; showItemTotal: boolean;
   showSubtotal: boolean; showBillDiscount: boolean; showBillTax: boolean; showRoundOff: boolean; showGrandTotal: boolean;
+  showCgstSgst: boolean; cgstPercentage: number; sgstPercentage: number;
   showFooter: boolean; footerText: string;
   paperSize: '58mm' | '80mm' | 'A4'; fontSize: number; textAlignment: 'left' | 'center' | 'right';
   updateDesign: (updates: Partial<Omit<PrinterDesignState, 'updateDesign' | 'resetDesign'>>) => void;
@@ -35,6 +36,7 @@ const initialState: Omit<PrinterDesignState, 'updateDesign' | 'resetDesign'> = {
   showPaymentMethod: true, showAmountPaid: false, showChange: false, showTransactionId: false,
   showItemName: true, showSku: false, showQuantity: true, showUnit: false, showRate: true, showItemDiscount: false, showItemTax: false, showItemTotal: true,
   showSubtotal: true, showBillDiscount: false, showBillTax: false, showRoundOff: false, showGrandTotal: true,
+  showCgstSgst: false, cgstPercentage: 2.5, sgstPercentage: 2.5,
   showFooter: true, footerText: '*****Thank You! Visit Again*****',
   paperSize: '80mm', fontSize: 12, textAlignment: 'center',
 };

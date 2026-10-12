@@ -14,11 +14,11 @@ export default function PrinterDesignPanel() {
   const role = (state as any).role // for preview data
 
   const handleSave = () => {
-    alert("Printer Design Settings Saved successfully!");
+    alert("Receipt Design Settings Saved successfully!");
   }
 
   const handleReset = () => {
-    if (confirm("Are you sure you want to reset all printer design settings to default?")) {
+    if (confirm("Are you sure you want to reset all Receipt Design Settings to default?")) {
       design.resetDesign()
     }
   }
@@ -29,13 +29,14 @@ export default function PrinterDesignPanel() {
     timestamp: Date.now(),
     cashierName: role === 'admin' ? 'Admin' : 'Cashier',
     items: [
-      { product: { id: "p1", name: "Biryani" }, quantity: 2, rate: 150, discount: 0, tax: 0, total: 300 }
+      { product: { id: "p1", name: "Biryani", tax: 2, price: 150 }, quantity: 2, rate: 150, discount: 0, tax: 6, total: 306 }
     ],
     subtotal: 300,
     discountValue: 0,
-    taxAmount: 0,
+    taxAmount: 6,
+    tax: 6,
     roundOff: 0,
-    total: 300,
+    total: 306,
     paymentMethod: "Cash",
     amountReceived: 500
   }
@@ -47,7 +48,7 @@ export default function PrinterDesignPanel() {
       {/* Settings Panel */}
       <div className="flex-1 flex flex-col bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
         <div className="p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
-          <h2 className="text-lg font-semibold text-zinc-800">Printer Design Settings</h2>
+          <h2 className="text-lg font-semibold text-zinc-800">Receipt Design Settings</h2>
           <div className="flex gap-2">
             <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors">
               <Eye className="w-4 h-4" /> Live Preview
@@ -242,8 +243,9 @@ export default function PrinterDesignPanel() {
                     { key: 'showSubtotal', label: 'Subtotal' },
                     { key: 'showBillDiscount', label: 'Discount' },
                     { key: 'showBillTax', label: 'Tax' },
+                    { key: 'showCgstSgst', label: 'Split CGST & SGST (Auto-calculated)' },
                     { key: 'showRoundOff', label: 'Round Off' },
-                    { key: 'showGrandTotal', label: 'Grand Total' }
+                    { key: 'showGrandTotal', label: 'Total' }
                   ].map(item => (
                     <div key={item.key} className="flex items-center justify-between border-b pb-2">
                       <label className="text-sm text-zinc-700">{item.label}</label>
