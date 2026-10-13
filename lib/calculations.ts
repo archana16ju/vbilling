@@ -101,3 +101,47 @@ export const calculateTax = (amountAfterDiscount: number, taxRate: number = 0): 
 export const calculateGlobalTotal = (subtotal: number, discountAmount: number, taxAmount: number): number => {
   return subtotal - discountAmount + taxAmount
 }
+
+export type RoundOffMethod = 'nearest' | 'custom' | 'down' | 'up' | 'none';
+
+export const calculateRoundOff = (
+  exactTotal: number,
+  enabled: boolean,
+  method: RoundOffMethod = 'nearest',
+  belowThreshold: number = 0.49,
+  aboveThreshold: number = 0.50
+): { roundOffAmount: number; grandTotal: number } => {
+  if (!enabled || method === 'none') {
+    return {
+      roundOffAmount: 0,
+      grandTotal: parseFloat(exactTotal.toFixed(2)),
+    };
+  }
+
+  let rounded = exactTotal;
+  if (method === 'down') {
+    // Always round down to the nearest whole rupee
+    rounded = Math.floor(exactTotal);
+  } else if (method === 'up') {
+    // Always round up to the next whole rupee when there is a decimal amount
+    rounded = Math.ceil(exactTotal);
+  } else {
+    // 'nearest' or 'custom' (Threshold-based rounding)
+    const integerPart = Math.floor(exactTotal);
+    const paise = parseFloat((exactTotal - integerPart).toFixed(2));
+    const below = typeof belowThreshold === 'number' ? belowThreshold : 0.49;
+    
+    // Amounts with paise up to belowThreshold round down; from aboveThreshold onwards round up
+    if (paise <= below) {
+      rounded = integerPart;
+    } else {
+      rounded = integerPart + 1;
+    }
+  }
+
+  const roundOffAmount = parseFloat((rounded - exactTotal).toFixed(2));
+  return {
+    roundOffAmount,
+    grandTotal: parseFloat(rounded.toFixed(2)),
+  };
+};

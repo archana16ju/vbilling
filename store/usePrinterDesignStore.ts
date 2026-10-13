@@ -14,7 +14,7 @@ export interface PrinterDesignState {
   dateFormat: 'DD/MM/YYYY' | 'DD-MM-YYYY' | 'YYYY-MM-DD' | 'DD MMM YYYY'; timeFormat: '12-hour' | '24-hour';
   showPaymentMethod: boolean; showAmountPaid: boolean; showChange: boolean; showTransactionId: boolean;
   showItemName: boolean; showSku: boolean; showQuantity: boolean; showUnit: boolean; showRate: boolean; showItemDiscount: boolean; showItemTax: boolean; showItemTotal: boolean;
-  showSubtotal: boolean; showBillDiscount: boolean; showBillTax: boolean; showRoundOff: boolean; showGrandTotal: boolean;
+  showSubtotal: boolean; showBillDiscount: boolean; showBillTax: boolean; showRoundOff: boolean; roundOffMethod: 'nearest' | 'custom' | 'down' | 'up' | 'none'; roundOffBelow: number; roundOffAbove: number; showGrandTotal: boolean;
   showCgstSgst: boolean; cgstPercentage: number; sgstPercentage: number;
   showFooter: boolean; footerText: string;
   paperSize: '58mm' | '80mm' | 'A4'; fontSize: number; textAlignment: 'left' | 'center' | 'right';
@@ -35,7 +35,7 @@ const initialState: Omit<PrinterDesignState, 'updateDesign' | 'resetDesign'> = {
   dateFormat: 'DD/MM/YYYY', timeFormat: '12-hour',
   showPaymentMethod: true, showAmountPaid: false, showChange: false, showTransactionId: false,
   showItemName: true, showSku: false, showQuantity: true, showUnit: false, showRate: true, showItemDiscount: false, showItemTax: false, showItemTotal: true,
-  showSubtotal: true, showBillDiscount: false, showBillTax: false, showRoundOff: false, showGrandTotal: true,
+  showSubtotal: true, showBillDiscount: false, showBillTax: false, showRoundOff: false, roundOffMethod: 'nearest', roundOffBelow: 0.49, roundOffAbove: 0.50, showGrandTotal: true,
   showCgstSgst: false, cgstPercentage: 2.5, sgstPercentage: 2.5,
   showFooter: true, footerText: '*****Thank You! Visit Again*****',
   paperSize: '80mm', fontSize: 12, textAlignment: 'center',

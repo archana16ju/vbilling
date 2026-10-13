@@ -3,7 +3,7 @@ import { generateReceiptHtml } from '@/lib/printSystem';
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Product, PRODUCTS, Category, CATEGORIES } from '@/lib/mock-data'
-import { CartItemData } from '@/lib/calculations'
+import { CartItemData, calculateRoundOff } from '@/lib/calculations'
 import { RawMaterial } from '@/types/product'
 
 export type HeldCart = {
@@ -18,6 +18,9 @@ export type Sale = {
   subtotal: number
   discount: number
   tax: number
+  cgst?: number
+  sgst?: number
+  roundOff?: number
   total: number
   paymentMethod: string
   timestamp: number
@@ -385,7 +388,24 @@ export const useTerminalStore = create<TerminalState>()(
     const totalCgst = taxGroups.reduce((sum, g) => sum + g.cgstAmount, 0);
     const totalSgst = taxGroups.reduce((sum, g) => sum + g.sgstAmount, 0);
     const totalTaxAmount = totalCgst + totalSgst;
-    const finalGrandTotal = (saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0));
+    const exactTotal = (saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0));
+
+    let roundOffAmount = 0;
+    let finalGrandTotal = exactTotal;
+
+    if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
+      roundOffAmount = saleData.roundOff;
+      finalGrandTotal = parseFloat((exactTotal + roundOffAmount).toFixed(2));
+    } else if (design.showRoundOff) {
+      const ro = calculateRoundOff(exactTotal, true, design.roundOffMethod || 'nearest', design.roundOffBelow, design.roundOffAbove);
+      roundOffAmount = ro.roundOffAmount;
+      finalGrandTotal = ro.grandTotal;
+    }
+
+    const formatSummaryRight = (label: string, value: string) => {
+      const line = `${label} ${value}`;
+      return line.padStart(48);
+    };
 
     const rawText = `
 ${design.showCompanyName ? formatLine(' '.repeat(Math.floor((48 - design.companyName.length) / 2)) + design.companyName, '') : ''}
@@ -398,32 +418,41 @@ ${design.showHeader && design.customHeaderText ? formatLine(' '.repeat(Math.floo
 ${formatLine(`BILL NO-${seqPart}`, dateStr)}
 ${formatLine(`Payment: ${saleData.paymentMethod}`, timeStr)}
 ------------------------------------------------
-${"ITEM".padEnd(20)} ${"PRICE".padStart(8)} ${"QTY".padStart(5)} ${"TOTAL".padStart(11)}
+${"ITEM".padEnd(15)} ${"PRICE".padStart(7)} ${"QTY".padStart(4)} ${"TAX".padStart(8)} ${"TOTAL".padStart(10)}
 ${saleData.items.map(item => {
   let name = item.product.name;
-  const price = String(parseFloat((item as any).rate || item.product.price || 0).toFixed(2)).padStart(8);
-  const qty = String(item.quantity).padStart(5);
-  const amt = String((item.quantity * parseFloat((item as any).rate || item.product.price || 0)).toFixed(2)).padStart(11);
+  const priceVal = parseFloat((item as any).rate || item.product.price || 0);
+  const price = String(priceVal.toFixed(2)).padStart(7);
+  const qtyVal = item.quantity || 1;
+  const qty = String(qtyVal).padStart(4);
+  const itemSubtotal = priceVal * qtyVal;
+  const discRate = (item.product && item.product.discount) || 0;
+  const itemDisc = itemSubtotal * (discRate / 100);
+  const taxable = itemSubtotal - itemDisc;
+  const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
+  const itemTax = (item as any).tax !== undefined ? (item as any).tax : taxable * (fullTaxRate / 100);
+  const taxStr = String(itemTax.toFixed(2)).padStart(8);
+  const amt = String(((item as any).total || (itemSubtotal - itemDisc + itemTax)).toFixed(2)).padStart(10);
   
-  if (name.length <= 20) {
-    return `${name.padEnd(20)} ${price} ${qty} ${amt}`;
+  if (name.length <= 15) {
+    return `${name.padEnd(15)} ${price} ${qty} ${taxStr} ${amt}`;
   } else {
     let lines = [];
-    lines.push(`${name.substring(0, 20)} ${price} ${qty} ${amt}`);
-    let remaining = name.substring(20);
+    lines.push(`${name.substring(0, 15)} ${price} ${qty} ${taxStr} ${amt}`);
+    let remaining = name.substring(15);
     while (remaining.length > 0) {
-      lines.push(remaining.substring(0, 20).padEnd(20));
-      remaining = remaining.substring(20);
+      lines.push(remaining.substring(0, 15).padEnd(15));
+      remaining = remaining.substring(15);
     }
     return lines.join('\n');
   }
 }).join('\n')}
 ------------------------------------------------
-${design.showSubtotal ? formatLine('Sub Total :', String(saleData.subtotal.toFixed(2))) + '\n' : ''}${design.showBillDiscount && saleData.discount > 0 ? formatLine('Discount :', '-' + String(saleData.discount.toFixed(2))) + '\n' : ''}${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? formatLine('Tax :', '+' + String(saleData.tax.toFixed(2))) + '\n' : ''}${design.showCgstSgst && taxGroups.length > 0 ? taxGroups.map(g => formatLine(`CGST @ ${formatTaxRate(g.rate)}% On Rs${g.taxable.toFixed(2)} :`, String(g.cgstAmount.toFixed(2))) + '\n' + formatLine(`SGST @ ${formatTaxRate(g.rate)}% On Rs${g.taxable.toFixed(2)} :`, String(g.sgstAmount.toFixed(2)))).join('\n') + '\n' : ''}------------------------------------------------
-${design.showGrandTotal ? formatLine('Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
+${design.showSubtotal ? formatSummaryRight('Sub Total :', String(saleData.subtotal.toFixed(2))) + '\n' : ''}${design.showBillDiscount && saleData.discount > 0 ? formatSummaryRight('Discount :', '-' + String(saleData.discount.toFixed(2))) + '\n' : ''}${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? formatSummaryRight('Tax :', '+' + String(saleData.tax.toFixed(2))) + '\n' : ''}${design.showCgstSgst ? formatSummaryRight('CGST :', String(totalCgst.toFixed(2))) + '\n' + formatSummaryRight('SGST :', String(totalSgst.toFixed(2))) + '\n' : ''}${design.showRoundOff ? formatSummaryRight('Round Off :', (roundOffAmount >= 0 ? '+' : '-') + 'Rs' + Math.abs(roundOffAmount).toFixed(2)) + '\n' : ''}------------------------------------------------
+${design.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
           *** Thank You, Visit Again! ***       
 `.replace(/\n\n+/g, '\n');
-    const htmlContent = generateReceiptHtml({ ...saleData, id: fullBillId, timestamp: Date.now() }, design);
+    const htmlContent = generateReceiptHtml({ ...saleData, roundOff: roundOffAmount, total: finalGrandTotal, id: fullBillId, timestamp: Date.now() }, design);
 
     // Always create a print job
     const jobId = "PRINT-" + Date.now();

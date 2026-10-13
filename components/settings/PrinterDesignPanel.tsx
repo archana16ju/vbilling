@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Save, RotateCcw, Eye, X } from "lucide-react"
 import { usePrinterDesignStore } from "@/store/usePrinterDesignStore"
 import { generateReceiptHtml } from "@/lib/printSystem"
+import { calculateRoundOff } from "@/lib/calculations"
 import { useTerminalStore } from "@/store/useTerminalStore"
 
 export default function PrinterDesignPanel() {
@@ -23,22 +24,31 @@ export default function PrinterDesignPanel() {
     }
   }
 
-  // Dummy data for preview
+  // Dummy data for preview demonstrating round-off
+  const previewExactTotal = 34.57;
+  const previewRound = calculateRoundOff(
+    previewExactTotal,
+    design.showRoundOff,
+    design.roundOffMethod,
+    design.roundOffBelow,
+    design.roundOffAbove
+  );
+
   const previewData = {
     billId: "BILL-051026-003",
     timestamp: Date.now(),
     cashierName: role === 'admin' ? 'Admin' : 'Cashier',
     items: [
-      { product: { id: "p1", name: "Biryani", tax: 2, price: 150 }, quantity: 2, rate: 150, discount: 0, tax: 6, total: 306 }
+      { product: { id: "p1", name: "Biryani", tax: 4.76, price: 33 }, quantity: 1, rate: 33, discount: 0, tax: 1.57, total: 34.57 }
     ],
-    subtotal: 300,
+    subtotal: 33,
     discountValue: 0,
-    taxAmount: 6,
-    tax: 6,
-    roundOff: 0,
-    total: 306,
+    taxAmount: 1.57,
+    tax: 1.57,
+    roundOff: previewRound.roundOffAmount,
+    total: previewRound.grandTotal,
     paymentMethod: "Cash",
-    amountReceived: 500
+    amountReceived: 50
   }
 
   const previewHtml = generateReceiptHtml(previewData, design)
@@ -179,10 +189,7 @@ export default function PrinterDesignPanel() {
                 {[
                   { key: 'showBillId', label: 'Bill ID' },
                   { key: 'showDate', label: 'Date' },
-                  { key: 'showTime', label: 'Time' },
-                  { key: 'showCashierName', label: 'Cashier / User Name' },
-                  { key: 'showTableNumber', label: 'Table Number' },
-                  { key: 'showOrderNumber', label: 'Order Number' }
+                  { key: 'showTime', label: 'Time' }
                 ].map(item => (
                   <div key={item.key} className="flex items-center justify-between border-b pb-2">
                     <label className="text-sm text-zinc-700">{item.label}</label>
@@ -245,11 +252,100 @@ export default function PrinterDesignPanel() {
                     { key: 'showBillTax', label: 'Tax' },
                     { key: 'showCgstSgst', label: 'Split CGST & SGST (Auto-calculated)' },
                     { key: 'showRoundOff', label: 'Round Off' },
-                    { key: 'showGrandTotal', label: 'Total' }
+                    { key: 'showGrandTotal', label: 'Grand Total' }
                   ].map(item => (
-                    <div key={item.key} className="flex items-center justify-between border-b pb-2">
-                      <label className="text-sm text-zinc-700">{item.label}</label>
-                      <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                    <div key={item.key} className="border-b pb-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm text-zinc-700">{item.label}</label>
+                        <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                      </div>
+                      {item.key === 'showRoundOff' && design.showRoundOff && (
+                        <div className="mt-3 pl-3 border-l-2 border-indigo-200 space-y-3 pb-1">
+                          <div>
+                            <label className="block text-xs font-medium text-zinc-700 mb-1">Round-Off Method</label>
+                            <select 
+                              value={design.roundOffMethod || 'nearest'} 
+                              onChange={e => {
+                                const method = e.target.value as any;
+                                if (method === 'nearest') {
+                                  design.updateDesign({ roundOffMethod: method, roundOffBelow: 0.49, roundOffAbove: 0.50 });
+                                } else {
+                                  design.updateDesign({ roundOffMethod: method });
+                                }
+                              }}
+                              className="w-full px-3 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="nearest">Nearest Whole Rupee</option>
+                              <option value="custom">Custom Threshold</option>
+                              <option value="down">Always Round Down</option>
+                              <option value="up">Always Round Up</option>
+                              <option value="none">No Round-Off</option>
+                            </select>
+                          </div>
+
+                          {(design.roundOffMethod === 'nearest' || design.roundOffMethod === 'custom') && (
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                              <div>
+                                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                                  Below Round-Off (₹)
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-2.5 top-1.5 text-zinc-400 text-xs font-semibold">₹</span>
+                                  <input 
+                                    type="number"
+                                    step="0.01"
+                                    min="0.00"
+                                    max="0.99"
+                                    value={design.roundOffBelow !== undefined ? design.roundOffBelow : 0.49}
+                                    onChange={e => {
+                                      const rawVal = parseFloat(e.target.value);
+                                      const below = isNaN(rawVal) ? 0 : Math.max(0, Math.min(0.99, parseFloat(rawVal.toFixed(2))));
+                                      const above = parseFloat(Math.min(1.00, Math.max(0.01, below + 0.01)).toFixed(2));
+                                      design.updateDesign({ 
+                                        roundOffBelow: below, 
+                                        roundOffAbove: above,
+                                        roundOffMethod: (below !== 0.49 || above !== 0.50) ? 'custom' : design.roundOffMethod
+                                      });
+                                    }}
+                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="0.49"
+                                  />
+                                </div>
+                                <span className="text-[10px] text-zinc-500 block mt-0.5">Rounds down (₹0.00 - ₹{(design.roundOffBelow ?? 0.49).toFixed(2)})</span>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                                  Above Round-Off (₹)
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-2.5 top-1.5 text-zinc-400 text-xs font-semibold">₹</span>
+                                  <input 
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    max="1.00"
+                                    value={design.roundOffAbove !== undefined ? design.roundOffAbove : 0.50}
+                                    onChange={e => {
+                                      const rawVal = parseFloat(e.target.value);
+                                      const above = isNaN(rawVal) ? 0.01 : Math.max(0.01, Math.min(1.00, parseFloat(rawVal.toFixed(2))));
+                                      const below = parseFloat(Math.max(0.00, Math.min(0.99, above - 0.01)).toFixed(2));
+                                      design.updateDesign({ 
+                                        roundOffAbove: above, 
+                                        roundOffBelow: below,
+                                        roundOffMethod: (below !== 0.49 || above !== 0.50) ? 'custom' : design.roundOffMethod
+                                      });
+                                    }}
+                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="0.50"
+                                  />
+                                </div>
+                                <span className="text-[10px] text-zinc-500 block mt-0.5">Rounds up (₹{(design.roundOffAbove ?? 0.50).toFixed(2)} - ₹0.99)</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -257,10 +353,7 @@ export default function PrinterDesignPanel() {
                 <div className="space-y-4 pt-4">
                   <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Payment Information</h3>
                   {[
-                    { key: 'showPaymentMethod', label: 'Payment Method' },
-                    { key: 'showAmountPaid', label: 'Amount Paid' },
-                    { key: 'showChange', label: 'Change / Balance' },
-                    { key: 'showTransactionId', label: 'Transaction ID' }
+                    { key: 'showPaymentMethod', label: 'Payment Method' }
                   ].map(item => (
                     <div key={item.key} className="flex items-center justify-between border-b pb-2">
                       <label className="text-sm text-zinc-700">{item.label}</label>

@@ -278,6 +278,10 @@ export async function recordSale(sale: any) {
     }
 
     const calculatedTotal = calculatedSubtotal - calculatedItemDiscounts - globalDiscountAmount + calculatedTax;
+    const calculatedCgst = calculatedTax / 2;
+    const calculatedSgst = calculatedTax / 2;
+    const roundOff = typeof sale.roundOff === 'number' ? sale.roundOff : 0;
+    const finalTotal = roundOff !== 0 ? parseFloat((calculatedTotal + roundOff).toFixed(2)) : calculatedTotal;
 
     const finalSale = {
       ...sale,
@@ -285,7 +289,10 @@ export async function recordSale(sale: any) {
       subtotal: calculatedSubtotal,
       discount: calculatedItemDiscounts + globalDiscountAmount,
       tax: calculatedTax,
-      total: calculatedTotal,
+      cgst: calculatedCgst,
+      sgst: calculatedSgst,
+      roundOff: roundOff,
+      total: finalTotal,
       _id: sale.id as any
     };
 
