@@ -10,15 +10,23 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number) => {
 };
 
 export default function OfflineSyncManager() {
+  const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql';
   const { offlineQueue, removeOfflineSale, markSaleCompleted, syncInterval } = useTerminalStore()
   const isSyncingRef = useRef(false)
+
+  // In Local MySQL Mode, sales are committed atomically to MySQL local_billing_db.
+  // Legacy SQLite/MongoDB sync loops and ghost polling are disabled.
+  if (isLocalMode) {
+    return null;
+  }
 
   // Check SQLite directly to clear ghost bills from localStorage
   useEffect(() => {
     const cleanupGhostBills = async () => {
       try {
+        const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql';
         const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-        const baseUrl = isElectron ? 'http://localhost:3015' : '';
+        const baseUrl = isLocalMode ? '' : (isElectron ? 'http://localhost:3015' : '');
         const res = await fetch(baseUrl + '/api/storage/pendingBills');
         if (res.ok) {
           const data = await res.json();
@@ -41,8 +49,9 @@ export default function OfflineSyncManager() {
 
     const initializeSequence = async () => {
       try {
+        const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql';
         const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-        const baseUrl = isElectron ? 'http://localhost:3015' : '';
+        const baseUrl = isLocalMode ? '' : (isElectron ? 'http://localhost:3015' : '');
         const now = new Date();
         const todayStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getFullYear()).slice(-2);
         const res = await fetch(`${baseUrl}/api/storage/sequence?date=${todayStr}`);
@@ -76,8 +85,10 @@ export default function OfflineSyncManager() {
       isSyncingRef.current = true;
       
       try {
+        const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql';
         const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
-        const syncUrl = isElectron ? 'http://localhost:3015/api/storage/sync' : '/api/storage/sync';
+        const baseUrl = isLocalMode ? '' : (isElectron ? 'http://localhost:3015' : '');
+        const syncUrl = `${baseUrl}/api/storage/sync`;
         const syncRes = await fetch(syncUrl, { method: 'POST' });
         if (syncRes.ok) {
           const result = await syncRes.json();
@@ -89,7 +100,9 @@ export default function OfflineSyncManager() {
           }
         }
 
-        const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+        const liveApiUrl = isLocalMode
+          ? ''
+          : (process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com');
         
         // Reconcile sequence
         try {
@@ -97,12 +110,12 @@ export default function OfflineSyncManager() {
           if (idRes.ok) {
              const data = await idRes.json();
              if (data && data.count !== undefined) {
-               state.reconcileBillSequence(data.count);
+               state.reconcileBillSequence(data.count, data.companyId, true);
                
                // Also backup to SQLite immediately
                const now = new Date();
                const todayStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getFullYear()).slice(-2);
-               fetch(`${isElectron ? 'http://localhost:3015' : ''}/api/storage/sequence`, {
+               fetch(`${baseUrl}/api/storage/sequence`, {
                  method: 'POST',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify({ date: todayStr, count: data.count })

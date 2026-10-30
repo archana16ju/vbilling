@@ -9,7 +9,7 @@ function ensureOfflineStorageFolders() {
   const legacyConfigPath = path.join(os.homedir(), '.billing-software', 'storage-config.json');
   const legacyLocation = path.join(os.homedir(), '.billing-software', 'BillingOfflineStorage');
   const appDataLocation = path.join(app.getPath('userData'), 'BillingOfflineStorage');
-  
+
   let location = appDataLocation;
 
   try {
@@ -131,20 +131,20 @@ function startNextServer() {
     }
 
     const nodePath = app.isPackaged ? path.join(process.resourcesPath, 'node.exe') : process.execPath;
-  
-  try {
-    const envSource = require('path').join(process.resourcesPath, '.env');
-    const envDest = require('path').join(appPath, '.env');
-    if (require('fs').existsSync(envSource)) {
-      require('fs').copyFileSync(envSource, envDest);
-    }
-  } catch(e){}
-  nextServerProcess = spawn(nodePath, [nextBin, 'start', '-p', String(PORT)], {
+
+    try {
+      const envSource = require('path').join(process.resourcesPath, '.env');
+      const envDest = require('path').join(appPath, '.env');
+      if (require('fs').existsSync(envSource)) {
+        require('fs').copyFileSync(envSource, envDest);
+      }
+    } catch (e) { }
+    nextServerProcess = spawn(nodePath, [nextBin, 'start', '-p', String(PORT)], {
       cwd: appPath,
-      env: { 
-        ...customEnv, 
-        ELECTRON_RUN_AS_NODE: '1', 
-        NODE_ENV: 'production', 
+      env: {
+        ...customEnv,
+        ELECTRON_RUN_AS_NODE: '1',
+        NODE_ENV: 'production',
         PORT: String(PORT),
         OFFLINE_STORAGE_PATH: process.env.OFFLINE_STORAGE_PATH
       },
@@ -183,12 +183,22 @@ async function checkInternet() {
 
 async function createWindow() {
   const isDev = !app.isPackaged;
+  const isLocalMode = process.env.BILLING_LOCAL_MODE === '1';
   const baseUrl = `http://localhost:${PORT}`;
   const liveUrl = 'https://skbriyani.vseyal.com';
-  
-  // Set default to live if online, else local
-  const isOnline = await checkInternet();
-  const startUrl = process.env.ELECTRON_START_URL || (isOnline ? `${liveUrl}/dashboard` : `${baseUrl}/dashboard`);
+
+  let startUrl;
+
+  if (isLocalMode) {
+    // Local testing: always use the local application.
+    startUrl = `${baseUrl}/dashboard`;
+  } else {
+    // Keep the existing behavior outside local testing.
+    const isOnline = await checkInternet();
+    startUrl =
+      process.env.ELECTRON_START_URL ||
+      (isOnline ? `${liveUrl}/dashboard` : `${baseUrl}/dashboard`);
+  }
 
   if (!isDev) {
     try {
@@ -205,12 +215,28 @@ async function createWindow() {
   }
 
   // Pre-set admin authentication session cookie so app opens directly logged in as Admin for both local and live
+
   try {
-    await session.defaultSession.cookies.set({ url: baseUrl, name: 'auth_role', value: 'admin', path: '/' });
-    await session.defaultSession.cookies.set({ url: liveUrl, name: 'auth_role', value: 'admin', path: '/' });
+    await session.defaultSession.cookies.set({
+      url: baseUrl,
+      name: 'auth_role',
+      value: 'admin',
+      path: '/',
+    });
+
+    // Set the live website cookie only outside local testing.
+    if (!isLocalMode) {
+      await session.defaultSession.cookies.set({
+        url: liveUrl,
+        name: 'auth_role',
+        value: 'admin',
+        path: '/',
+      });
+    }
   } catch (cookieErr) {
     console.error('Failed to set auto-login cookie:', cookieErr);
   }
+
 
   mainWindow = new BrowserWindow({
     width: 1366,
@@ -250,9 +276,10 @@ async function createWindow() {
   });
 
   // Auto-switch between live and local based on internet availability
-    let lastOnlineState = null;
+  let lastOnlineState = null;
   let retryCount = 0;
   setInterval(async () => {
+    if (process.env.BILLING_LOCAL_MODE === '1') return;
     if (!mainWindow) return;
     const currentlyOnline = await checkInternet();
     const currentUrl = mainWindow.webContents.getURL();

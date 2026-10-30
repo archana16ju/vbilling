@@ -10,7 +10,12 @@ const options = {
 let client
 let clientPromise: Promise<MongoClient | null>
 
-if (!uri) {
+const isLocalMySql = process.env.LOCAL_DB_MODE === 'mysql';
+
+if (isLocalMySql) {
+  // Strictly prevent local MySQL mode from ever initializing or connecting to MongoDB
+  clientPromise = Promise.resolve(null);
+} else if (!uri) {
   // If no URI is provided, resolve to null so the db.ts catch blocks trigger the mock data fallback
   console.warn('MONGODB_URI is missing. App will run in offline/mock mode.')
   clientPromise = Promise.resolve(null)

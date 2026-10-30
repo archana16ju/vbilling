@@ -3,6 +3,7 @@ import { Product } from "./mock-data"
 export type CartItemData = {
   product: Product
   quantity: number
+  notes?: string
 }
 
 export const calculateItemSubtotal = (item: CartItemData): number => {

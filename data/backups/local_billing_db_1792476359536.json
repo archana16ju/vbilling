@@ -1,0 +1,295 @@
+{
+  "timestamp": "2026-10-20T06:05:59.503Z",
+  "database": "local_billing_db",
+  "tables": {
+    "_migrations": [
+      {
+        "version": 1,
+        "name": "001_create_companies_and_user_companies",
+        "applied_at": "2026-10-19T10:50:46.000Z"
+      },
+      {
+        "version": 2,
+        "name": "002_add_company_isolation_columns",
+        "applied_at": "2026-10-19T10:50:47.000Z"
+      },
+      {
+        "version": 3,
+        "name": "003_create_customers_and_payments",
+        "applied_at": "2026-10-19T10:50:47.000Z"
+      },
+      {
+        "version": 4,
+        "name": "004_users_and_seed_defaults",
+        "applied_at": "2026-10-19T10:51:04.000Z"
+      },
+      {
+        "version": 5,
+        "name": "005_standardize_database_collation",
+        "applied_at": "2026-10-19T12:31:54.000Z"
+      }
+    ],
+    "cash_register": [],
+    "categories": [],
+    "companies": [
+      {
+        "id": "comp_1792411565628",
+        "name": "company-1",
+        "code": "COM",
+        "address": null,
+        "phone": null,
+        "email": null,
+        "gstin": null,
+        "currency": "INR",
+        "is_active": 1,
+        "created_at": "2026-10-19T12:06:05.000Z",
+        "updated_at": "2026-10-19T12:06:05.000Z"
+      }
+    ],
+    "customers": [],
+    "payments": [],
+    "products": [],
+    "raw_materials": [],
+    "sales": [
+      {
+        "id": "BILL-171026-001",
+        "bill_number": "BILL-171026-001",
+        "company_id": null,
+        "items": [
+          {
+            "product": {
+              "id": "p1",
+              "sku": "BIR-01",
+              "tax": 0,
+              "name": "Chicken Biryani",
+              "unit": "plate",
+              "price": 160,
+              "stock": 999,
+              "barcode": "1001",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p3",
+              "sku": "BIR-03",
+              "tax": 0,
+              "name": "Naatu Kozhi Biryani",
+              "unit": "plate",
+              "price": 240,
+              "stock": 999,
+              "barcode": "1003",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          }
+        ],
+        "subtotal": "400.00",
+        "discount": "0.00",
+        "tax": "0.00",
+        "round_off": "0.00",
+        "total": "400.00",
+        "payment_method": "UPI",
+        "payment_status": "paid",
+        "customer_name": null,
+        "created_by": null,
+        "created_at": "2026-10-17T13:23:15.000Z"
+      },
+      {
+        "id": "BILL-191026-003",
+        "bill_number": "BILL-191026-003",
+        "company_id": null,
+        "items": [
+          {
+            "product": {
+              "id": "p1",
+              "sku": "BIR-01",
+              "tax": 0,
+              "name": "Chicken Biryani",
+              "unit": "plate",
+              "price": 160,
+              "stock": 999,
+              "barcode": "1001",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p2",
+              "sku": "BIR-02",
+              "tax": 0,
+              "name": "Mutton Biryani (Dome Biryani)",
+              "unit": "plate",
+              "price": 250,
+              "stock": 999,
+              "barcode": "1002",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p3",
+              "sku": "BIR-03",
+              "tax": 0,
+              "name": "Naatu Kozhi Biryani",
+              "unit": "plate",
+              "price": 240,
+              "stock": 999,
+              "barcode": "1003",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p4",
+              "sku": "BIR-04",
+              "tax": 0,
+              "name": "Egg Biryani",
+              "unit": "plate",
+              "price": 130,
+              "stock": 999,
+              "barcode": "1004",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p5",
+              "sku": "BIR-05",
+              "tax": 0,
+              "name": "Ghee Rice",
+              "unit": "plate",
+              "price": 100,
+              "stock": 999,
+              "barcode": "1005",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          },
+          {
+            "product": {
+              "id": "p6",
+              "sku": "BIR-06",
+              "tax": 0,
+              "name": "65 Biryani",
+              "unit": "plate",
+              "price": 180,
+              "stock": 999,
+              "barcode": "1006",
+              "discount": 0,
+              "categoryId": "c1",
+              "quantityStep": 1
+            },
+            "quantity": 1
+          }
+        ],
+        "subtotal": "1060.00",
+        "discount": "0.00",
+        "tax": "0.00",
+        "round_off": "0.00",
+        "total": "1060.00",
+        "payment_method": "Card",
+        "payment_status": "paid",
+        "customer_name": null,
+        "created_by": null,
+        "created_at": "2026-10-19T07:06:51.000Z"
+      }
+    ],
+    "stock_transactions": [],
+    "user_companies": [
+      {
+        "id": "uc_1792413428939_xmnl",
+        "user_id": "u_cashier_1792413428939",
+        "company_id": "comp_1792411565628",
+        "role": "cashier",
+        "created_at": "2026-10-19T12:37:08.000Z"
+      }
+    ],
+    "users": [
+      {
+        "id": "u_cashier_1792413428939",
+        "name": "cashier1",
+        "username": "cashier1",
+        "email": "cashier1@local.test",
+        "password_hash": null,
+        "password": "cashier",
+        "role": "cashier",
+        "shortcuts": null,
+        "is_active": 1,
+        "created_at": "2026-10-19T12:37:08.000Z",
+        "updated_at": "2026-10-19T12:37:08.000Z"
+      },
+      {
+        "id": "u1",
+        "name": "admin",
+        "username": "admin",
+        "email": "admin@local.test",
+        "password_hash": null,
+        "password": "admin",
+        "role": "super_admin",
+        "shortcuts": null,
+        "is_active": 1,
+        "created_at": "2026-10-19T10:55:52.000Z",
+        "updated_at": "2026-10-19T12:35:47.000Z"
+      },
+      {
+        "id": "u1792411533209",
+        "name": "company-2",
+        "username": "company-2",
+        "email": null,
+        "password_hash": null,
+        "password": "company-2",
+        "role": "admin",
+        "shortcuts": null,
+        "is_active": 1,
+        "created_at": "2026-10-19T12:05:33.000Z",
+        "updated_at": "2026-10-19T12:05:33.000Z"
+      },
+      {
+        "id": "u1792413342180",
+        "name": "company-1",
+        "username": "company-1",
+        "email": null,
+        "password_hash": null,
+        "password": "company-1",
+        "role": "admin",
+        "shortcuts": null,
+        "is_active": 1,
+        "created_at": "2026-10-19T12:35:42.000Z",
+        "updated_at": "2026-10-19T12:35:42.000Z"
+      },
+      {
+        "id": "u2",
+        "name": "cashier",
+        "username": "cashier",
+        "email": "cashier@local.test",
+        "password_hash": null,
+        "password": "cashier123",
+        "role": "cashier",
+        "shortcuts": null,
+        "is_active": 1,
+        "created_at": "2026-10-19T10:55:52.000Z",
+        "updated_at": "2026-10-19T12:35:42.000Z"
+      }
+    ]
+  }
+}

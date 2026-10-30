@@ -9,11 +9,8 @@ export default function TerminalPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  
-  if (!mounted) return null;
-
   return (
-    <main className="flex h-screen flex-col bg-zinc-100 overflow-hidden">
+    <main className="flex h-screen flex-col bg-zinc-950 text-white overflow-hidden">
       <TerminalHeader />
 
       <div className="flex flex-1 overflow-hidden">
@@ -21,11 +18,11 @@ export default function TerminalPage() {
           <CategoryPanel />
         </div>
 
-        <div className="flex-1 overflow-hidden border-l border-zinc-200">
+        <div className="flex-1 overflow-hidden border-l border-zinc-800">
           <ProductPanel />
         </div>
 
-        <div className="w-[380px] shrink-0 border-l border-zinc-200 xl:w-[420px]">
+        <div className="w-[380px] shrink-0 border-l border-zinc-800 xl:w-[420px]">
           <CartPanel />
         </div>
       </div>

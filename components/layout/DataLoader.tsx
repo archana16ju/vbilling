@@ -14,9 +14,9 @@ export default function DataLoader() {
     async function loadData() {
       try {
         const [dbProducts, dbCategories, dbRawMaterials] = await Promise.all([
-          getProducts(),
-          getCategories(),
-          getRawMaterials()
+          getProducts().catch((e) => { console.warn('DataLoader getProducts notice:', e?.message || e); return []; }),
+          getCategories().catch((e) => { console.warn('DataLoader getCategories notice:', e?.message || e); return []; }),
+          getRawMaterials().catch((e) => { console.warn('DataLoader getRawMaterials notice:', e?.message || e); return []; })
         ]);
         
         if (dbProducts) setProducts(dbProducts);

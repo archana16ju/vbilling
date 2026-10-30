@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getStorageStats } from '@/lib/storage';
 import clientPromise from '@/lib/mongodb';
+import { isLocalMySqlMode } from '@/lib/mysql';
 
 export async function GET() {
   try {
     const stats = await getStorageStats();
     
+    if (isLocalMySqlMode()) {
+      return NextResponse.json({
+        ...stats,
+        isMongoConnected: false,
+        isLocalMySql: true,
+      });
+    }
+
     let isMongoConnected = false;
     try {
       const client = await clientPromise;

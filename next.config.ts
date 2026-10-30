@@ -1,10 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['better-sqlite3', 'mongodb'],
+  serverExternalPackages: ['better-sqlite3', 'mongodb', 'mysql2'],
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000", "127.0.0.1:3000"]
+      allowedOrigins: [
+        "localhost:3000", "127.0.0.1:3000", "192.168.*:3000", "10.*:3000", "172.*:3000",
+        "localhost:3015", "127.0.0.1:3015", "192.168.*:3015", "10.*:3015", "172.*:3015",
+        "localhost:3030", "127.0.0.1:3030", "192.168.*:3030", "10.*:3030", "172.*:3030"
+      ]
     }
   },
   async rewrites() {

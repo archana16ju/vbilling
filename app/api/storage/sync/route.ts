@@ -9,11 +9,20 @@ import {
   updateMediaActionRetries
 } from '@/lib/storage';
 import { getDb } from '@/lib/actions/db';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { GridFSBucket } from 'mongodb';
 import { readFile } from 'fs/promises';
 import { Readable } from 'stream';
 
 export async function POST() {
+  if (isLocalMySqlMode()) {
+    return NextResponse.json({
+      success: true,
+      message: 'Local MySQL mode active. Production MongoDB and live API synchronization is disabled.',
+      syncedBillIds: [],
+    });
+  }
+
   try {
     // Check if MongoDB is online
     let db;

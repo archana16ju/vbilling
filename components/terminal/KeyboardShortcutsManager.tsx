@@ -93,21 +93,31 @@ export default function KeyboardShortcutsManager() {
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-          <Keyboard className="h-5 w-5" /> Keyboard Shortcuts
+    <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl max-w-2xl text-white">
+      <div className="flex items-center justify-between mb-5 pb-3 border-b border-zinc-800">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <div 
+            className="p-1.5 rounded-lg border"
+            style={{
+              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+              borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+              color: 'var(--theme-accent, #DB2777)'
+            }}
+          >
+            <Keyboard className="h-4 w-4" />
+          </div>
+          Keyboard Shortcuts
         </h2>
         <div className="flex gap-2">
           <button 
             onClick={handleResetAll}
-            className="text-sm font-medium text-red-600 hover:text-red-700 hover:underline px-2 py-1"
+            className="text-xs font-bold text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-950/40 hover:bg-rose-900/50 transition cursor-pointer"
           >
             Reset All
           </button>
           <button 
             onClick={handleSave}
-            className="rounded bg-black px-4 py-1.5 text-sm font-bold text-white hover:bg-gray-800 transition-colors"
+            className="rounded-xl bg-theme-bar hover:opacity-95 px-4 py-1.5 text-xs font-bold text-white shadow-lg shadow-theme-glow border border-theme transition cursor-pointer active:scale-95"
           >
             {saveStatus || 'Save Changes'}
           </button>
@@ -115,27 +125,37 @@ export default function KeyboardShortcutsManager() {
       </div>
 
       {errorMsg && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm font-medium text-red-800 border border-red-200">
+        <div className="mb-4 rounded-xl bg-rose-950/50 p-3 text-xs font-semibold text-rose-300 border border-rose-800/60">
           {errorMsg}
         </div>
       )}
 
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {Object.entries(SHORTCUT_LABELS).map(([key, label]) => {
           const currentShortcut = (activeShortcuts || DEFAULT_SHORTCUTS)[key]
           const isEditing = editingKey === key
 
           return (
-            <div key={key} className="flex items-center justify-between rounded-lg border-b border-zinc-100 p-3 hover:bg-zinc-50">
-              <div className="font-medium text-zinc-700 w-1/3">{label}</div>
+            <div key={key} className="flex items-center justify-between rounded-xl border border-zinc-800/60 bg-zinc-950/60 p-3 hover:bg-zinc-800/40 transition">
+              <div className="font-semibold text-zinc-300 text-sm w-1/3">{label}</div>
               
               <div className="flex-1 flex justify-center">
                 {isEditing ? (
-                  <span className="animate-pulse rounded border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">
+                  <span 
+                    className="animate-pulse rounded-lg border px-3 py-1 text-xs font-bold shadow-md"
+                    style={{
+                      backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                      borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                      color: 'var(--theme-badge-text, #F472B6)'
+                    }}
+                  >
                     Press any key combination...
                   </span>
                 ) : (
-                  <kbd className="rounded border border-zinc-300 bg-zinc-100 px-2.5 py-1 text-sm font-bold font-sans shadow-sm text-zinc-900">
+                  <kbd 
+                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-mono font-bold shadow-inner"
+                    style={{ color: 'var(--theme-accent, #DB2777)' }}
+                  >
                     {currentShortcut}
                   </kbd>
                 )}
@@ -145,7 +165,7 @@ export default function KeyboardShortcutsManager() {
                 {isEditing ? (
                   <button 
                     onClick={() => setEditingKey(null)}
-                    className="text-xs font-medium text-zinc-500 hover:text-zinc-800 px-2"
+                    className="text-xs font-bold text-zinc-400 hover:text-white px-2 cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -153,14 +173,14 @@ export default function KeyboardShortcutsManager() {
                   <>
                     <button 
                       onClick={() => setEditingKey(key)}
-                      className="rounded border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-100 shadow-sm transition-colors"
+                      className="rounded-xl border border-zinc-700 bg-zinc-800/80 px-3 py-1 text-xs font-bold text-zinc-200 hover:bg-zinc-700 hover:text-white shadow-sm transition cursor-pointer"
                     >
                       Change
                     </button>
                     {currentShortcut !== DEFAULT_SHORTCUTS[key] && (
                       <button 
                         onClick={() => handleReset(key)}
-                        className="rounded px-3 py-1 text-xs font-medium text-zinc-500 hover:text-zinc-800 hover:bg-zinc-200 transition-colors"
+                        className="rounded-xl px-2.5 py-1 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
                       >
                         Reset
                       </button>

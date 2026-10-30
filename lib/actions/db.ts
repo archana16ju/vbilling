@@ -4,8 +4,41 @@ import clientPromise from '@/lib/mongodb';
 import { Product, Category, PRODUCTS, CATEGORIES } from '@/lib/mock-data';
 import { getLocalProducts, getLocalCategories, addDashboardSyncAction, cacheDashboardData } from '@/lib/storage';
 import { calculateRecipeDeduction, getRawMaterials, processStockTransactions } from '@/lib/actions/inventory';
+import { isLocalMySqlMode } from '@/lib/mysql';
+import {
+  mysqlGetProducts,
+  mysqlCreateProduct,
+  mysqlUpdateProduct,
+  mysqlDeleteProduct,
+  mysqlGetCategories,
+  mysqlCreateCategory,
+  mysqlUpdateCategory,
+  mysqlDeleteCategory,
+  mysqlGetNextBillId,
+  mysqlRecordSale,
+  mysqlUpdateSalePayment,
+  mysqlGetLiveSales,
+  mysqlClearAllSales,
+  mysqlGetDeliveryPersons,
+  mysqlCreateDeliveryPerson,
+  mysqlUpdateDeliveryPerson,
+  mysqlDeleteDeliveryPerson,
+  mysqlGetDeliveries,
+  mysqlGetDeliveryByBillId,
+  mysqlUpdateDeliveryStatus,
+  mysqlManualAssignDelivery,
+  mysqlUpdateDeliveryLocation,
+  mysqlGetDeliveryByTrackingToken,
+  mysqlGetOnlineOrderConfigs,
+  mysqlSaveOnlineOrderConfig,
+  mysqlImportOnlineOrder,
+} from '@/lib/mysql-billing';
+import { Delivery, DeliveryPerson, DeliveryStatus, OnlineOrderConfig } from '@/types/delivery';
 
 export async function getDb() {
+  if (isLocalMySqlMode()) {
+    throw new Error('Safety Violation: MongoDB access is strictly blocked in Local MySQL mode.');
+  }
   const client = await clientPromise;
   if (!client) throw new Error('MongoDB is offline/disconnected');
   return client.db();
@@ -13,6 +46,9 @@ export async function getDb() {
 
 // --- PRODUCTS ---
 export async function getProducts(): Promise<Product[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetProducts();
+  }
   try {
     const db = await getDb();
     const products = await db.collection('products').find({}).toArray();
@@ -37,6 +73,9 @@ export async function getProducts(): Promise<Product[]> {
 }
 
 export async function createProduct(product: Omit<Product, 'id'>): Promise<Product> {
+  if (isLocalMySqlMode()) {
+    return await mysqlCreateProduct(product);
+  }
   const newProduct = { ...product, id: "p" + Date.now() };
   try {
     const db = await getDb();
@@ -54,6 +93,9 @@ export async function createProduct(product: Omit<Product, 'id'>): Promise<Produ
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateProduct(id, updates);
+  }
   try {
     const db = await getDb();
     const result = await db.collection('products').updateOne({ id }, { $set: updates });
@@ -79,6 +121,9 @@ export async function updateProduct(id: string, updates: Partial<Product>): Prom
 }
 
 export async function deleteProduct(id: string): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlDeleteProduct(id);
+  }
   try {
     const db = await getDb();
     const result = await db.collection('products').deleteOne({ id });
@@ -97,6 +142,9 @@ export async function deleteProduct(id: string): Promise<boolean> {
 
 // --- CATEGORIES ---
 export async function getCategories(): Promise<Category[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetCategories();
+  }
   try {
     const db = await getDb();
     const categories = await db.collection('categories').find({}).toArray();
@@ -123,6 +171,9 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 export async function createCategory(category: Omit<Category, 'id'>): Promise<Category> {
+  if (isLocalMySqlMode()) {
+    return await mysqlCreateCategory(category);
+  }
   const newCategory = { ...category, id: "c" + Date.now() };
   try {
     const db = await getDb();
@@ -139,6 +190,9 @@ export async function createCategory(category: Omit<Category, 'id'>): Promise<Ca
 }
 
 export async function updateCategory(id: string, updates: Partial<Category>): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateCategory(id, updates);
+  }
   try {
     const db = await getDb();
     const result = await db.collection('categories').updateOne({ id }, { $set: updates });
@@ -163,6 +217,9 @@ export async function updateCategory(id: string, updates: Partial<Category>): Pr
 }
 
 export async function deleteCategory(id: string): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlDeleteCategory(id);
+  }
   try {
     const db = await getDb();
     const result = await db.collection('categories').deleteOne({ id });
@@ -179,6 +236,9 @@ export async function deleteCategory(id: string): Promise<boolean> {
 }
 
 export async function seedDatabase() {
+  if (isLocalMySqlMode()) {
+    return;
+  }
   try {
     const db = await getDb();
     const prodCount = await db.collection('products').countDocuments();
@@ -195,6 +255,9 @@ export async function seedDatabase() {
 }
 
 export async function getNextBillId(): Promise<{ id: string, count: number }> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetNextBillId();
+  }
   const now = new Date();
   const dd = String(now.getDate()).padStart(2, '0');
   const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -227,6 +290,9 @@ export async function getNextBillId(): Promise<{ id: string, count: number }> {
 }
 
 export async function recordSale(sale: any) {
+  if (isLocalMySqlMode()) {
+    return await mysqlRecordSale(sale);
+  }
   try {
     const db = await getDb();
     
@@ -362,7 +428,40 @@ export async function recordSale(sale: any) {
   }
 }
 
+export async function updateSalePayment(
+  billId: string,
+  paymentMethod: string,
+  cashReceived?: number,
+  changeReturned?: number
+) {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateSalePayment(billId, paymentMethod, cashReceived, changeReturned);
+  }
+  try {
+    const db = await getDb();
+    await db.collection('sales').updateOne(
+      { $or: [{ id: billId }, { _id: billId as any }, { billNumber: billId }] },
+      {
+        $set: {
+          paymentMethod,
+          payment_status: 'paid',
+          amountReceived: cashReceived,
+          changeAmount: changeReturned,
+          settledAt: Date.now(),
+        },
+      }
+    );
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateSalePayment error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 export async function clearAllSales() {
+  if (isLocalMySqlMode()) {
+    return await mysqlClearAllSales();
+  }
   try {
     const db = await getDb();
     await db.collection('sales').deleteMany({});
@@ -374,6 +473,9 @@ export async function clearAllSales() {
 }
 
 export async function getLiveSales(): Promise<any[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetLiveSales();
+  }
   try {
     const db = await getDb();
     const sales = await db.collection('sales').find().sort({ timestamp: -1 }).limit(200).toArray();
@@ -384,5 +486,127 @@ export async function getLiveSales(): Promise<any[]> {
   }
 }
 
+// --- DELIVERY & DELIVERY STAFF ACTIONS ---
 
+export async function getDeliveryPersons(): Promise<DeliveryPerson[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetDeliveryPersons();
+  }
+  return [];
+}
 
+export async function createDeliveryPerson(data: {
+  name: string;
+  employeeId: string;
+  phone: string;
+  maxActiveDeliveries?: number;
+}): Promise<DeliveryPerson> {
+  if (isLocalMySqlMode()) {
+    return await mysqlCreateDeliveryPerson(data);
+  }
+  throw new Error('Delivery management is available in local MySQL mode.');
+}
+
+export async function updateDeliveryPerson(
+  id: string,
+  updates: Partial<DeliveryPerson>
+): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateDeliveryPerson(id, updates);
+  }
+  return false;
+}
+
+export async function deleteDeliveryPerson(id: string): Promise<boolean> {
+  if (isLocalMySqlMode()) {
+    return await mysqlDeleteDeliveryPerson(id);
+  }
+  return false;
+}
+
+export async function getDeliveries(filter?: {
+  status?: string;
+  search?: string;
+}): Promise<Delivery[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetDeliveries(filter);
+  }
+  return [];
+}
+
+export async function getDeliveryByBillId(billId: string): Promise<Delivery | null> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetDeliveryByBillId(billId);
+  }
+  return null;
+}
+
+export async function updateDeliveryStatus(
+  deliveryId: string,
+  newStatus: DeliveryStatus,
+  deliveryNotes?: string
+): Promise<{ success: boolean; delivery?: Delivery; error?: string }> {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateDeliveryStatus(deliveryId, newStatus, deliveryNotes);
+  }
+  return { success: false, error: 'Local MySQL mode required' };
+}
+
+export async function manualAssignDelivery(
+  deliveryId: string,
+  deliveryPersonId: string | null
+): Promise<{ success: boolean; delivery?: Delivery; error?: string }> {
+  if (isLocalMySqlMode()) {
+    return await mysqlManualAssignDelivery(deliveryId, deliveryPersonId);
+  }
+  return { success: false, error: 'Local MySQL mode required' };
+}
+
+export async function updateDeliveryLocation(
+  deliveryId: string,
+  latitude: number,
+  longitude: number
+): Promise<{ success: boolean; error?: string }> {
+  if (isLocalMySqlMode()) {
+    return await mysqlUpdateDeliveryLocation(deliveryId, latitude, longitude);
+  }
+  return { success: false, error: 'Local MySQL mode required' };
+}
+
+export async function getDeliveryByTrackingToken(token: string): Promise<any | null> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetDeliveryByTrackingToken(token);
+  }
+  return null;
+}
+
+export async function getOnlineOrderConfigs(): Promise<OnlineOrderConfig[]> {
+  if (isLocalMySqlMode()) {
+    return await mysqlGetOnlineOrderConfigs();
+  }
+  return [];
+}
+
+export async function saveOnlineOrderConfig(data: {
+  platform: string;
+  displayName?: string;
+  isEnabled: boolean;
+  apiKey?: string | null;
+  apiSecret?: string | null;
+  storeId?: string | null;
+  webhookSecret?: string | null;
+  autoAccept?: boolean;
+  connectionStatus?: 'connected' | 'disconnected' | 'error';
+}): Promise<OnlineOrderConfig | null> {
+  if (isLocalMySqlMode()) {
+    return await mysqlSaveOnlineOrderConfig(data);
+  }
+  return null;
+}
+
+export async function importOnlineOrder(payload: any): Promise<any> {
+  if (isLocalMySqlMode()) {
+    return await mysqlImportOnlineOrder(payload);
+  }
+  return { success: false, error: 'Local MySQL mode required' };
+}

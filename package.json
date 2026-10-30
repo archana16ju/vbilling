@@ -5,11 +5,14 @@
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
+    "dev:local-mysql": "cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql next dev --hostname 0.0.0.0 --webpack --port 3000",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3015 && electron .\"",
+    "electron:dev": "concurrently \"next dev -p 3015\" \"wait-on http://localhost:3015 && cross-env BILLING_LOCAL_MODE=1 electron .\"",
+    "electron:dev:mysql": "concurrently \"cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql next dev -p 3015\" \"wait-on http://localhost:3015 && cross-env BILLING_LOCAL_MODE=1 LOCAL_DB_MODE=mysql electron .\"",
     "electron:build": "node scripts/copy-node.js && next build --webpack && electron-builder",
+    "electron:build:mysql": "node scripts/copy-node.js && cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql next build --webpack && electron-builder --config electron-builder-local-mysql.json",
     "electron:publish": "node scripts/copy-node.js && next build --webpack && electron-builder -p always"
   },
   "dependencies": {
@@ -17,6 +20,7 @@
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.46.0",
     "mongodb": "^7.6.0",
+    "mysql2": "^3.24.6",
     "next": "16.3.5",
     "puppeteer-core": "^25.13.0",
     "react": "19.2.8",
@@ -32,6 +36,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "electron": "^44.4.1",
     "electron-builder": "^26.15.3",
     "eslint": "^9",

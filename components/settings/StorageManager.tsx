@@ -17,9 +17,16 @@ export default function StorageManager() {
   const [dateFilter, setDateFilter] = useState('')
   const [isViewingImages, setIsViewingImages] = useState(false)
 
+  const getStorageUrl = (endpoint: string) => {
+    const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql';
+    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron');
+    const baseUrl = isLocalMode ? '' : (isElectron ? 'http://localhost:3015' : '');
+    return `${baseUrl}/api/storage/${endpoint}`;
+  };
+
   const loadStats = async () => {
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'stats');
+      const res = await fetch(getStorageUrl('stats'));
       if (!res.ok) throw new Error('Failed to load storage data');
       const data = await res.json();
       setStats(data);
@@ -39,7 +46,7 @@ export default function StorageManager() {
     if (!newLocation.trim()) return;
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'config', {
+      const res = await fetch(getStorageUrl('config'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: newLocation })
@@ -63,7 +70,7 @@ export default function StorageManager() {
     if (!confirm('Are you sure? This will delete cached images but pending bills will be safe.')) return;
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'clear', { method: 'POST' });
+      const res = await fetch(getStorageUrl('clear'), { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setMessage({ type: 'success', text: 'Cache cleared successfully.' })
@@ -85,7 +92,7 @@ export default function StorageManager() {
     }
     setIsLoading(true);
     try {
-      const res = await fetch((typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:3015/api/storage/' : '/api/storage/') + 'allBills');
+      const res = await fetch(getStorageUrl('allBills'));
       const data = await res.json();
       setBills(data);
       setIsViewingBills(true);
@@ -109,30 +116,30 @@ export default function StorageManager() {
   );
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl text-white">
       <div className="flex items-center gap-3 mb-6">
-        <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+        <div className="rounded-xl bg-pink-500/10 border border-pink-500/30 p-2.5 text-pink-400">
           <HardDrive className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-zinc-900">Local Temporary Storage</h2>
-          <p className="text-sm text-zinc-500">Manage offline bills and cached product images for this device.</p>
+          <h2 className="text-lg font-bold text-white">Local Temporary Storage</h2>
+          <p className="text-xs text-zinc-400">Manage offline bills and cached product images for this device.</p>
         </div>
       </div>
 
       {message && (
-        <div className={`mb-4 p-3 rounded-md text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+        <div className={`mb-4 p-3 rounded-xl text-xs font-semibold border ${message.type === 'error' ? 'bg-rose-950/50 text-rose-300 border-rose-800/60' : 'bg-emerald-950/50 text-emerald-300 border-emerald-800/60'}`}>
           {message.text}
         </div>
       )}
 
-      <div className="bg-zinc-50 p-4 rounded-lg mb-6 border border-zinc-100">
+      <div className="bg-zinc-900/90 p-5 rounded-2xl mb-6 border border-zinc-800">
         <div className="flex justify-between items-start mb-2">
-          <span className="text-sm font-medium text-zinc-700">Current Location</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Current Storage Path</span>
           {!isChangingLocation && (
             <button 
               onClick={() => setIsChangingLocation(true)}
-              className="text-sm text-blue-600 hover:underline"
+              className="text-xs font-bold text-pink-400 hover:text-pink-300 transition cursor-pointer"
             >
               Change Location
             </button>
@@ -140,32 +147,32 @@ export default function StorageManager() {
         </div>
         
         {isChangingLocation ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2 mt-2">
             <input 
               value={newLocation}
               onChange={(e) => setNewLocation(e.target.value)}
-              className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm"
+              className="flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none"
               placeholder="e.g. D:\BillingOfflineStorage"
             />
             <button 
               onClick={handleUpdateLocation}
               disabled={isLoading}
-              className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+              className="btn-theme-primary text-white font-bold px-4 py-2 rounded-xl text-xs disabled:opacity-50 transition cursor-pointer shadow-md"
             >
               Save
             </button>
             <button 
               onClick={() => { setIsChangingLocation(false); setNewLocation(stats.location); }}
-              className="px-4 py-2 text-zinc-600 text-sm hover:bg-zinc-200 rounded"
+              className="px-4 py-2 text-zinc-400 text-xs font-bold hover:text-white hover:bg-zinc-800 rounded-xl transition cursor-pointer"
             >
               Cancel
             </button>
           </div>
         ) : (
           <div className="flex flex-col gap-4 mt-4">
-            <div className="flex items-center justify-between bg-white p-3 rounded border border-zinc-200">
-              <span className="text-sm font-semibold text-zinc-700">Total Local Storage Used:</span>
-              <span className="text-sm font-bold text-blue-600">
+            <div className="flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-zinc-800">
+              <span className="text-xs font-bold text-zinc-300">Total Local Storage Used:</span>
+              <span className="text-sm font-bold text-pink-400">
                 {stats.usedBytes > 1024 * 1024 
                   ? `${(stats.usedBytes / (1024 * 1024)).toFixed(2)} MB` 
                   : `${(stats.usedBytes / 1024).toFixed(2)} KB`}
@@ -173,29 +180,29 @@ export default function StorageManager() {
             </div>
             
             {stats.folderDetails && stats.folderDetails.length > 0 && (
-              <div className="overflow-x-auto rounded border border-zinc-200 bg-white">
+              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950">
                 <table className="min-w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-zinc-100 text-zinc-600">
+                  <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">Folder/File</th>
-                      <th className="px-3 py-2 font-semibold">Path</th>
-                      <th className="px-3 py-2 font-semibold text-right">Size</th>
-                      <th className="px-3 py-2 font-semibold text-center">Type</th>
+                      <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-[10px]">Folder/File</th>
+                      <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-[10px]">Path</th>
+                      <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-[10px] text-right">Size</th>
+                      <th className="px-3 py-2.5 font-bold uppercase tracking-wider text-[10px] text-center">Type</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
+                  <tbody className="divide-y divide-zinc-800/60">
                     {stats.folderDetails.map((f: any, i: number) => (
-                      <tr key={i} className="hover:bg-zinc-50">
-                        <td className="px-3 py-2 font-medium text-zinc-900">{f.name}</td>
-                        <td className="px-3 py-2 text-zinc-500 font-mono" title={f.path}>{f.path}</td>
-                        <td className="px-3 py-2 text-zinc-700 text-right font-medium">
+                      <tr key={i} className="hover:bg-zinc-900/50 transition">
+                        <td className="px-3 py-2 font-medium text-white">{f.name}</td>
+                        <td className="px-3 py-2 text-zinc-400 font-mono text-[11px]" title={f.path}>{f.path}</td>
+                        <td className="px-3 py-2 text-zinc-300 text-right font-bold">
                           {f.sizeBytes > 1024 * 1024 
                             ? `${(f.sizeBytes / (1024 * 1024)).toFixed(2)} MB` 
                             : `${(f.sizeBytes / 1024).toFixed(2)} KB`}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium ${
-                            f.type === 'Permanent Data' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            f.type === 'Permanent Data' ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30' : 'theme-badge'
                           }`}>
                             {f.type}
                           </span>
@@ -210,111 +217,111 @@ export default function StorageManager() {
         )}
       </div>
 
-      <h3 className="mb-3 text-sm font-bold text-zinc-700 uppercase tracking-wider">Terminal Bills</h3>
+      <h3 className="mb-3 text-xs font-bold text-zinc-400 uppercase tracking-wider">Terminal Bills</h3>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm bg-zinc-50/50">
-          <div className="text-sm text-zinc-500 mb-1">Database Size</div>
-          <div className="text-xl font-bold text-zinc-900">{((stats.databaseSizeBytes || 0) / (1024 * 1024)).toFixed(2)} MB</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Database Size</div>
+          <div className="text-xl font-bold text-white">{((stats.databaseSizeBytes || 0) / (1024 * 1024)).toFixed(2)} MB</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Total Bills</div>
-          <div className="text-xl font-bold text-zinc-900">{stats.totalOfflineBillsCount || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Total Bills</div>
+          <div className="text-xl font-bold text-white">{stats.totalOfflineBillsCount || 0}</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Pending Sync</div>
-          <div className="text-xl font-bold text-orange-600">{stats.pendingBillsCount || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Pending Sync</div>
+          <div className="text-xl font-bold text-amber-400">{stats.pendingBillsCount || 0}</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Completed</div>
-          <div className="text-xl font-bold text-green-600">{stats.completedCount || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Completed</div>
+          <div className="text-xl font-bold text-emerald-400">{stats.completedCount || 0}</div>
         </div>
       </div>
 
-      <h3 className="mb-3 mt-6 text-sm font-bold text-zinc-700 uppercase tracking-wider">Dashboard Offline Data</h3>
+      <h3 className="mb-3 mt-6 text-xs font-bold text-zinc-400 uppercase tracking-wider">Dashboard Offline Data</h3>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Pending Sync</div>
-          <div className="text-xl font-bold text-orange-600">{stats.dashboardPendingSyncs || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Pending Sync</div>
+          <div className="text-xl font-bold text-amber-400">{stats.dashboardPendingSyncs || 0}</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Local Products</div>
-          <div className="text-xl font-bold text-zinc-900">{stats.dashboardOfflineProducts || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Local Products</div>
+          <div className="text-xl font-bold text-white">{stats.dashboardOfflineProducts || 0}</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm">
-          <div className="text-sm text-zinc-500 mb-1">Local Categories</div>
-          <div className="text-xl font-bold text-zinc-900">{stats.dashboardOfflineCategories || 0}</div>
+        <div className="p-4 border border-zinc-800 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-zinc-400 mb-1">Local Categories</div>
+          <div className="text-xl font-bold text-white">{stats.dashboardOfflineCategories || 0}</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm bg-blue-50/50">
-          <div className="text-sm text-zinc-500 mb-1">Product Images</div>
-          <div className="text-xl font-bold text-blue-700">{stats.cachedProductImagesCount || 0} Cached</div>
+        <div className="p-4 border border-theme rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-theme-accent mb-1 font-bold">Product Images</div>
+          <div className="text-xl font-bold text-theme-accent">{stats.cachedProductImagesCount || 0} Cached</div>
         </div>
-        <div className="p-4 border border-zinc-100 rounded-lg shadow-sm bg-blue-50/50">
-          <div className="text-sm text-zinc-500 mb-1">Category Images</div>
-          <div className="text-xl font-bold text-blue-700">{stats.cachedCategoryImagesCount || 0} Cached</div>
+        <div className="p-4 border border-purple-500/20 rounded-2xl shadow-sm bg-zinc-900/90">
+          <div className="text-xs text-purple-400 mb-1">Category Images</div>
+          <div className="text-xl font-bold text-purple-300">{stats.cachedCategoryImagesCount || 0} Cached</div>
         </div>
       </div>
 
-      <div className="flex gap-3 pt-2">
+      <div className="flex flex-wrap gap-3 pt-2">
         <button 
           onClick={handleViewBills}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 rounded-md text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 btn-theme-primary rounded-xl text-xs font-bold text-white shadow-lg transition cursor-pointer active:scale-95 disabled:opacity-50"
         >
           <DbIcon className="h-4 w-4" /> {isViewingBills ? 'Hide Local Bills' : 'View Local Bills'}
         </button>
         <button 
           onClick={() => setIsViewingImages(!isViewingImages)}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 border border-purple-200 bg-purple-50 rounded-md text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 border border-purple-500/30 bg-purple-950/40 rounded-xl text-xs font-bold text-purple-300 hover:bg-purple-900/50 transition cursor-pointer disabled:opacity-50"
         >
           <FileText className="h-4 w-4" /> {isViewingImages ? 'Hide Cached Images' : 'View Cached Images'}
         </button>
         <button 
           onClick={handleClearCache}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 border border-zinc-300 rounded-md text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 border border-rose-500/30 bg-rose-950/40 rounded-xl text-xs font-bold text-rose-400 hover:bg-rose-900/50 transition cursor-pointer disabled:opacity-50"
         >
           <Trash2 className="h-4 w-4" /> Clear Image Cache
         </button>
         <button 
           onClick={loadStats}
           disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 border border-zinc-300 rounded-md text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 border border-zinc-700 bg-zinc-800 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className="h-4 w-4" /> Refresh Stats
         </button>
       </div>
 
       {isViewingImages && stats.cachedImagesList && (
-        <div className="mt-8 border-t border-zinc-200 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="mt-8 border-t border-zinc-800 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-zinc-500" /> Offline Cached Images
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <FileText className="h-5 w-5 text-pink-400" /> Offline Cached Images
             </h3>
-            <p className="text-sm text-zinc-500">Locally compressed WebP images stored for offline functionality.</p>
+            <p className="text-xs text-zinc-400">Locally compressed WebP images stored for offline functionality.</p>
           </div>
           
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 shadow-sm no-scrollbar">
-            <table className="min-w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600">
+          <div className="overflow-x-auto rounded-2xl border border-zinc-800 shadow-xl no-scrollbar bg-zinc-950">
+            <table className="min-w-full text-left text-xs whitespace-nowrap">
+              <thead className="bg-zinc-900/90 border-b border-zinc-800 text-zinc-400">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Preview</th>
-                  <th className="px-4 py-3 font-semibold">Filename</th>
-                  <th className="px-4 py-3 font-semibold">Type</th>
-                  <th className="px-4 py-3 font-semibold">Size</th>
-                  <th className="px-4 py-3 font-semibold">Location</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Preview</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Filename</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Type</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Size</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Location</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 bg-white">
+              <tbody className="divide-y divide-zinc-800/60 bg-zinc-950">
                 {stats.cachedImagesList.map((img: any, index: number) => (
-                  <tr key={`${img.name}-${index}`} className="hover:bg-zinc-50/80 transition-colors">
+                  <tr key={`${img.name}-${index}`} className="hover:bg-zinc-900/50 transition-colors">
                     <td className="px-4 py-3">
-                      <img src={`/api/media/${img.name}`} alt="preview" className="h-10 w-10 object-cover rounded shadow-sm border border-zinc-200 bg-zinc-100" />
+                      <img src={`/api/media/${img.name}`} alt="preview" className="h-10 w-10 object-cover rounded-lg shadow-sm border border-zinc-800 bg-zinc-900" />
                     </td>
-                    <td className="px-4 py-3 font-medium text-zinc-900">{img.name}</td>
-                    <td className="px-4 py-3 text-zinc-600 uppercase text-xs">{img.type}</td>
-                    <td className="px-4 py-3 text-zinc-600">{(img.size / 1024).toFixed(1)} KB</td>
-                    <td className="px-4 py-3 text-zinc-500 font-mono text-xs max-w-[200px] truncate" title={img.path}>{img.path}</td>
+                    <td className="px-4 py-3 font-semibold text-white">{img.name}</td>
+                    <td className="px-4 py-3 text-zinc-400 uppercase text-xs">{img.type}</td>
+                    <td className="px-4 py-3 text-pink-400 font-bold">{(img.size / 1024).toFixed(1)} KB</td>
+                    <td className="px-4 py-3 text-zinc-400 font-mono text-xs max-w-[200px] truncate" title={img.path}>{img.path}</td>
                   </tr>
                 ))}
                 {stats.cachedImagesList.length === 0 && (
@@ -331,49 +338,49 @@ export default function StorageManager() {
       )}
 
       {isViewingBills && (
-        <div className="mt-8 border-t border-zinc-200 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="mt-8 border-t border-zinc-800 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
             <div>
-              <h3 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-zinc-500" /> Offline Database Records
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <FileText className="h-5 w-5 text-pink-400" /> Offline Database Records
               </h3>
-              <p className="text-sm text-zinc-500">Read directly from local_storage.db</p>
+              <p className="text-xs text-zinc-400">Read directly from local_storage.db</p>
             </div>
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
               <div className="relative">
-                <Calendar className="absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
+                <Calendar className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
                 <input 
                   type="date"
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="pl-9 pr-3 py-1.5 rounded-md border border-zinc-300 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black w-full"
+                  className="pl-8 pr-3 py-1.5 rounded-xl border border-zinc-700 bg-zinc-950 text-white text-xs outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 w-full"
                 />
               </div>
               <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
                 <input 
                   type="text"
                   placeholder="Search Bill No..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-3 py-1.5 rounded-md border border-zinc-300 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black w-full"
+                  className="pl-8 pr-3 py-1.5 rounded-xl border border-zinc-700 bg-zinc-950 text-white placeholder-zinc-500 text-xs outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 w-full"
                 />
               </div>
             </div>
           </div>
           
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 shadow-sm no-scrollbar">
-            <table className="min-w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600">
+          <div className="overflow-x-auto rounded-2xl border border-zinc-800 shadow-xl no-scrollbar bg-zinc-950">
+            <table className="min-w-full text-left text-xs whitespace-nowrap">
+              <thead className="bg-zinc-900/90 border-b border-zinc-800 text-zinc-400">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Bill Number</th>
-                  <th className="px-4 py-3 font-semibold">Date & Time</th>
-                  <th className="px-4 py-3 font-semibold text-right">Total Amount</th>
-                  <th className="px-4 py-3 font-semibold">Payment</th>
-                  <th className="px-4 py-3 font-semibold text-center">Sync Status</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Bill Number</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Date & Time</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px] text-right">Total Amount</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px]">Payment</th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-[10px] text-center">Sync Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 bg-white">
+              <tbody className="divide-y divide-zinc-800/60 bg-zinc-950">
                 {bills
                   .filter(b => b.sync_status !== 'COMPLETED')
                   .filter(b => b.id.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -385,16 +392,16 @@ export default function StorageManager() {
                     return localDate === dateFilter;
                   })
                   .map((bill, index) => (
-                  <tr key={`${bill.id}-${index}`} className="hover:bg-zinc-50/80 transition-colors">
-                    <td className="px-4 py-3 font-medium text-zinc-900">{bill.id}</td>
-                    <td className="px-4 py-3 text-zinc-600">{new Date(bill.timestamp).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-medium text-zinc-900">₹{bill.total.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-zinc-600">{bill.payment_method}</td>
+                  <tr key={`${bill.id}-${index}`} className="hover:bg-zinc-900/50 transition-colors">
+                    <td className="px-4 py-3 font-bold text-white">{bill.id}</td>
+                    <td className="px-4 py-3 text-zinc-400">{new Date(bill.timestamp).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-bold text-pink-400">₹{bill.total.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-zinc-300">{bill.payment_method}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        bill.sync_status === 'COMPLETED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-orange-100 text-orange-700 border border-orange-200 animate-pulse'
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border ${
+                        bill.sync_status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30 animate-pulse'
                       }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${bill.sync_status === 'COMPLETED' ? 'bg-green-600' : 'bg-orange-600'}`}></span>
+                        <span className={`h-1.5 w-1.5 rounded-full ${bill.sync_status === 'COMPLETED' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
                         {bill.sync_status === 'COMPLETED' ? 'COMPLETED' : 'PENDING_SYNC'}
                       </span>
                     </td>
@@ -404,7 +411,7 @@ export default function StorageManager() {
                   <tr>
                     <td colSpan={5} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center justify-center text-zinc-500">
-                        <DbIcon className="h-8 w-8 mb-2 text-zinc-300" />
+                        <DbIcon className="h-8 w-8 mb-2 text-zinc-600" />
                         <p>No offline bills found in database.</p>
                       </div>
                     </td>

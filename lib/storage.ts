@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { promises as fs } from 'fs';
 import fsSync from 'fs';
@@ -57,6 +57,7 @@ function getDbInstance(location: string) {
       );
       CREATE TABLE IF NOT EXISTS offline_bills (
         id TEXT PRIMARY KEY,
+        company_id TEXT,
         data TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         payment_method TEXT,
@@ -65,11 +66,13 @@ function getDbInstance(location: string) {
       );
       CREATE TABLE IF NOT EXISTS local_categories (
         id TEXT PRIMARY KEY,
+        company_id TEXT,
         name TEXT NOT NULL,
         image TEXT
       );
       CREATE TABLE IF NOT EXISTS local_products (
         id TEXT PRIMARY KEY,
+        company_id TEXT,
         name TEXT NOT NULL,
         price REAL NOT NULL,
         stock INTEGER NOT NULL,
@@ -125,6 +128,9 @@ function getDbInstance(location: string) {
     try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeYield REAL;"); } catch (e) {}
     try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN recipeUnit TEXT;"); } catch (e) {}
     try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN rawMaterials TEXT;"); } catch (e) {}
+    try { dbInstance.exec("ALTER TABLE offline_bills ADD COLUMN company_id TEXT;"); } catch (e) {}
+    try { dbInstance.exec("ALTER TABLE local_products ADD COLUMN company_id TEXT;"); } catch (e) {}
+    try { dbInstance.exec("ALTER TABLE local_categories ADD COLUMN company_id TEXT;"); } catch (e) {}
   } catch (e) {
     console.error("Failed to initialize database tables:", e);
     Database = null; // Disable and return mock
@@ -398,11 +404,16 @@ export async function resetStorage() {
   return setStorageLocation(defaultPath);
 }
 
-export async function getPendingBills() {
+export async function getPendingBills(companyId?: string) {
   const paths = await getStoragePaths();
   try {
     const db = getDbInstance(paths.base);
-    const rows = db.prepare(`SELECT data FROM offline_bills WHERE sync_status = 'PENDING_SYNC'`).all();
+    let rows: any[];
+    if (companyId) {
+      rows = db.prepare(`SELECT data FROM offline_bills WHERE sync_status = 'PENDING_SYNC' AND (company_id = ? OR company_id IS NULL)`).all(companyId);
+    } else {
+      rows = db.prepare(`SELECT data FROM offline_bills WHERE sync_status = 'PENDING_SYNC'`).all();
+    }
     return rows.map((r: any) => JSON.parse(r.data));
   } catch (e) {
     console.error('getPendingBills error', e);
@@ -434,12 +445,13 @@ export async function savePendingBill(bill: any) {
   try {
     const db = getDbInstance(paths.base);
     const insert = db.prepare(`
-      INSERT OR REPLACE INTO offline_bills (id, data, timestamp, payment_method, total, sync_status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO offline_bills (id, company_id, data, timestamp, payment_method, total, sync_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     
     insert.run(
       bill.id,
+      bill.companyId || null,
       JSON.stringify(bill),
       bill.timestamp || Date.now(),
       bill.paymentMethod || 'Cash',
@@ -528,11 +540,16 @@ export async function deletePendingBill(billId: string) {
 
 // --- Dashboard Offline Methods ---
 
-export async function getLocalProducts() {
+export async function getLocalProducts(companyId?: string) {
   const paths = await getStoragePaths();
   try {
     const db = getDbInstance(paths.base);
-    const rows = db.prepare('SELECT * FROM local_products').all();
+    let rows: any[];
+    if (companyId) {
+      rows = db.prepare('SELECT * FROM local_products WHERE company_id = ? OR company_id IS NULL').all(companyId);
+    } else {
+      rows = db.prepare('SELECT * FROM local_products').all();
+    }
     return rows.map((r: any) => ({
       ...r,
       categoryId: r.category,
@@ -567,10 +584,13 @@ export async function getLocalStockTransactions() {
   }
 }
 
-export async function getLocalCategories() {
+export async function getLocalCategories(companyId?: string) {
   const paths = await getStoragePaths();
   try {
     const db = getDbInstance(paths.base);
+    if (companyId) {
+      return db.prepare('SELECT * FROM local_categories WHERE company_id = ? OR company_id IS NULL').all(companyId);
+    }
     return db.prepare('SELECT * FROM local_categories').all();
   } catch (e) {
     return [];
@@ -605,9 +625,9 @@ export async function cacheDashboardData(type: 'PRODUCT' | 'CATEGORY' | 'RAWMATE
     const db = getDbInstance(paths.base);
     let insert: any;
     if (type === 'PRODUCT') {
-      insert = db.prepare('INSERT OR REPLACE INTO local_products (id, name, price, stock, category, image, quantityStep, recipeYield, recipeUnit, rawMaterials) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      insert = db.prepare('INSERT OR REPLACE INTO local_products (id, company_id, name, price, stock, category, image, quantityStep, recipeYield, recipeUnit, rawMaterials) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     } else if (type === 'CATEGORY') {
-      insert = db.prepare('INSERT OR REPLACE INTO local_categories (id, name, image) VALUES (?, ?, ?)');
+      insert = db.prepare('INSERT OR REPLACE INTO local_categories (id, company_id, name, image) VALUES (?, ?, ?, ?)');
     } else if (type === 'RAWMATERIAL') {
       insert = db.prepare('INSERT OR REPLACE INTO local_raw_materials (id, name, unit, currentStock, minimumStock, isActive, lastUpdated) VALUES (?, ?, ?, ?, ?, ?, ?)');
     } else if (type === 'STOCKTX') {
@@ -618,11 +638,11 @@ export async function cacheDashboardData(type: 'PRODUCT' | 'CATEGORY' | 'RAWMATE
       for (const item of itemsList) {
         if (type === 'PRODUCT') {
           insert.run(
-            item._id || item.id, item.name, item.price, item.stock, item.categoryId || item.category, item.image || null, item.quantityStep || 1,
+            item._id || item.id, item.companyId || item.company_id || null, item.name, item.price, item.stock, item.categoryId || item.category, item.image || null, item.quantityStep || 1,
             item.recipeYield || null, item.recipeUnit || null, item.rawMaterials ? JSON.stringify(item.rawMaterials) : null
           );
         } else if (type === 'CATEGORY') {
-          insert.run(item._id || item.id, item.name, item.image || null);
+          insert.run(item._id || item.id, item.companyId || item.company_id || null, item.name, item.image || null);
         } else if (type === 'RAWMATERIAL') {
           insert.run(item._id || item.id, item.name, item.unit, item.currentStock, item.minimumStock, item.isActive ? 1 : 0, item.lastUpdated || Date.now());
         } else if (type === 'STOCKTX') {

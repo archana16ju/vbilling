@@ -54,27 +54,27 @@ export default function PrinterDesignPanel() {
   const previewHtml = generateReceiptHtml(previewData, design)
 
   return (
-    <div className="flex justify-center h-[calc(100vh-140px)] gap-6 w-full max-w-4xl mx-auto">
+    <div className="flex justify-center h-[calc(100vh-140px)] gap-6 w-full max-w-4xl mx-auto text-white">
       {/* Settings Panel */}
-      <div className="flex-1 flex flex-col bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
-          <h2 className="text-lg font-semibold text-zinc-800">Receipt Design Settings</h2>
+      <div className="flex-1 flex flex-col bg-zinc-900/90 border border-zinc-800 rounded-2xl shadow-xl overflow-hidden">
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+          <h2 className="text-base font-bold text-white">Receipt Design Settings</h2>
           <div className="flex gap-2">
-            <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors">
-              <Eye className="w-4 h-4" /> Live Preview
+            <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-purple-300 bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 rounded-xl transition cursor-pointer">
+              <Eye className="w-3.5 h-3.5" /> Live Preview
             </button>
-            <button onClick={handleReset} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors">
-              <RotateCcw className="w-4 h-4" /> Reset
+            <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-400 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/30 rounded-xl transition cursor-pointer">
+              <RotateCcw className="w-3.5 h-3.5" /> Reset
             </button>
-            <button onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">
-              <Save className="w-4 h-4" /> Save Design
+            <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white btn-theme-primary rounded-xl transition cursor-pointer active:scale-95">
+              <Save className="w-3.5 h-3.5" /> Save Design
             </button>
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
           {/* Tabs */}
-          <div className="w-48 bg-zinc-50 border-r border-zinc-200 p-2 overflow-y-auto">
+          <div className="w-48 bg-zinc-950/60 border-r border-zinc-800 p-2 overflow-y-auto space-y-1">
             {[
               { id: "company", label: "Company Details" },
               { id: "header", label: "Receipt Header" },
@@ -88,7 +88,11 @@ export default function PrinterDesignPanel() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm mb-1 ${activeTab === tab.id ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
+                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  activeTab === tab.id 
+                    ? 'bg-gradient-to-r from-pink-950/60 to-zinc-900 text-white border border-pink-500/40' 
+                    : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-white'
+                }`}
               >
                 {tab.label}
               </button>
@@ -96,88 +100,85 @@ export default function PrinterDesignPanel() {
           </div>
 
           {/* Form Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-6 overflow-y-auto bg-zinc-900/40">
             {activeTab === "company" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Company Details</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Company Details</h3>
                 
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-700">Show Company Name</label>
-                  <input type="checkbox" checked={design.showCompanyName} onChange={e => design.updateDesign({ showCompanyName: e.target.checked })} className="w-4 h-4 text-indigo-600 rounded border-zinc-300" />
+                  <label className="text-xs font-semibold text-zinc-300">Show Company Name</label>
+                  <input type="checkbox" checked={design.showCompanyName} onChange={e => design.updateDesign({ showCompanyName: e.target.checked })} className="w-4 h-4 accent-pink-600 rounded" />
                 </div>
                 {design.showCompanyName && (
-                  <div className="pl-6 space-y-3 border-l-2 border-indigo-100 pb-2">
+                  <div className="pl-4 space-y-3 border-l-2 border-pink-500/40 pb-2">
                     <div>
-                      <label className="block text-xs text-zinc-500 mb-1">Company / Shop Name</label>
-                      <input type="text" value={design.companyName} onChange={e => design.updateDesign({ companyName: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
+                      <label className="block text-xs text-zinc-400 mb-1">Company / Shop Name</label>
+                      <input type="text" value={design.companyName} onChange={e => design.updateDesign({ companyName: e.target.value })} className="w-full px-3 py-2 border border-zinc-700 rounded-xl text-xs bg-zinc-950 text-white placeholder-zinc-500 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={design.companyNameBold} onChange={e => design.updateDesign({ companyNameBold: e.target.checked })} />
-                      <label className="text-xs text-zinc-700">Bold Name</label>
+                      <input type="checkbox" checked={design.companyNameBold} onChange={e => design.updateDesign({ companyNameBold: e.target.checked })} className="accent-pink-600" />
+                      <label className="text-xs text-zinc-300">Bold Name</label>
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between mt-4">
-                  <label className="text-sm font-medium text-zinc-700">Show Location / Address</label>
-                  <input type="checkbox" checked={design.showLocation} onChange={e => design.updateDesign({ showLocation: e.target.checked })} className="w-4 h-4" />
+                  <label className="text-xs font-semibold text-zinc-300">Show Location / Address</label>
+                  <input type="checkbox" checked={design.showLocation} onChange={e => design.updateDesign({ showLocation: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                 </div>
                 {design.showLocation && (
-                  <div className="pl-6">
-                    <textarea value={design.location} onChange={e => design.updateDesign({ location: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" rows={2} />
+                  <div className="pl-4">
+                    <textarea value={design.location} onChange={e => design.updateDesign({ location: e.target.value })} className="w-full px-3 py-2 border border-zinc-700 rounded-xl text-xs bg-zinc-950 text-white placeholder-zinc-500 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" rows={2} />
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div className="space-y-2 border p-3 rounded-md">
+                  <div className="space-y-2 border border-zinc-800 bg-zinc-950/60 p-3.5 rounded-xl">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium text-zinc-900">Show Phone</label>
-                      <input type="checkbox" checked={design.showPhoneNumber} onChange={e => design.updateDesign({ showPhoneNumber: e.target.checked })} />
+                      <label className="text-xs font-semibold text-zinc-300">Show Phone</label>
+                      <input type="checkbox" checked={design.showPhoneNumber} onChange={e => design.updateDesign({ showPhoneNumber: e.target.checked })} className="accent-pink-600" />
                     </div>
-                    {design.showPhoneNumber && <input type="text" value={design.phoneNumber} onChange={e => design.updateDesign({ phoneNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
+                    {design.showPhoneNumber && <input type="text" value={design.phoneNumber} onChange={e => design.updateDesign({ phoneNumber: e.target.value })} className="w-full px-2.5 py-1.5 border border-zinc-700 bg-zinc-950 rounded-lg text-xs text-white placeholder-zinc-500 focus:border-pink-500 outline-none" />}
                   </div>
                   
-                  <div className="space-y-2 border p-3 rounded-md">
+                  <div className="space-y-2 border border-zinc-800 bg-zinc-950/60 p-3.5 rounded-xl">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium text-zinc-900">Show GST No</label>
-                      <input type="checkbox" checked={design.showGstNumber} onChange={e => design.updateDesign({ showGstNumber: e.target.checked })} />
+                      <label className="text-xs font-semibold text-zinc-300">Show GST No</label>
+                      <input type="checkbox" checked={design.showGstNumber} onChange={e => design.updateDesign({ showGstNumber: e.target.checked })} className="accent-pink-600" />
                     </div>
-                    {design.showGstNumber && <input type="text" value={design.gstNumber} onChange={e => design.updateDesign({ gstNumber: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
+                    {design.showGstNumber && <input type="text" value={design.gstNumber} onChange={e => design.updateDesign({ gstNumber: e.target.value })} className="w-full px-2.5 py-1.5 border border-zinc-700 bg-zinc-950 rounded-lg text-xs text-white placeholder-zinc-500 focus:border-pink-500 outline-none" />}
                   </div>
 
-                  <div className="space-y-2 border p-3 rounded-md">
+                  <div className="space-y-2 border border-zinc-800 bg-zinc-950/60 p-3.5 rounded-xl">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium text-zinc-900">Show Email</label>
-                      <input type="checkbox" checked={design.showEmail} onChange={e => design.updateDesign({ showEmail: e.target.checked })} />
+                      <label className="text-xs font-semibold text-zinc-300">Show Email</label>
+                      <input type="checkbox" checked={design.showEmail} onChange={e => design.updateDesign({ showEmail: e.target.checked })} className="accent-pink-600" />
                     </div>
-                    {design.showEmail && <input type="text" value={design.email} onChange={e => design.updateDesign({ email: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
+                    {design.showEmail && <input type="text" value={design.email} onChange={e => design.updateDesign({ email: e.target.value })} className="w-full px-2.5 py-1.5 border border-zinc-700 bg-zinc-950 rounded-lg text-xs text-white placeholder-zinc-500 focus:border-pink-500 outline-none" />}
                   </div>
 
-                  <div className="space-y-2 border p-3 rounded-md">
+                  <div className="space-y-2 border border-zinc-800 bg-zinc-950/60 p-3.5 rounded-xl">
                     <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium text-zinc-900">Show Website</label>
-                      <input type="checkbox" checked={design.showWebsite} onChange={e => design.updateDesign({ showWebsite: e.target.checked })} />
+                      <label className="text-xs font-semibold text-zinc-300">Show Website</label>
+                      <input type="checkbox" checked={design.showWebsite} onChange={e => design.updateDesign({ showWebsite: e.target.checked })} className="accent-pink-600" />
                     </div>
-                    {design.showWebsite && <input type="text" value={design.website} onChange={e => design.updateDesign({ website: e.target.value })} className="w-full px-2 py-1 border rounded text-sm text-black placeholder:text-zinc-400" />}
+                    {design.showWebsite && <input type="text" value={design.website} onChange={e => design.updateDesign({ website: e.target.value })} className="w-full px-2.5 py-1.5 border border-zinc-700 bg-zinc-950 rounded-lg text-xs text-white placeholder-zinc-500 focus:border-pink-500 outline-none" />}
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between mt-4 border-t pt-4">
                 </div>
               </div>
             )}
 
             {activeTab === "header" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Receipt Header</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Receipt Header</h3>
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-700">Show Header</label>
-                  <input type="checkbox" checked={design.showHeader} onChange={e => design.updateDesign({ showHeader: e.target.checked })} className="w-4 h-4" />
+                  <label className="text-xs font-semibold text-zinc-300">Show Header</label>
+                  <input type="checkbox" checked={design.showHeader} onChange={e => design.updateDesign({ showHeader: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                 </div>
                 {design.showHeader && (
                   <div>
-                    <label className="block text-xs text-zinc-500 mb-1">Custom Header Text</label>
-                    <input type="text" value={design.customHeaderText} onChange={e => design.updateDesign({ customHeaderText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
+                    <label className="block text-xs text-zinc-400 mb-1">Custom Header Text</label>
+                    <input type="text" value={design.customHeaderText} onChange={e => design.updateDesign({ customHeaderText: e.target.value })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" />
                   </div>
                 )}
               </div>
@@ -185,15 +186,15 @@ export default function PrinterDesignPanel() {
 
             {activeTab === "bill" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Bill Information</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Bill Information</h3>
                 {[
                   { key: 'showBillId', label: 'Bill ID' },
                   { key: 'showDate', label: 'Date' },
                   { key: 'showTime', label: 'Time' }
                 ].map(item => (
-                  <div key={item.key} className="flex items-center justify-between border-b pb-2">
-                    <label className="text-sm text-zinc-700">{item.label}</label>
-                    <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                  <div key={item.key} className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
+                    <label className="text-xs font-semibold text-zinc-300">{item.label}</label>
+                    <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                   </div>
                 ))}
               </div>
@@ -201,10 +202,10 @@ export default function PrinterDesignPanel() {
 
             {activeTab === "datetime" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Date & Time Formats</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Date & Time Formats</h3>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-2">Date Format</label>
-                  <select value={design.dateFormat} onChange={e => design.updateDesign({ dateFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
+                  <label className="block text-xs font-semibold text-zinc-300 mb-2">Date Format</label>
+                  <select value={design.dateFormat} onChange={e => design.updateDesign({ dateFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                     <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                     <option value="DD-MM-YYYY">DD-MM-YYYY</option>
                     <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -212,8 +213,8 @@ export default function PrinterDesignPanel() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-2">Time Format</label>
-                  <select value={design.timeFormat} onChange={e => design.updateDesign({ timeFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
+                  <label className="block text-xs font-semibold text-zinc-300 mb-2">Time Format</label>
+                  <select value={design.timeFormat} onChange={e => design.updateDesign({ timeFormat: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                     <option value="12-hour">12-hour (e.g. 03:30 PM)</option>
                     <option value="24-hour">24-hour (e.g. 15:30)</option>
                   </select>
@@ -223,7 +224,7 @@ export default function PrinterDesignPanel() {
 
             {activeTab === "items" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Item Information</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Item Information</h3>
                 {[
                   { key: 'showItemName', label: 'Item Name' },
                   { key: 'showSku', label: 'SKU' },
@@ -234,9 +235,9 @@ export default function PrinterDesignPanel() {
                   { key: 'showItemTax', label: 'Tax' },
                   { key: 'showItemTotal', label: 'Item Total' }
                 ].map(item => (
-                  <div key={item.key} className="flex items-center justify-between border-b pb-2">
-                    <label className="text-sm text-zinc-700">{item.label}</label>
-                    <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                  <div key={item.key} className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
+                    <label className="text-xs font-semibold text-zinc-300">{item.label}</label>
+                    <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                   </div>
                 ))}
               </div>
@@ -245,7 +246,7 @@ export default function PrinterDesignPanel() {
             {activeTab === "totals" && (
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Bill Totals</h3>
+                  <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Bill Totals</h3>
                   {[
                     { key: 'showSubtotal', label: 'Subtotal' },
                     { key: 'showBillDiscount', label: 'Discount' },
@@ -254,15 +255,15 @@ export default function PrinterDesignPanel() {
                     { key: 'showRoundOff', label: 'Round Off' },
                     { key: 'showGrandTotal', label: 'Grand Total' }
                   ].map(item => (
-                    <div key={item.key} className="border-b pb-2">
+                    <div key={item.key} className="border-b border-zinc-800/60 pb-2.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-sm text-zinc-700">{item.label}</label>
-                        <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                        <label className="text-xs font-semibold text-zinc-300">{item.label}</label>
+                        <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                       </div>
                       {item.key === 'showRoundOff' && design.showRoundOff && (
-                        <div className="mt-3 pl-3 border-l-2 border-indigo-200 space-y-3 pb-1">
+                        <div className="mt-3 pl-3 border-l-2 border-pink-500/40 space-y-3 pb-1">
                           <div>
-                            <label className="block text-xs font-medium text-zinc-700 mb-1">Round-Off Method</label>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">Round-Off Method</label>
                             <select 
                               value={design.roundOffMethod || 'nearest'} 
                               onChange={e => {
@@ -273,7 +274,7 @@ export default function PrinterDesignPanel() {
                                   design.updateDesign({ roundOffMethod: method });
                                 }
                               }}
-                              className="w-full px-3 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full px-3 py-1.5 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
                             >
                               <option value="nearest">Nearest Whole Rupee</option>
                               <option value="custom">Custom Threshold</option>
@@ -286,7 +287,7 @@ export default function PrinterDesignPanel() {
                           {(design.roundOffMethod === 'nearest' || design.roundOffMethod === 'custom') && (
                             <div className="grid grid-cols-2 gap-3 pt-1">
                               <div>
-                                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                                <label className="block text-xs font-semibold text-zinc-400 mb-1">
                                   Below Round-Off (₹)
                                 </label>
                                 <div className="relative">
@@ -307,7 +308,7 @@ export default function PrinterDesignPanel() {
                                         roundOffMethod: (below !== 0.49 || above !== 0.50) ? 'custom' : design.roundOffMethod
                                       });
                                     }}
-                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
                                     placeholder="0.49"
                                   />
                                 </div>
@@ -315,7 +316,7 @@ export default function PrinterDesignPanel() {
                               </div>
 
                               <div>
-                                <label className="block text-xs font-medium text-zinc-700 mb-1">
+                                <label className="block text-xs font-semibold text-zinc-400 mb-1">
                                   Above Round-Off (₹)
                                 </label>
                                 <div className="relative">
@@ -336,7 +337,7 @@ export default function PrinterDesignPanel() {
                                         roundOffMethod: (below !== 0.49 || above !== 0.50) ? 'custom' : design.roundOffMethod
                                       });
                                     }}
-                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-300 rounded-md text-sm text-black bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    className="w-full pl-6 pr-2 py-1.5 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-pink-500"
                                     placeholder="0.50"
                                   />
                                 </div>
@@ -351,13 +352,13 @@ export default function PrinterDesignPanel() {
                 </div>
 
                 <div className="space-y-4 pt-4">
-                  <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Payment Information</h3>
+                  <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Payment Information</h3>
                   {[
                     { key: 'showPaymentMethod', label: 'Payment Method' }
                   ].map(item => (
-                    <div key={item.key} className="flex items-center justify-between border-b pb-2">
-                      <label className="text-sm text-zinc-700">{item.label}</label>
-                      <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4" />
+                    <div key={item.key} className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5">
+                      <label className="text-xs font-semibold text-zinc-300">{item.label}</label>
+                      <input type="checkbox" checked={design[item.key as keyof typeof design] as boolean} onChange={e => design.updateDesign({ [item.key]: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                     </div>
                   ))}
                 </div>
@@ -366,18 +367,18 @@ export default function PrinterDesignPanel() {
 
             {activeTab === "footer" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Footer</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Footer</h3>
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-zinc-700">Show Footer</label>
-                  <input type="checkbox" checked={design.showFooter} onChange={e => design.updateDesign({ showFooter: e.target.checked })} className="w-4 h-4" />
+                  <label className="text-xs font-semibold text-zinc-300">Show Footer</label>
+                  <input type="checkbox" checked={design.showFooter} onChange={e => design.updateDesign({ showFooter: e.target.checked })} className="w-4 h-4 accent-pink-600" />
                 </div>
                 {design.showFooter && (
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-2">Custom Footer Text</label>
-                    <textarea value={design.footerText} onChange={e => design.updateDesign({ footerText: e.target.value })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" rows={3} />
+                    <label className="block text-xs font-semibold text-zinc-300 mb-2">Custom Footer Text</label>
+                    <textarea value={design.footerText} onChange={e => design.updateDesign({ footerText: e.target.value })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none" rows={3} />
                     <div className="flex gap-2 mt-2">
                       {["Thank You!", "Visit Again", "Thank You for Shopping"].map(t => (
-                        <button key={t} onClick={() => design.updateDesign({ footerText: t })} className="px-2 py-1 bg-zinc-100 border text-xs rounded hover:bg-zinc-200">
+                        <button key={t} onClick={() => design.updateDesign({ footerText: t })} className="px-2.5 py-1 bg-zinc-800 border border-zinc-700 text-[11px] font-bold text-zinc-300 rounded-lg hover:bg-zinc-700 hover:text-white transition cursor-pointer">
                           {t}
                         </button>
                       ))}
@@ -389,18 +390,18 @@ export default function PrinterDesignPanel() {
 
             {activeTab === "layout" && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-zinc-800 border-b pb-2">Receipt Size / Layout</h3>
+                <h3 className="text-sm font-bold text-white border-b border-zinc-800 pb-2">Receipt Size / Layout</h3>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-2">Paper Size</label>
-                  <select value={design.paperSize} onChange={e => design.updateDesign({ paperSize: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400">
+                  <label className="block text-xs font-semibold text-zinc-300 mb-2">Paper Size</label>
+                  <select value={design.paperSize} onChange={e => design.updateDesign({ paperSize: e.target.value as any })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
                     <option value="58mm">58mm Thermal</option>
                     <option value="80mm">80mm Thermal</option>
                     <option value="A4">A4 Size</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-2">Base Font Size (px)</label>
-                  <input type="number" value={design.fontSize} onChange={e => design.updateDesign({ fontSize: parseInt(e.target.value) || 14 })} className="w-full px-3 py-2 border border-zinc-300 rounded-md text-sm text-black placeholder:text-zinc-400" />
+                  <label className="block text-xs font-semibold text-zinc-300 mb-2">Base Font Size (px)</label>
+                  <input type="number" value={design.fontSize} onChange={e => design.updateDesign({ fontSize: parseInt(e.target.value) || 14 })} className="w-full px-3 py-2 border border-zinc-700 bg-zinc-950 rounded-xl text-xs text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500" />
                 </div>
               </div>
             )}
@@ -410,16 +411,16 @@ export default function PrinterDesignPanel() {
 
       {/* Overlay Modal for Live Preview */}
       {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-4 py-3 border-b flex justify-between items-center bg-zinc-50">
-              <h3 className="font-bold text-zinc-800">Receipt Live Preview</h3>
-              <button onClick={() => setShowPreview(false)} className="p-1 hover:bg-zinc-200 rounded-md transition-colors text-zinc-500">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] text-white">
+            <div className="px-4 py-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/60">
+              <h3 className="font-bold text-white text-sm">Receipt Live Preview</h3>
+              <button onClick={() => setShowPreview(false)} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 bg-zinc-100 flex-1 overflow-y-auto flex justify-center">
-              <div className="bg-white shadow-md border" style={{ width: design.paperSize === '58mm' ? '58mm' : design.paperSize === '80mm' ? '80mm' : '210mm', minHeight: '100px' }}>
+            <div className="p-6 bg-zinc-950/80 flex-1 overflow-y-auto flex justify-center">
+              <div className="bg-white shadow-2xl border border-zinc-300 rounded" style={{ width: design.paperSize === '58mm' ? '58mm' : design.paperSize === '80mm' ? '80mm' : '210mm', minHeight: '100px' }}>
                 <iframe
                   title="Receipt Preview"
                   srcDoc={previewHtml}

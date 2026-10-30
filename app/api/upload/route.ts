@@ -4,6 +4,7 @@ import path from "path"
 import { GridFSBucket } from 'mongodb'
 import { getDb } from '@/lib/actions/db'
 import { ensureStorageDirectories, getStoragePaths, addMediaSyncAction } from '@/lib/storage'
+import { isLocalMySqlMode } from '@/lib/mysql'
 import { Readable } from 'stream'
 import sharp from 'sharp'
 
@@ -36,6 +37,11 @@ export async function POST(request: NextRequest) {
       : path.join(paths.productImages, filename);
       
     await writeFile(filepath, buffer)
+
+    // In local MySQL mode, the local cache file is sufficient and we must not push to production MongoDB
+    if (isLocalMySqlMode()) {
+      return NextResponse.json({ url: `/api/media/${filename}` });
+    }
 
     // Try Upload to GridFS
     try {

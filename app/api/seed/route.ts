@@ -2,8 +2,16 @@ import { NextResponse } from 'next/server';
 import { seedDatabase } from '@/lib/actions/db';
 import clientPromise from '@/lib/mongodb';
 import { PRODUCTS, CATEGORIES } from '@/lib/mock-data';
+import { isLocalMySqlMode } from '@/lib/mysql';
 
 export async function GET() {
+  if (isLocalMySqlMode()) {
+    return NextResponse.json(
+      { error: 'Database seeding via API is disabled in Local MySQL mode to prevent data override.' },
+      { status: 403 }
+    );
+  }
+
   try {
     const client = await clientPromise;
     if (!client) throw new Error('MongoDB is offline/disconnected');

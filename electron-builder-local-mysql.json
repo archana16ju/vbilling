@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.vseyal.localmysqlbilling",
+  "productName": "Local MySQL Billing",
+  "copyright": "Copyright © 2026 Local MySQL Billing",
+  "npmRebuild": false,
+  "asar": false,
+  "directories": {
+    "output": "dist-local-mysql",
+    "buildResources": "public"
+  },
+  "files": [
+    "**/*",
+    "!dist/**/*",
+    "!dist2/**/*",
+    "!dist3/**/*",
+    "!dist-local-mysql/**/*",
+    "!.git/**/*",
+    "!.env",
+    ".env.local",
+    "!node_modules/next/dist/docs/**/*",
+    "!.next/cache/**/*",
+    "!.next/dev/**/*"
+  ],
+  "extraMetadata": {
+    "main": "electron/local-mysql-main.cjs"
+  },
+  "extraResources": [
+    "node.exe",
+    ".env.local"
+  ],
+  "win": {
+    "executableName": "LocalMySQLBilling",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Local MySQL Billing"
+  }
+}

@@ -10,6 +10,8 @@ export type HeldCart = {
   id: string
   items: CartItemData[]
   timestamp: number
+  orderNote?: string
+  selectedCustomer?: { id?: string; name: string; phone?: string; email?: string; address?: string } | null
 }
 
 export type Sale = {
@@ -29,6 +31,34 @@ export type Sale = {
   discountValue?: number
   isDiscountPercentage?: boolean
   syncStatus?: 'COMPLETED' | 'PENDING_SYNC'
+  createdBy?: string
+  companyId?: string
+  companyName?: string
+  tableId?: string
+  tableName?: string
+  waiterId?: string
+  waiterName?: string
+  servingStatus?: string
+  orderType?: 'Dine In' | 'Takeaway' | 'Delivery' | string
+  orderSource?: 'Terminal' | 'Zomato' | 'Swiggy' | string
+  onlineOrderId?: string
+  customerName?: string
+  customerPhone?: string
+  deliveryAddress?: string
+  deliveryNotes?: string
+  orderNote?: string
+  delivery?: {
+    id?: string
+    billId?: string
+    deliveryStatus?: string
+    assignmentStatus?: string
+    deliveryAddress?: string
+    deliveryNotes?: string
+    deliveryPersonId?: string
+    deliveryPersonName?: string
+    [key: string]: any
+  }
+  createdAt?: string
 }
 
 export type PrintJob = {
@@ -52,6 +82,10 @@ type TerminalState = {
   discountValue: number
   isDiscountPercentage: boolean
   heldCarts: HeldCart[]
+  orderNote: string
+  setOrderNote: (note: string) => void
+  selectedCustomer: { id?: string; name: string; phone?: string; email?: string; address?: string } | null
+  setSelectedCustomer: (customer: { id?: string; name: string; phone?: string; email?: string; address?: string } | null) => void
   
   setCategory: (id: string) => void
   setSearchQuery: (query: string) => void
@@ -71,6 +105,7 @@ type TerminalState = {
   addToCart: (product: Product) => void
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
+  updateItemNotes: (productId: string, notes: string) => void
   clearCart: () => void
   
   setDiscount: (value: number, isPercentage: boolean) => void
@@ -86,6 +121,7 @@ type TerminalState = {
   removeOfflineSale: (id: string) => void
   updateOfflineSaleStatus: (id: string, status: 'COMPLETED' | 'PENDING_SYNC') => void
   markSaleCompleted: (id: string) => void
+  updateSalePayment: (billId: string, paymentMethod: string, cashReceived?: number, changeReturned?: number) => void
 
   printerType: string
   setPrinterType: (type: string) => void
@@ -120,8 +156,11 @@ type TerminalState = {
   setCompletedBillHtml: (html: string | null) => void
 
   billSequence: { date: string, count: number }
-  generateNextBillId: () => string
-  reconcileBillSequence: (serverCount: number) => void
+  companySequences?: Record<string, { date: string, count: number }>
+  activeCompanyId?: string
+  setActiveCompanyId?: (id: string) => void
+  generateNextBillId: (companyId?: string) => string
+  reconcileBillSequence: (serverCount: number, companyId?: string, force?: boolean) => void
 }
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {
@@ -140,37 +179,55 @@ export const useTerminalStore = create<TerminalState>()(
   persist(
     (set, get) => ({
       billSequence: { date: '', count: 0 },
-      reconcileBillSequence: (serverCount: number) => {
+      companySequences: {},
+      activeCompanyId: '',
+      setActiveCompanyId: (id: string) => set({ activeCompanyId: id }),
+      reconcileBillSequence: (serverCount: number, companyId?: string, force?: boolean) => {
         const state = get()
         const now = new Date()
         const dd = String(now.getDate()).padStart(2, '0')
         const mm = String(now.getMonth() + 1).padStart(2, '0')
         const yy = String(now.getFullYear()).slice(-2)
         const todayStr = `${dd}${mm}${yy}`
-        
-        if (state.billSequence.date === todayStr) {
-          if (serverCount > state.billSequence.count) {
-            set({ billSequence: { date: todayStr, count: serverCount } })
+        const compKey = companyId || state.activeCompanyId || 'default'
+
+        const existing = (state.companySequences || {})[compKey] || { date: '', count: 0 }
+        let newCount = serverCount
+        if (!force && existing.date === todayStr) {
+          newCount = Math.max(serverCount, existing.count)
+        }
+
+        set({
+          billSequence: { date: todayStr, count: newCount },
+          companySequences: {
+            ...(state.companySequences || {}),
+            [compKey]: { date: todayStr, count: newCount }
           }
-        } else {
-          set({ billSequence: { date: todayStr, count: serverCount } })
-        }
+        })
       },
-      generateNextBillId: () => {
+      generateNextBillId: (companyId?: string) => {
         const state = get()
         const now = new Date()
         const dd = String(now.getDate()).padStart(2, '0')
         const mm = String(now.getMonth() + 1).padStart(2, '0')
         const yy = String(now.getFullYear()).slice(-2)
         const todayStr = `${dd}${mm}${yy}`
-        
+        const compKey = companyId || state.activeCompanyId || 'default'
+
+        const existing = (state.companySequences || {})[compKey] || { date: '', count: 0 }
         let nextCount = 1
-        if (state.billSequence.date === todayStr) {
-          nextCount = state.billSequence.count + 1
+        if (existing.date === todayStr) {
+          nextCount = existing.count + 1
         }
-        
-        set({ billSequence: { date: todayStr, count: nextCount } })
-        
+
+        set({
+          billSequence: { date: todayStr, count: nextCount },
+          companySequences: {
+            ...(state.companySequences || {}),
+            [compKey]: { date: todayStr, count: nextCount }
+          }
+        })
+
         return `BILL-${todayStr}-${String(nextCount).padStart(3, '0')}`
       },
       products: PRODUCTS,
@@ -194,6 +251,10 @@ export const useTerminalStore = create<TerminalState>()(
       wifiPrinter: null,
       printJobs: [],
       completedBillHtml: null,
+      orderNote: '',
+      setOrderNote: (note: string) => set({ orderNote: note }),
+      selectedCustomer: null,
+      setSelectedCustomer: (cust) => set({ selectedCustomer: cust }),
 
       setIsBackendOnline: (status) => set({ isBackendOnline: status }),
       setCompletedBillHtml: (html) => set({ completedBillHtml: html }),
@@ -220,12 +281,16 @@ export const useTerminalStore = create<TerminalState>()(
     const newHeldCart: HeldCart = {
       id: "HOLD-" + Date.now(),
       items: state.cart,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      orderNote: state.orderNote,
+      selectedCustomer: state.selectedCustomer
     };
     return {
       heldCarts: [newHeldCart, ...(state.heldCarts || [])],
       cart: [],
-      discountValue: 0
+      discountValue: 0,
+      orderNote: '',
+      selectedCustomer: null
     }
   }),
   
@@ -235,6 +300,8 @@ export const useTerminalStore = create<TerminalState>()(
     if (!held) return state;
     return {
       cart: held.items,
+      orderNote: held.orderNote || '',
+      selectedCustomer: held.selectedCustomer || null,
       heldCarts: safeHeldCarts.filter(h => h.id !== id),
       discountValue: 0
     }
@@ -299,8 +366,14 @@ export const useTerminalStore = create<TerminalState>()(
       )
     }
   }),
+
+  updateItemNotes: (productId, notes) => set((state) => ({
+    cart: state.cart.map(i =>
+      i.product.id === productId ? { ...i, notes } : i
+    )
+  })),
   
-  clearCart: () => set({ cart: [], discountValue: 0 }),
+  clearCart: () => set({ cart: [], discountValue: 0, orderNote: '', selectedCustomer: null }),
   
   setDiscount: (value, isPercentage) => set({ discountValue: value, isDiscountPercentage: isPercentage }),
   
@@ -328,14 +401,18 @@ export const useTerminalStore = create<TerminalState>()(
         sales: [newSale, ...state.sales],
         products: updatedProducts,
         cart: [], 
-        discountValue: 0 
+        discountValue: 0,
+        orderNote: '',
+        selectedCustomer: null
       }
     })
     
     const state = useTerminalStore.getState();
-    const formatLine = (left: string, right: string) => {
-      const space = 48 - left.length - right.length;
-      return left + ' '.repeat(Math.max(1, space)) + right;
+    const formatLine = (left: any = '', right: any = '') => {
+      const l = String(left ?? '');
+      const r = String(right ?? '');
+      const space = 48 - l.length - r.length;
+      return l + ' '.repeat(Math.max(1, space)) + r;
     };
     
     const dateStr = new Date().toLocaleDateString('en-GB');
@@ -343,96 +420,106 @@ export const useTerminalStore = create<TerminalState>()(
 
     const design = usePrinterDesignStore.getState();
 
-    // Calculate CGST and SGST divided equally from product tax rates
-    const taxGroups: { rate: number; taxable: number; cgstAmount: number; sgstAmount: number }[] = [];
-    if (Array.isArray(saleData.items) && saleData.items.length > 0) {
-      const rateMap = new Map<number, number>();
-      saleData.items.forEach((item: any) => {
-        const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
-        if (fullTaxRate > 0) {
-          const qty = item.quantity || 1;
-          const price = parseFloat(item.rate || (item.product && item.product.price) || 0);
-          const itemSubtotal = price * qty;
-          const discRate = (item.product && item.product.discount) || 0;
-          const itemDisc = itemSubtotal * (discRate / 100);
-          const taxable = itemSubtotal - itemDisc;
-          rateMap.set(fullTaxRate, (rateMap.get(fullTaxRate) || 0) + taxable);
-        }
-      });
+    let htmlContent = '';
+    let jobId = '';
 
-      rateMap.forEach((taxable, fullTaxRate) => {
-        const dividedRate = fullTaxRate / 2; // e.g. 2% -> 1%, 5.4% -> 2.7%
+    try {
+      // Calculate CGST and SGST divided equally from product tax rates
+      const taxGroups: { rate: number; taxable: number; cgstAmount: number; sgstAmount: number }[] = [];
+      if (Array.isArray(saleData.items) && saleData.items.length > 0) {
+        const rateMap = new Map<number, number>();
+        saleData.items.forEach((item: any) => {
+          const fullTaxRate = (item?.product && typeof item.product.tax === 'number') ? item.product.tax : (typeof item?.tax === 'number' ? item.tax : 0);
+          if (fullTaxRate > 0) {
+            const qty = item?.quantity || 1;
+            const price = parseFloat(item?.rate || (item?.product && item.product.price) || item?.price || 0);
+            const itemSubtotal = price * qty;
+            const discRate = (item?.product && item.product.discount) || item?.discount || 0;
+            const itemDisc = itemSubtotal * (discRate / 100);
+            const taxable = itemSubtotal - itemDisc;
+            rateMap.set(fullTaxRate, (rateMap.get(fullTaxRate) || 0) + taxable);
+          }
+        });
+
+        rateMap.forEach((taxable, fullTaxRate) => {
+          const dividedRate = fullTaxRate / 2; // e.g. 2% -> 1%, 5.4% -> 2.7%
+          taxGroups.push({
+            rate: dividedRate,
+            taxable,
+            cgstAmount: taxable * (dividedRate / 100),
+            sgstAmount: taxable * (dividedRate / 100),
+          });
+        });
+      }
+
+      if (taxGroups.length === 0 && (saleData.tax || 0) > 0 && (saleData.subtotal || 0) > 0) {
+        const taxable = (saleData.subtotal || 0) - (saleData.discount || 0);
+        const effectiveFullRate = taxable > 0 ? ((saleData.tax / taxable) * 100) : 0;
+        const dividedRate = effectiveFullRate / 2;
+        const halfTax = saleData.tax / 2;
         taxGroups.push({
           rate: dividedRate,
           taxable,
-          cgstAmount: taxable * (dividedRate / 100),
-          sgstAmount: taxable * (dividedRate / 100),
+          cgstAmount: halfTax,
+          sgstAmount: halfTax,
         });
-      });
-    }
+      }
 
-    if (taxGroups.length === 0 && (saleData.tax || 0) > 0 && (saleData.subtotal || 0) > 0) {
-      const taxable = (saleData.subtotal || 0) - (saleData.discount || 0);
-      const effectiveFullRate = taxable > 0 ? ((saleData.tax / taxable) * 100) : 0;
-      const dividedRate = effectiveFullRate / 2;
-      const halfTax = saleData.tax / 2;
-      taxGroups.push({
-        rate: dividedRate,
-        taxable,
-        cgstAmount: halfTax,
-        sgstAmount: halfTax,
-      });
-    }
+      const totalCgst = taxGroups.reduce((sum, g) => sum + g.cgstAmount, 0);
+      const totalSgst = taxGroups.reduce((sum, g) => sum + g.sgstAmount, 0);
+      const totalTaxAmount = totalCgst + totalSgst;
+      const exactTotal = (saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0));
 
-    const formatTaxRate = (rate: number) => parseFloat(rate.toFixed(2)).toString();
-    const totalCgst = taxGroups.reduce((sum, g) => sum + g.cgstAmount, 0);
-    const totalSgst = taxGroups.reduce((sum, g) => sum + g.sgstAmount, 0);
-    const totalTaxAmount = totalCgst + totalSgst;
-    const exactTotal = (saleData.subtotal || 0) - (saleData.discount || 0) + (design.showCgstSgst ? totalTaxAmount : (saleData.tax || 0));
+      let roundOffAmount = 0;
+      let finalGrandTotal = exactTotal;
 
-    let roundOffAmount = 0;
-    let finalGrandTotal = exactTotal;
+      if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
+        roundOffAmount = saleData.roundOff;
+        finalGrandTotal = parseFloat((exactTotal + roundOffAmount).toFixed(2));
+      } else if (design.showRoundOff) {
+        const ro = calculateRoundOff(exactTotal, true, design.roundOffMethod || 'nearest', design.roundOffBelow, design.roundOffAbove);
+        roundOffAmount = ro.roundOffAmount;
+        finalGrandTotal = ro.grandTotal;
+      }
 
-    if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
-      roundOffAmount = saleData.roundOff;
-      finalGrandTotal = parseFloat((exactTotal + roundOffAmount).toFixed(2));
-    } else if (design.showRoundOff) {
-      const ro = calculateRoundOff(exactTotal, true, design.roundOffMethod || 'nearest', design.roundOffBelow, design.roundOffAbove);
-      roundOffAmount = ro.roundOffAmount;
-      finalGrandTotal = ro.grandTotal;
-    }
+      const formatSummaryRight = (label: string, value: string) => {
+        const line = `${label} ${value}`;
+        return line.padStart(48);
+      };
 
-    const formatSummaryRight = (label: string, value: string) => {
-      const line = `${label} ${value}`;
-      return line.padStart(48);
-    };
+      const compName = String(design?.companyName || '');
+      const loc = String(design?.location || '');
+      const ph = String(design?.phoneNumber || '');
+      const em = String(design?.email || '');
+      const gst = String(design?.gstNumber || '');
+      const header = String(design?.customHeaderText || '');
 
-    const rawText = `
-${design.showCompanyName ? formatLine(' '.repeat(Math.floor((48 - design.companyName.length) / 2)) + design.companyName, '') : ''}
-${design.showLocation && design.location ? formatLine(' '.repeat(Math.floor((48 - design.location.length) / 2)) + design.location, '') : ''}
-${design.showPhoneNumber && design.phoneNumber ? formatLine(' '.repeat(Math.floor((48 - ('Ph: ' + design.phoneNumber).length) / 2)) + 'Ph: ' + design.phoneNumber, '') : ''}
-${design.showEmail && design.email ? formatLine(' '.repeat(Math.floor((48 - ('Email: ' + design.email).length) / 2)) + 'Email: ' + design.email, '') : ''}
-${design.showGstNumber && design.gstNumber ? formatLine(' '.repeat(Math.floor((48 - ('GST: ' + design.gstNumber).length) / 2)) + 'GST: ' + design.gstNumber, '') : ''}
-${design.showHeader && design.customHeaderText ? formatLine(' '.repeat(Math.floor((48 - design.customHeaderText.length) / 2)) + design.customHeaderText, '') : ''}
+      const rawText = `
+${design?.showCompanyName && compName ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - compName.length) / 2))) + compName, '') : ''}
+${design?.showLocation && loc ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - loc.length) / 2))) + loc, '') : ''}
+${design?.showPhoneNumber && ph ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - ('Ph: ' + ph).length) / 2))) + 'Ph: ' + ph, '') : ''}
+${design?.showEmail && em ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - ('Email: ' + em).length) / 2))) + 'Email: ' + em, '') : ''}
+${design?.showGstNumber && gst ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - ('GST: ' + gst).length) / 2))) + 'GST: ' + gst, '') : ''}
+${design?.showHeader && header ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - header.length) / 2))) + header, '') : ''}
 ------------------------------------------------
 ${formatLine(`BILL NO-${seqPart}`, dateStr)}
 ${formatLine(`Payment: ${saleData.paymentMethod}`, timeStr)}
 ------------------------------------------------
 ${"ITEM".padEnd(15)} ${"PRICE".padStart(7)} ${"QTY".padStart(4)} ${"TAX".padStart(8)} ${"TOTAL".padStart(10)}
-${saleData.items.map(item => {
-  let name = item.product.name;
-  const priceVal = parseFloat((item as any).rate || item.product.price || 0);
+${(Array.isArray(saleData.items) ? saleData.items : []).map((item: any) => {
+  let name = String(item?.product?.name || item?.name || 'Item');
+  const priceVal = parseFloat(item?.rate || (item?.product && item.product.price) || item?.price || 0);
   const price = String(priceVal.toFixed(2)).padStart(7);
-  const qtyVal = item.quantity || 1;
+  const qtyVal = item?.quantity || 1;
   const qty = String(qtyVal).padStart(4);
   const itemSubtotal = priceVal * qtyVal;
-  const discRate = (item.product && item.product.discount) || 0;
+  const discRate = (item?.product && item.product.discount) || item?.discount || 0;
   const itemDisc = itemSubtotal * (discRate / 100);
   const taxable = itemSubtotal - itemDisc;
-  const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
-  const itemTax = (item as any).tax !== undefined ? (item as any).tax : taxable * (fullTaxRate / 100);
+  const fullTaxRate = (item?.product && typeof item.product.tax === 'number') ? item.product.tax : (typeof item?.tax === 'number' ? item.tax : 0);
+  const itemTax = item?.tax !== undefined ? item.tax : taxable * (fullTaxRate / 100);
   const taxStr = String(itemTax.toFixed(2)).padStart(8);
-  const amt = String(((item as any).total || (itemSubtotal - itemDisc + itemTax)).toFixed(2)).padStart(10);
+  const amt = String((item?.total || (itemSubtotal - itemDisc + itemTax)).toFixed(2)).padStart(10);
   
   if (name.length <= 15) {
     return `${name.padEnd(15)} ${price} ${qty} ${taxStr} ${amt}`;
@@ -448,38 +535,44 @@ ${saleData.items.map(item => {
   }
 }).join('\n')}
 ------------------------------------------------
-${design.showSubtotal ? formatSummaryRight('Sub Total :', String(saleData.subtotal.toFixed(2))) + '\n' : ''}${design.showBillDiscount && saleData.discount > 0 ? formatSummaryRight('Discount :', '-' + String(saleData.discount.toFixed(2))) + '\n' : ''}${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? formatSummaryRight('Tax :', '+' + String(saleData.tax.toFixed(2))) + '\n' : ''}${design.showCgstSgst ? formatSummaryRight('CGST :', String(totalCgst.toFixed(2))) + '\n' + formatSummaryRight('SGST :', String(totalSgst.toFixed(2))) + '\n' : ''}${design.showRoundOff ? formatSummaryRight('Round Off :', (roundOffAmount >= 0 ? '+' : '-') + 'Rs' + Math.abs(roundOffAmount).toFixed(2)) + '\n' : ''}------------------------------------------------
-${design.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
+${design?.showSubtotal ? formatSummaryRight('Sub Total :', String((saleData.subtotal || 0).toFixed(2))) + '\n' : ''}${design?.showBillDiscount && (saleData.discount || 0) > 0 ? formatSummaryRight('Discount :', '-' + String((saleData.discount || 0).toFixed(2))) + '\n' : ''}${design?.showBillTax && !design?.showCgstSgst && (saleData.tax || 0) > 0 ? formatSummaryRight('Tax :', '+' + String((saleData.tax || 0).toFixed(2))) + '\n' : ''}${design?.showCgstSgst ? formatSummaryRight('CGST :', String(totalCgst.toFixed(2))) + '\n' + formatSummaryRight('SGST :', String(totalSgst.toFixed(2))) + '\n' : ''}${design?.showRoundOff ? formatSummaryRight('Round Off :', (roundOffAmount >= 0 ? '+' : '-') + 'Rs' + Math.abs(roundOffAmount).toFixed(2)) + '\n' : ''}------------------------------------------------
+${design?.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
           *** Thank You, Visit Again! ***       
 `.replace(/\n\n+/g, '\n');
-    const htmlContent = generateReceiptHtml({ ...saleData, roundOff: roundOffAmount, total: finalGrandTotal, id: fullBillId, timestamp: Date.now() }, design);
 
-    // Always create a print job
-    const jobId = "PRINT-" + Date.now();
-    state.addPrintJob({
-      id: jobId,
-      billId: fullBillId,
-      htmlContent,
-      rawText,
-      status: 'PENDING',
-      timestamp: Date.now()
-    });
+      htmlContent = generateReceiptHtml({ ...saleData, roundOff: roundOffAmount, total: finalGrandTotal, id: fullBillId, timestamp: Date.now() }, design);
+
+      // Always create a print job
+      jobId = "PRINT-" + Date.now();
+      state.addPrintJob({
+        id: jobId,
+        billId: fullBillId,
+        htmlContent,
+        rawText,
+        status: 'PENDING',
+        timestamp: Date.now()
+      });
+    } catch (printPrepErr) {
+      console.warn("Print job generation warning (non-fatal):", printPrepErr);
+    }
 
     if (state.printerType === 'wire' || state.printerType === 'browser') {
-      const printWindow = window.open('', '_blank', 'width=340,height=700');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        state.updatePrintJobStatus(jobId, 'PRINTED');
-      } else {
-        alert("Sale Completed! Please allow popups to print receipt.");
+      if (htmlContent) {
+        const printWindow = window.open('', '_blank', 'width=340,height=700');
+        if (printWindow) {
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          if (jobId) state.updatePrintJobStatus(jobId, 'PRINTED');
+        } else {
+          alert("Sale Completed! Please allow popups to print receipt.");
+        }
       }
     } else if (state.printerType === 'wifi' || state.printerType === 'bluetooth') {
       // Background printing engine will automatically print this via the PrintJob queue
-      state.updatePrintJobStatus(jobId, 'PENDING');
+      if (jobId) state.updatePrintJobStatus(jobId, 'PENDING');
     } else {
       // None
-      state.updatePrintJobStatus(jobId, 'PRINTED');
+      if (jobId) state.updatePrintJobStatus(jobId, 'PRINTED');
     }
   },
   
@@ -505,6 +598,29 @@ ${design.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.toF
 
   markSaleCompleted: (id) => set((state) => ({
     sales: state.sales.filter(s => s.id !== id)
+  })),
+
+  updateSalePayment: (billId, paymentMethod, cashReceived, changeReturned) => set((state) => ({
+    sales: state.sales.map((s) =>
+      s.id === billId || (s as any).billNumber === billId
+        ? {
+            ...s,
+            paymentMethod,
+            amountReceived: cashReceived,
+            changeAmount: changeReturned,
+          }
+        : s
+    ),
+    offlineQueue: state.offlineQueue.map((s) =>
+      s.id === billId || (s as any).billNumber === billId
+        ? {
+            ...s,
+            paymentMethod,
+            amountReceived: cashReceived,
+            changeAmount: changeReturned,
+          }
+        : s
+    ),
   }))
 }),
 {

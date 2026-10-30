@@ -134,6 +134,11 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
     ${design.showHeader && design.customHeaderText ? `<div class="sub-title" style="font-weight: bold;">${design.customHeaderText}</div>` : ''}
     <hr class="divider">
     ${design.showBillId ? `<div class="inv-info"><span>Bill No:</span><span>${(saleData.id || saleData.billId) || ''}</span></div>` : ''}
+    ${saleData.orderType ? `<div class="inv-info"><span>Order Type:</span><span>${saleData.orderType}</span></div>` : ''}
+    ${saleData.orderSource && saleData.orderSource !== 'Terminal' ? `<div class="inv-info"><span>Channel:</span><span style="font-weight: bold;">${saleData.orderSource}</span></div>` : ''}
+    ${saleData.onlineOrderId ? `<div class="inv-info"><span>${saleData.orderSource || 'Platform'} Order ID:</span><span style="font-weight: bold; font-family: monospace;">#${saleData.onlineOrderId}</span></div>` : ''}
+    ${saleData.customerName ? `<div class="inv-info"><span>Guest:</span><span>${saleData.customerName}${saleData.customerPhone ? ' (' + saleData.customerPhone + ')' : ''}</span></div>` : ''}
+    ${saleData.orderNote ? `<div class="inv-info"><span>Note:</span><span>${saleData.orderNote}</span></div>` : ''}
     ${design.showDate || design.showTime ? `<div class="inv-info"><span>Date:</span><span>${design.showDate ? formattedDate : ''} ${design.showTime ? formattedTime : ''}</span></div>` : ''}
     ${design.showPaymentMethod ? `<div class="inv-info"><span>Payment:</span><span>${saleData.paymentMethod || 'Cash'}</span></div>` : ''}
     <hr class="divider">

@@ -50,41 +50,61 @@ export default function RawMaterialsPage() {
   }
 
   const getStatus = (current: number, min: number) => {
-    if (current <= 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700', icon: AlertTriangle }
-    if (current <= min) return { label: 'Low Stock', color: 'bg-yellow-100 text-yellow-700', icon: AlertTriangle }
-    return { label: 'In Stock', color: 'bg-green-100 text-green-700', icon: CheckCircle2 }
+    if (current <= 0) return { label: 'Out of Stock', color: 'bg-rose-500/15 border border-rose-500/30 text-rose-400', icon: AlertTriangle }
+    if (current <= min) return { label: 'Low Stock', color: 'bg-amber-500/15 border border-amber-500/30 text-amber-400', icon: AlertTriangle }
+    return { label: 'In Stock', color: 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400', icon: CheckCircle2 }
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Raw Materials</h1>
-          <p className="text-zinc-500">Manage recipe ingredients and track inventory</p>
+    <div className="p-8 space-y-6">
+      {/* Dynamic Theme Hero Banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-theme-bar p-6 text-white shadow-xl border border-theme">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black/30 backdrop-blur-md border border-white/10 text-pink-300 shadow-inner">
+              <Tags className="h-6 w-6 text-pink-300" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+                Raw Materials
+              </h1>
+              <p className="text-sm font-medium text-pink-100/80">
+                Manage recipe ingredients and track inventory levels
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <a
+              href="/stocks"
+              className="flex items-center gap-2 rounded-xl border border-white/20 bg-black/30 backdrop-blur-md px-4 py-2.5 text-sm font-bold text-white hover:bg-black/50 transition shadow-sm"
+            >
+              Switch to Full Stock Manager →
+            </a>
+            <button
+              onClick={() => handleOpenForm()}
+              className="flex items-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Add Material
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => handleOpenForm()}
-          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Add Material
-        </button>
       </div>
 
-      <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-xl overflow-hidden backdrop-blur-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-zinc-600">
-            <thead className="border-b border-zinc-200 bg-zinc-50/50 text-xs uppercase text-zinc-500">
+          <table className="w-full text-left text-sm text-zinc-300">
+            <thead className="border-b border-zinc-800 bg-zinc-950/80 text-xs uppercase tracking-wider text-zinc-400">
               <tr>
-                <th className="px-6 py-4 font-semibold">Material Name</th>
-                <th className="px-6 py-4 font-semibold text-right">Current Stock</th>
-                <th className="px-6 py-4 font-semibold text-right">Min Stock</th>
-                <th className="px-6 py-4 font-semibold text-center">Status</th>
-                <th className="px-6 py-4 font-semibold text-center">Active</th>
-                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                <th className="px-6 py-4 font-bold">Material Name</th>
+                <th className="px-6 py-4 font-bold text-right">Current Stock</th>
+                <th className="px-6 py-4 font-bold text-right">Min Stock</th>
+                <th className="px-6 py-4 font-bold text-center">Status</th>
+                <th className="px-6 py-4 font-bold text-center">Active</th>
+                <th className="px-6 py-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-zinc-800/60">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-zinc-500 animate-pulse">Loading materials...</td>
@@ -97,26 +117,26 @@ export default function RawMaterialsPage() {
                 materials.map((item) => {
                   const status = getStatus(item.currentStock, item.minimumStock)
                   return (
-                    <tr key={item.id} className="hover:bg-zinc-50/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-zinc-900">{item.name}</td>
+                    <tr key={item.id} className="hover:bg-zinc-800/40 transition-colors">
+                      <td className="px-6 py-4 font-bold text-white">{item.name}</td>
                       <td className="px-6 py-4 text-right">
-                        <span className="font-semibold text-zinc-900">{item.currentStock}</span> {item.unit}
+                        <span className="font-bold text-pink-400">{item.currentStock}</span> <span className="text-zinc-400 text-xs">{item.unit}</span>
                       </td>
-                      <td className="px-6 py-4 text-right text-zinc-500">{item.minimumStock} {item.unit}</td>
+                      <td className="px-6 py-4 text-right text-zinc-400">{item.minimumStock} {item.unit}</td>
                       <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${status.color}`}>
                           <status.icon className="w-3 h-3" /> {status.label}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${item.isActive ? 'bg-zinc-100 text-zinc-800' : 'bg-red-50 text-red-600'}`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${item.isActive ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'}`}>
                           {item.isActive ? 'Yes' : 'No'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleOpenForm(item)}
-                          className="inline-flex items-center justify-center rounded-md p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 transition-colors"
+                          className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-pink-400 transition-colors border border-transparent hover:border-zinc-700"
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
@@ -131,30 +151,30 @@ export default function RawMaterialsPage() {
       </div>
 
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-            <h2 className="mb-6 text-xl font-bold text-zinc-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl text-white">
+            <h2 className="mb-6 text-xl font-black text-white">
               {editingMaterial ? "Edit Raw Material" : "Add Raw Material"}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">Name</label>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-zinc-400">Name</label>
                 <input
                   name="name"
                   required
                   defaultValue={editingMaterial?.name}
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   placeholder="e.g. Rice, Chicken"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-zinc-700">Unit</label>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-zinc-400">Unit</label>
                   <select
                     name="unit"
                     defaultValue={editingMaterial?.unit || "kg"}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-black focus:ring-1 focus:ring-black"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   >
                     <option value="kg">kg</option>
                     <option value="g">g</option>
@@ -170,27 +190,27 @@ export default function RawMaterialsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-zinc-700">Minimum Stock</label>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-zinc-400">Minimum Stock</label>
                   <input
                     name="minimumStock"
                     type="number"
                     step="0.01"
                     required
                     defaultValue={editingMaterial?.minimumStock || 0}
-                    className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-black focus:ring-1 focus:ring-black"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">Current Stock</label>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-zinc-400">Current Stock</label>
                 <input
                   name="currentStock"
                   type="number"
                   step="0.01"
                   required
                   defaultValue={editingMaterial?.currentStock || 0}
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 outline-none focus:border-black focus:ring-1 focus:ring-black"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
                 />
               </div>
 
@@ -200,24 +220,24 @@ export default function RawMaterialsPage() {
                   name="isActive" 
                   id="isActive"
                   defaultChecked={editingMaterial ? editingMaterial.isActive : true}
-                  className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
+                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-pink-600 focus:ring-pink-500"
                 />
-                <label htmlFor="isActive" className="text-sm font-medium text-zinc-700">
+                <label htmlFor="isActive" className="text-sm font-medium text-zinc-300">
                   Active
                 </label>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-zinc-100">
+              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsFormOpen(false)}
-                  className="rounded-md px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"
+                  className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-black px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                  className="rounded-xl btn-theme-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
                 >
                   Save Material
                 </button>
@@ -229,3 +249,4 @@ export default function RawMaterialsPage() {
     </div>
   )
 }
+

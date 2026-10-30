@@ -9,36 +9,39 @@ export default function ProductCard({ product }: { product: Product }) {
   const productName = product.name || 'Unknown Product';
 
   return (
-    <div className="grid grid-cols-12 items-center gap-4 border-b border-zinc-100 bg-white px-6 py-4 transition-colors hover:bg-zinc-50">
+    <div className="grid grid-cols-12 items-center gap-4 border-b border-zinc-800/60 bg-zinc-950 px-6 py-4 transition-colors hover:bg-zinc-900/60">
       <div className="col-span-7 flex items-center gap-4">
         {product.image ? (
           <img 
             src={product.image} 
             alt={productName}
-            className="h-16 w-16 shrink-0 rounded-xl object-cover shadow-sm bg-white"
+            className="h-14 w-14 shrink-0 rounded-2xl object-cover shadow-md bg-zinc-900 border border-zinc-800"
           />
         ) : (
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-zinc-100 font-bold text-zinc-400 shadow-sm">
+          <div 
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 font-black text-base shadow-sm"
+            style={{ color: 'var(--theme-accent, #DB2777)' }}
+          >
             {productName.charAt(0).toUpperCase()}
           </div>
         )}
         <div className="flex flex-col">
-          <span className="font-bold text-zinc-900">{productName}</span>
-          <span className="text-xs text-zinc-500">SKU: {product.sku || 'N/A'}</span>
+          <span className="font-bold text-white text-sm">{productName}</span>
+          <span className="text-xs text-zinc-500 font-mono mt-0.5">SKU: {product.sku || 'N/A'}</span>
         </div>
       </div>
       
       <div className="col-span-2 text-right">
-        <span className="text-lg font-bold text-zinc-800">₹{product.price || 0}</span>
+        <span className="text-lg font-black" style={{ color: 'var(--theme-accent, #DB2777)' }}>₹{product.price || 0}</span>
       </div>
       
       <div className="col-span-3 flex justify-end">
         <button 
-          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 font-bold text-white transition-colors hover:bg-gray-800 active:scale-95"
+          className="flex items-center gap-2 rounded-xl bg-theme-bar border border-theme shadow-theme-glow hover:opacity-95 px-4 py-2 text-xs font-bold text-white transition-all cursor-pointer active:scale-95"
           onClick={() => addToCart(product)}
         >
-          <ShoppingCartIcon className="h-4 w-4" />
-          Add <span className="hidden opacity-60 xl:inline-block">[↵]</span>
+          <ShoppingCartIcon className="h-3.5 w-3.5" />
+          <span>Add</span> <span className="hidden opacity-75 xl:inline-block">[↵]</span>
         </button>
       </div>
     </div>

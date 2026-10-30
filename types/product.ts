@@ -1,15 +1,23 @@
 export type ProductUnit =
   | "piece"
+  | "pcs"
   | "kg"
   | "g"
   | "liter"
+  | "L"
   | "ml"
   | "box"
   | "pack"
+  | "pkt"
   | "dozen"
+  | "bag"
+  | "bottle"
+  | "bunch"
+  | "tin"
   | "tsp"
   | "tbsp"
   | "cup"
+  | string;
 
 export interface RecipeItem {
   rawMaterialId: string
@@ -28,6 +36,8 @@ export interface Product {
   quantityStep: number
   categoryId: string
   image?: string
+  tax?: number
+  discount?: number
   
   // Recipe Additions
   recipeYield?: number
@@ -43,6 +53,12 @@ export interface RawMaterial {
   minimumStock: number
   isActive: boolean
   lastUpdated?: number
+  purchaseUnit?: string
+  conversionFactor?: number
+  category?: string
+  supplierName?: string
+  shelfLifeDays?: number
+  costPerUnit?: number
 }
 
 export interface StockTransaction {
@@ -55,4 +71,37 @@ export interface StockTransaction {
   date: number
   reason?: string
   referenceId?: string // Bill ID or production ID
+}
+
+export interface Supplier {
+  id: string
+  name: string
+  phone?: string
+  email?: string
+  address?: string
+  balanceOwed?: number
+  companyId?: string
+}
+
+export interface PurchaseOrderItem {
+  id?: string
+  name: string
+  orderedQty: number
+  unit?: string
+  deliveredQty: number
+  stillOwedQty: number
+  rate: number
+}
+
+export interface PurchaseOrder {
+  id: string
+  supplierId: string
+  supplierName: string
+  orderDate: string
+  expectedDate?: string
+  totalAmount: number
+  paidAmount: number
+  owedAmount: number
+  state: 'Draft' | 'Pending' | 'Part delivered' | 'Delivered' | 'Cancelled'
+  itemsJson?: string
 }
