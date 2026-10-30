@@ -1,9 +1,8 @@
 name: Publish Update to MongoDB
 
+# Push trigger disabled to prevent automated deployment and production MongoDB updates
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
