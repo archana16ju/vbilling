@@ -16,9 +16,11 @@ import {
   Check,
   X,
   AlertCircle,
+  AlertTriangle,
   RotateCcw,
   Sparkles,
   User,
+  RefreshCw,
 } from 'lucide-react';
 import WaiterAssignmentModal from '@/components/terminal/WaiterAssignmentModal';
 
@@ -69,6 +71,7 @@ export default function TableCollectionsPage() {
     deleteTable,
     setTableStatus,
     setTableWaiter,
+    syncTablesFromOrders,
     addFloor,
     deleteFloor,
     resetToDefaults,
@@ -93,14 +96,57 @@ export default function TableCollectionsPage() {
   const [formStatus, setFormStatus] = useState<TableStatus>('FREE');
   const [formNotes, setFormNotes] = useState('');
 
+  const [role, setRole] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/dine-in-orders?allTables=true&activeOnly=true', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders)) {
+          syncTablesFromOrders(data.orders);
+        }
+      }
+    } catch (err) {
+      console.error('Tables refresh error:', err);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
+    const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
+    const r = match ? match[2] : null;
+    if (r) setRole(r === 'admin' ? 'company_admin' : r);
+
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((me) => {
+        if (me && me.authenticated && me.role) {
+          setRole(me.role === 'admin' ? 'company_admin' : me.role);
+        }
+      })
+      .catch(() => {});
+
     if (floors.length > 0 && !floors.includes(activeFloor)) {
       setActiveFloor(floors[0]);
     }
+
+    // Initial sync and auto-polling every 3.5 seconds
+    handleRefresh();
+    const pollInterval = setInterval(() => {
+      handleRefresh();
+    }, 3500);
+
+    return () => clearInterval(pollInterval);
   }, [floors]);
 
   if (!mounted) return null;
+
+  const isWaiter = role === 'waiter';
 
   const currentFloorTables = tables.filter((t) => t.floor === activeFloor);
 
@@ -199,40 +245,57 @@ export default function TableCollectionsPage() {
                 );
               })}
 
-              <button
-                type="button"
-                onClick={() => setIsAddFloorOpen(true)}
-                className="rounded-full px-3 py-1.5 text-xs font-bold text-pink-200 hover:text-white hover:bg-black/50 transition cursor-pointer flex items-center gap-1"
-                title="Add a new floor"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Floor</span>
-              </button>
+              {!isWaiter && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddFloorOpen(true)}
+                  className="rounded-full px-3 py-1.5 text-xs font-bold text-pink-200 hover:text-white hover:bg-black/50 transition cursor-pointer flex items-center gap-1"
+                  title="Add a new floor"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Floor</span>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <button
-              onClick={openAddModal}
-              style={{ color: '#0f172a' }}
-              className="flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 rounded-xl border border-pink-400/30 bg-black/40 px-3.5 py-2 text-xs font-bold text-pink-200 hover:bg-black/60 hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+              title="Refresh table statuses"
             >
-              <Plus className="h-4 w-4 stroke-[3]" />
-              <span>Add Table</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
 
-            <button
-              onClick={() => {
-                if (confirm('Reset all tables and floors to reference defaults?')) {
-                  resetToDefaults();
-                  setActiveFloor('Ground floor');
-                }
-              }}
-              className="rounded-xl border border-pink-400/30 bg-black/40 p-2.5 text-pink-200 hover:bg-black/60 hover:text-white transition shadow-sm cursor-pointer"
-              title="Reset tables to default reference layout"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </button>
+            {!isWaiter && (
+              <button
+                onClick={openAddModal}
+                style={{ color: '#0f172a' }}
+                className="flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
+              >
+                <Plus className="h-4 w-4 stroke-[3]" />
+                <span>Add Table</span>
+              </button>
+            )}
+
+            {!isWaiter && (
+              <button
+                onClick={() => {
+                  if (confirm('Reset all tables and floors to reference defaults?')) {
+                    resetToDefaults();
+                    setActiveFloor('Ground floor');
+                  }
+                }}
+                className="rounded-xl border border-pink-400/30 bg-black/40 p-2 text-pink-200 hover:bg-black/60 hover:text-white transition shadow-sm cursor-pointer"
+                title="Reset tables to default reference layout"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -278,31 +341,79 @@ export default function TableCollectionsPage() {
           </div>
         )}
 
-        {/* Floor summary & count */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-white">{activeFloor}</h2>
-            <span className="text-xs font-medium text-pink-300 bg-pink-950/40 px-2.5 py-1 rounded-full border border-pink-500/30">
-              {currentFloorTables.length} {currentFloorTables.length === 1 ? 'Table' : 'Tables'}
-            </span>
-          </div>
+        {/* Floor summary & count with Live Availability Metrics */}
+        {(() => {
+          const totalTables = currentFloorTables.length;
+          const runningTables = currentFloorTables.filter((t) => t.status === 'RUNNING' || selectedTableId === t.id).length;
+          const freeTables = currentFloorTables.filter((t) => t.status === 'FREE' && selectedTableId !== t.id).length;
+          const totalCapacity = currentFloorTables.reduce((sum, t) => sum + (t.capacity || 0), 0);
+          const totalSeated = currentFloorTables.reduce(
+            (sum, t) => sum + ((t.status === 'RUNNING' || selectedTableId === t.id) ? (t.guestCount || 1) : 0),
+            0
+          );
+          const totalAvailableSeats = Math.max(0, totalCapacity - totalSeated);
+          const overCapacityTables = currentFloorTables.filter(
+            (t) => (t.status === 'RUNNING' || selectedTableId === t.id) && (t.guestCount || 1) > t.capacity
+          );
 
-          {floors.length > 1 && (
-            <button
-              onClick={() => {
-                if (confirm(`Delete the floor "${activeFloor}" and its tables?`)) {
-                  deleteFloor(activeFloor);
-                  const remaining = floors.filter((f) => f !== activeFloor);
-                  if (remaining.length > 0) setActiveFloor(remaining[0]);
-                }
-              }}
-              className="text-xs text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>Delete this floor</span>
-            </button>
-          )}
-        </div>
+          return (
+            <div className="mb-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-white">{activeFloor}</h2>
+                  <span className="text-xs font-medium text-pink-300 bg-pink-950/40 px-2.5 py-1 rounded-full border border-pink-500/30">
+                    {totalTables} {totalTables === 1 ? 'Table' : 'Tables'}
+                  </span>
+                </div>
+
+                {floors.length > 1 && !isWaiter && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete the floor "${activeFloor}" and its tables?`)) {
+                        deleteFloor(activeFloor);
+                        const remaining = floors.filter((f) => f !== activeFloor);
+                        if (remaining.length > 0) setActiveFloor(remaining[0]);
+                      }
+                    }}
+                    className="text-xs text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete this floor</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Floor live capacity & running status strip */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 font-semibold text-zinc-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+                  <span>Running: <strong>{runningTables}</strong></span>
+                </div>
+
+                <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 font-semibold text-zinc-300">
+                  <span className="h-2 w-2 rounded-full bg-zinc-500" />
+                  <span>Free: <strong>{freeTables}</strong></span>
+                </div>
+
+                <div className="flex items-center gap-1.5 rounded-xl bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 font-semibold text-zinc-300">
+                  <Users className="h-3.5 w-3.5 text-zinc-400" />
+                  <span>Total Seats: <strong>{totalCapacity}</strong></span>
+                </div>
+
+                <div className="flex items-center gap-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 font-bold text-emerald-300">
+                  <span>✨ Available Seats: <strong>{totalAvailableSeats}</strong> free</span>
+                </div>
+
+                {overCapacityTables.length > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 px-3 py-1.5 font-black text-amber-300 animate-pulse">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                    <span>⚠️ {overCapacityTables.length} {overCapacityTables.length === 1 ? 'Table' : 'Tables'} Over Capacity!</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Tables Grid */}
         {currentFloorTables.length === 0 ? (
@@ -325,6 +436,17 @@ export default function TableCollectionsPage() {
             {currentFloorTables.map((table) => {
               const statusCfg = STATUS_CONFIG[table.status] || STATUS_CONFIG.FREE;
               const isSelected = selectedTableId === table.id;
+              const isRunning = table.status === 'RUNNING' || isSelected;
+              const isBillPrinted = table.status === 'BILL_PRINTED';
+              const isNeedsAttention = table.status === 'NEEDS_ATTENTION';
+              const isFree = !isRunning && !isBillPrinted && !isNeedsAttention;
+
+              // Guest Capacity and Alert Calculations
+              const currentSeated = isRunning ? (table.guestCount || 1) : 0;
+              const availableSeats = Math.max(0, table.capacity - currentSeated);
+              const isOverCapacity = isRunning && currentSeated > table.capacity;
+              const isFull = isRunning && currentSeated >= table.capacity && !isOverCapacity;
+              const seatDeficit = currentSeated - table.capacity;
 
               return (
                 <div
@@ -336,98 +458,177 @@ export default function TableCollectionsPage() {
                       selectTable(table, table.capacity || 2);
                     }
                   }}
-                  className={`group relative flex flex-col justify-between rounded-3xl p-5 min-h-[145px] transition-all hover:shadow-xl cursor-pointer ${
+                  className={`group relative flex flex-col justify-between rounded-3xl p-5 min-h-[155px] transition-all hover:shadow-xl cursor-pointer ${
                     isSelected
                       ? 'border-2 border-emerald-500 bg-emerald-950/40 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30'
+                      : isOverCapacity
+                      ? 'border-2 border-amber-500/80 bg-amber-950/25 shadow-lg shadow-amber-950/30 ring-1 ring-amber-500/40 hover:border-amber-400'
+                      : isRunning
+                      ? 'border-2 border-emerald-500/60 bg-emerald-950/20 shadow-lg shadow-emerald-500/10 hover:border-emerald-500/80'
+                      : isBillPrinted
+                      ? 'border-2 border-cyan-500/60 bg-cyan-950/20 shadow-lg shadow-cyan-500/10 hover:border-cyan-500/80'
+                      : isNeedsAttention
+                      ? 'border-2 border-rose-500/60 bg-rose-950/20 shadow-lg shadow-rose-500/10 hover:border-rose-500/80'
                       : `${statusCfg.borderClass} ${statusCfg.bgClass}`
                   }`}
                 >
-                  {/* Top: Name & Quick Actions */}
+                  {/* Top: Name & Badges */}
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className={`text-xl font-black tracking-tight ${isSelected ? 'text-emerald-300' : 'text-white'}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xl font-black tracking-tight ${
+                        isSelected
+                          ? 'text-emerald-300'
+                          : isOverCapacity
+                          ? 'text-amber-200'
+                          : 'text-white'
+                      }`}>
                         {table.name}
                       </span>
                       {table.type && (
-                        <span className="ml-2 rounded-md bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 uppercase">
+                        <span className="rounded-md bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 text-[10px] font-semibold text-zinc-300 uppercase">
                           {table.type}
                         </span>
                       )}
                       {isSelected && (
-                        <span className="ml-2 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                        <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
                           Selected
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => openEditModal(table)}
-                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
-                        title="Edit Table Details"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Delete table ${table.name}?`)) {
-                            deleteTable(table.id);
-                          }
-                        }}
-                        className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-950/50 hover:text-rose-400 transition"
-                        title="Delete Table"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Middle: Capacity & Waiter */}
-                  <div className="my-2 flex items-center justify-between text-xs font-medium text-zinc-400">
                     <div className="flex items-center gap-1.5">
-                      <Users className="h-4 w-4 text-zinc-500" />
-                      <span>{table.capacity} seats</span>
-                      {table.guestCount ? (
-                        <span className="text-zinc-500">({table.guestCount} guests)</span>
-                      ) : null}
-                    </div>
+                      {isOverCapacity ? (
+                        <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 flex items-center gap-1 animate-pulse">
+                          <AlertTriangle className="h-3 w-3 text-amber-400" />
+                          <span>Over Cap</span>
+                        </span>
+                      ) : isRunning ? (
+                        <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                          Running
+                        </span>
+                      ) : isBillPrinted ? (
+                        <span className="rounded-full bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-0.5 text-[10px] font-bold text-cyan-400">
+                          Bill
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-zinc-800/80 border border-zinc-700/60 px-2 py-0.5 text-[10px] font-semibold text-zinc-400">
+                          Free
+                        </span>
+                      )}
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTableToAssignWaiter(table);
-                      }}
-                      className="flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition cursor-pointer"
-                      title="Assign or change waiter for this table"
-                    >
-                      <User className="h-3 w-3" />
-                      <span className="truncate max-w-[80px]">
-                        {table.waiterName || 'Assign'}
-                      </span>
-                    </button>
+                      {!isWaiter && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => openEditModal(table)}
+                            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition"
+                            title="Edit Table Details"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete table ${table.name}?`)) {
+                                deleteTable(table.id);
+                              }
+                            }}
+                            className="rounded-lg p-1.5 text-zinc-500 hover:bg-rose-950/50 hover:text-rose-400 transition"
+                            title="Delete Table"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Bottom: Status */}
-                  <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-                      table.status === 'RUNNING' || isSelected
+                  {/* Middle: Capacity, Seating & Guest Seats Alert */}
+                  <div className="my-2.5 space-y-1.5">
+                    {isOverCapacity ? (
+                      <div className="rounded-xl bg-amber-500/15 border border-amber-500/40 p-2.5 text-xs text-amber-200">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                          <span>Guest Limit Exceeded!</span>
+                        </div>
+                        <p className="text-[11px] font-medium text-amber-400/90 mt-0.5">
+                          <strong>{currentSeated}</strong> guests seated on <strong>{table.capacity}</strong> seats ({seatDeficit} over)
+                        </p>
+                      </div>
+                    ) : isRunning ? (
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-300">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-4 w-4 text-emerald-400" />
+                          <span><strong>{currentSeated}</strong> seated (Cap: {table.capacity})</span>
+                        </div>
+                        <span className={isFull ? 'text-amber-400 font-bold text-[11px]' : 'text-emerald-400 font-bold text-[11px]'}>
+                          {isFull ? 'Full (0 left)' : `${availableSeats} seats left`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-xs font-medium text-zinc-400">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-4 w-4 text-zinc-500" />
+                          <span>{table.capacity} seats</span>
+                        </div>
+                        <span className="text-emerald-400 font-bold text-[11px]">
+                          {table.capacity} available
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Waiter Assignment */}
+                    <div className="flex items-center justify-between text-xs text-zinc-400 pt-1">
+                      <span className="text-[11px] text-zinc-500 font-medium">Server:</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTableToAssignWaiter(table);
+                        }}
+                        className="flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition cursor-pointer"
+                        title="Assign or change waiter for this table"
+                      >
+                        <User className="h-3 w-3" />
+                        <span className="truncate max-w-[90px]">
+                          {table.waiterName || 'Assign'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom: Status & Details */}
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+                    <span className={`inline-flex items-center gap-1.5 font-semibold ${
+                      isOverCapacity
+                        ? 'text-amber-300'
+                        : isRunning
                         ? 'text-emerald-400'
-                        : table.status === 'BILL_PRINTED'
+                        : isBillPrinted
                         ? 'text-cyan-400'
-                        : table.status === 'NEEDS_ATTENTION'
+                        : isNeedsAttention
                         ? 'text-rose-400'
                         : 'text-zinc-400'
                     }`}>
-                      <span className={`h-2.5 w-2.5 rounded-full ${isSelected || table.status === 'RUNNING' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : statusCfg.dotClass}`} />
-                      {isSelected || table.status === 'RUNNING' ? 'Running' : statusCfg.label}
+                      <span className={`h-2.5 w-2.5 rounded-full ${
+                        isOverCapacity
+                          ? 'bg-amber-400 shadow-sm shadow-amber-400 animate-pulse'
+                          : isRunning
+                          ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                          : isBillPrinted
+                          ? 'bg-cyan-400 shadow-sm shadow-cyan-400/50'
+                          : statusCfg.dotClass
+                      }`} />
+                      {isOverCapacity
+                        ? 'Running · Over Capacity'
+                        : isRunning
+                        ? 'Running'
+                        : statusCfg.label}
                     </span>
 
-                    {table.waiterName && (
-                      <span className="text-[10px] text-zinc-500 truncate max-w-[100px]">
-                        By {table.waiterName}
+                    {table.activeBillAmount ? (
+                      <span className="font-bold text-white">
+                        ₹{Number(table.activeBillAmount).toFixed(2)}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
@@ -442,13 +643,13 @@ export default function TableCollectionsPage() {
               <span className="h-3 w-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
               Running
             </span>
+            <span className="flex items-center gap-2 text-amber-300">
+              <span className="h-3 w-3 rounded-full bg-amber-400 shadow-sm shadow-amber-400 animate-pulse" />
+              Over Capacity Alert
+            </span>
             <span className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50" />
               Bill printed, awaiting payment
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" />
-              Needs attention
             </span>
             <span className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full border border-zinc-500 bg-zinc-700" />
@@ -457,7 +658,7 @@ export default function TableCollectionsPage() {
           </div>
 
           <span className="text-[11px] text-zinc-500">
-            Changes are saved locally and synced directly with the Terminal.
+            Real-time synchronization with Terminal active orders.
           </span>
         </div>
       </div>
@@ -650,18 +851,18 @@ export default function TableCollectionsPage() {
         onSelectWaiter={(waiter) => {
           if (tableToAssignWaiter) {
             setTableWaiter(tableToAssignWaiter.id, waiter?.id || null, waiter?.name || null);
-            if (tableToAssignWaiter.activeOrderId) {
-              fetch('/api/dine-in-orders', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'assignWaiter',
-                  orderId: tableToAssignWaiter.activeOrderId,
-                  waiterId: waiter?.id || null,
-                  waiterName: waiter?.name || null,
-                }),
-              }).catch(console.error);
-            }
+            fetch('/api/dine-in-orders', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'assignWaiter',
+                orderId: tableToAssignWaiter.activeOrderId || null,
+                tableId: tableToAssignWaiter.id,
+                tableName: `Table ${tableToAssignWaiter.name}`,
+                waiterId: waiter?.id || null,
+                waiterName: waiter?.name || null,
+              }),
+            }).catch(console.error);
           }
           setTableToAssignWaiter(null);
         }}

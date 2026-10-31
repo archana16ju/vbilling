@@ -6,6 +6,7 @@ import {
   updateDineInServingStatus,
   assignDineInWaiter,
   updateDineInKitchenStatus,
+  releaseDineInTable,
 } from '@/lib/actions/dine-in';
 
 export async function GET(request: Request) {
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
     const servingStatus = searchParams.get('servingStatus') || undefined;
     const kitchenStatus = searchParams.get('kitchenStatus') || undefined;
     const activeOnly = searchParams.get('activeOnly') === 'true';
+    const allTables = searchParams.get('allTables') === 'true';
 
     const result = await getDineInOrders({
       waiterId,
@@ -28,6 +30,7 @@ export async function GET(request: Request) {
       servingStatus,
       kitchenStatus,
       activeOnly,
+      allTables,
     });
 
     if (!result.success) {
@@ -70,23 +73,36 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { action, orderId, servingStatus, waiterId, waiterName, kitchenStatus } = body;
+    const { action, orderId, tableId, tableName, servingStatus, waiterId, waiterName, kitchenStatus } = body;
 
-    if (!orderId) {
-      return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
+    if (action === 'releaseTable') {
+      if (!tableId && !tableName) {
+        return NextResponse.json({ error: 'Table ID or Name is required' }, { status: 400 });
+      }
+      const res = await releaseDineInTable(tableId, tableName);
+      return NextResponse.json(res);
     }
 
     if (action === 'updateServingStatus' || servingStatus) {
+      if (!orderId) {
+        return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
+      }
       const res = await updateDineInServingStatus(orderId, servingStatus);
       return NextResponse.json(res);
     }
 
     if (action === 'assignWaiter') {
-      const res = await assignDineInWaiter(orderId, waiterId || null, waiterName || null);
+      if (!orderId && !tableId && !tableName) {
+        return NextResponse.json({ error: 'Order ID or Table is required' }, { status: 400 });
+      }
+      const res = await assignDineInWaiter(orderId, waiterId || null, waiterName || null, tableId, tableName);
       return NextResponse.json(res);
     }
 
     if (action === 'updateKitchenStatus' && kitchenStatus) {
+      if (!orderId) {
+        return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
+      }
       const res = await updateDineInKitchenStatus(orderId, kitchenStatus);
       return NextResponse.json(res);
     }

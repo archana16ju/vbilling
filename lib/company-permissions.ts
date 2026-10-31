@@ -286,6 +286,17 @@ function mapRowToPermissions(row: any, companyId: string): CompanyPermissions {
   return permissions;
 }
 
+// Short-lived in-memory cache for company permissions to optimize collection switching
+const companyPermissionsCache = new Map<string, { permissions: CompanyPermissions; expiresAt: number }>();
+
+export function clearCompanyPermissionsCache(companyId?: string) {
+  if (companyId) {
+    companyPermissionsCache.delete(companyId);
+  } else {
+    companyPermissionsCache.clear();
+  }
+}
+
 /**
  * Retrieves the module permissions for a company.
  * If no record exists yet, creates a default enabled record.
@@ -297,6 +308,12 @@ export async function getCompanyPermissions(companyId: string): Promise<CompanyP
       ...DEFAULT_DASHBOARD_PERMISSIONS,
     } as CompanyPermissions;
   }
+
+  const cached = companyPermissionsCache.get(companyId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.permissions;
+  }
+
   await ensureLocalMySqlInitialized();
 
   const pool = getMysqlPool();
@@ -306,7 +323,9 @@ export async function getCompanyPermissions(companyId: string): Promise<CompanyP
   );
 
   if (rows && rows.length > 0) {
-    return mapRowToPermissions(rows[0], companyId);
+    const res = mapRowToPermissions(rows[0], companyId);
+    companyPermissionsCache.set(companyId, { permissions: res, expiresAt: Date.now() + 5000 });
+    return res;
   }
 
   // Insert default full permissions for company
@@ -319,11 +338,13 @@ export async function getCompanyPermissions(companyId: string): Promise<CompanyP
     [id, companyId]
   );
 
-  return {
+  const defaultRes = {
     id,
     companyId,
     ...DEFAULT_DASHBOARD_PERMISSIONS,
   } as CompanyPermissions;
+  companyPermissionsCache.set(companyId, { permissions: defaultRes, expiresAt: Date.now() + 5000 });
+  return defaultRes;
 }
 
 /**
@@ -498,6 +519,7 @@ export async function updateCompanyPermissions(
     );
   }
 
+  clearCompanyPermissionsCache(companyId);
   return true;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useKitchenStore, KotTicket } from '@/store/useKitchenStore';
 import { useShortcutsStore } from '@/store/useShortcutsStore';
 import {
@@ -13,6 +13,7 @@ import {
   UtensilsCrossed,
   X,
   Filter,
+  RefreshCw,
 } from 'lucide-react';
 
 const CANCEL_REASONS = [
@@ -25,8 +26,14 @@ const CANCEL_REASONS = [
 
 export default function KitchenPage() {
   const [mounted, setMounted] = useState(false);
-  const { tickets, toggleItemCompleted, markTicketReady, cancelTicket, clearCompletedTickets } =
-    useKitchenStore();
+  const {
+    tickets,
+    toggleItemCompleted,
+    markTicketReady,
+    cancelTicket,
+    clearCompletedTickets,
+    syncFromApiOrders,
+  } = useKitchenStore();
   const shortcutsStore = useShortcutsStore();
   const showShortcutBadges = shortcutsStore.config.showKeysOnButtons;
 
@@ -36,17 +43,42 @@ export default function KitchenPage() {
   const [cancelNote, setCancelNote] = useState<string>('');
   const [now, setNow] = useState(Date.now());
   const [selectedTicketIndex, setSelectedTicketIndex] = useState<number>(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Sync real-time kitchen orders from company database API
+  const fetchKitchenOrders = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dine-in-orders', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.orders)) {
+          syncFromApiOrders(data.orders);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync kitchen orders from database:', err);
+    }
+  }, [syncFromApiOrders]);
 
   useEffect(() => {
     setMounted(true);
+    fetchKitchenOrders();
+
+    // Live polling every 3 seconds for new KOTs from cashiers/waiters
+    const pollInterval = setInterval(() => {
+      fetchKitchenOrders();
+    }, 3000);
+
     // Timer update every second for live ticket elapsed time
     const interval = setInterval(() => {
       setNow(Date.now());
     }, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
-  if (!mounted) return null;
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(interval);
+    };
+  }, [fetchKitchenOrders]);
 
   const preparingTickets = tickets.filter((t) => t.status === 'PREPARING');
   const readyTickets = tickets.filter((t) => t.status === 'READY');
@@ -124,6 +156,8 @@ export default function KitchenPage() {
     setSelectedReason('Guest changed mind');
   };
 
+  if (!mounted) return null;
+
   return (
     <div className="space-y-6">
       {/* Top Header with Dynamic Theme Gradient Banner */}
@@ -192,6 +226,21 @@ export default function KitchenPage() {
                 Clear Ready
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={async () => {
+                setIsRefreshing(true);
+                await fetchKitchenOrders();
+                setTimeout(() => setIsRefreshing(false), 500);
+              }}
+              disabled={isRefreshing}
+              className="rounded-xl border border-pink-400/30 bg-black/50 px-3 py-2 text-xs font-bold text-pink-200 hover:bg-black/80 hover:text-white transition shadow-sm cursor-pointer ml-1 flex items-center gap-1.5"
+              title="Refresh live kitchen tickets"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           </div>
         </div>
       </div>
@@ -274,7 +323,7 @@ export default function KitchenPage() {
                   <div className="mt-2 text-[11px] font-medium text-zinc-400 flex items-center gap-1.5 flex-wrap">
                     <span className="font-bold text-pink-300">{ticket.orderType}</span>
                     <span>·</span>
-                    <span>
+                    <span suppressHydrationWarning>
                       {new Date(ticket.createdAt).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',

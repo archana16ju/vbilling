@@ -1,7 +1,7 @@
 'use client'
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Category } from "@/lib/mock-data"
-import { Tags, Plus, Edit2, Trash2, LayoutGrid, CheckCircle } from "lucide-react"
+import { Tags, Plus, Edit2, Trash2, LayoutGrid, CheckCircle, RefreshCw } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createCategory, updateCategory, deleteCategory as deleteCategoryDb, getCategories } from "@/lib/actions/db"
 
@@ -10,18 +10,27 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const loadCategories = async () => {
+    setIsRefreshing(true)
+    try {
+      const dbCategories = await getCategories()
+      if (Array.isArray(dbCategories)) {
+        const customCats = dbCategories.filter((c) => c && c.id !== 'all')
+        useTerminalStore.setState({ categories: customCats })
+      }
+    } catch (err) {
+      console.error("Failed to load categories:", err)
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300)
+    }
+  }
 
   // Fetch fresh categories from database on mount
   useEffect(() => {
-    getCategories().then((dbCategories) => {
-      if (Array.isArray(dbCategories)) {
-        const customCats = dbCategories.filter((c) => c && c.id !== 'all');
-        useTerminalStore.setState({ categories: customCats });
-      }
-    }).catch((err) => {
-      console.error("Failed to load categories:", err);
-    });
-  }, []);
+    loadCategories()
+  }, [])
 
   const handleOpenForm = (category?: Category) => {
     if (category) {
@@ -103,12 +112,23 @@ export default function CategoriesPage() {
               </p>
             </div>
           </div>
-          <button 
-            onClick={() => handleOpenForm()}
-            className="flex items-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
-          >
-            <Plus className="h-4 w-4" /> Add Category
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={loadCategories}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 rounded-xl bg-black/30 hover:bg-black/45 border border-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh categories"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-pink-300" : "text-zinc-200"}`} />
+              <span>Refresh</span>
+            </button>
+            <button 
+              onClick={() => handleOpenForm()}
+              className="flex items-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+            >
+              <Plus className="h-4 w-4" /> Add Category
+            </button>
+          </div>
         </div>
       </div>
 

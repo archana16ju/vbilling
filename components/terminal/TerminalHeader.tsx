@@ -1,6 +1,6 @@
 'use client'
 import Link from "next/link"
-import { Wifi, UserCircle, LayoutDashboard, Building2, LogOut, ChefHat, UtensilsCrossed, ChevronDown, Truck, Zap, User } from "lucide-react"
+import { Wifi, UserCircle, LayoutDashboard, Building2, LogOut, ChefHat, UtensilsCrossed, ChevronDown, Truck, Zap, User, AlertTriangle } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import { getUserRole, getUserShortcuts } from "@/app/login/actions"
 import { useTableStore } from "@/store/useTableStore"
@@ -274,25 +274,53 @@ export default function TerminalHeader() {
             })}
           </div>
 
-          {orderType === 'Dine In' && (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setIsTableModalOpen(true)}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer border ${
-                  selectedTable
-                    ? 'border-emerald-500/50 bg-emerald-950/60 text-emerald-300 shadow-lg shadow-emerald-950/40 hover:bg-emerald-900/60'
-                    : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                <UtensilsCrossed className="h-3.5 w-3.5 text-emerald-400" />
-                <span>
-                  {selectedTable
-                    ? `Table ${selectedTable.name} · ${selectedGuestCount} ${selectedGuestCount === 1 ? 'guest' : 'guests'}`
-                    : 'Choose a Table'}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
-              </button>
+          {orderType === 'Dine In' && (() => {
+            const isOverCapacity = selectedTable ? selectedGuestCount > selectedTable.capacity : false;
+            const availableSeats = selectedTable ? Math.max(0, selectedTable.capacity - selectedGuestCount) : 0;
+
+            return (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsTableModalOpen(true)}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer border ${
+                    !selectedTable
+                      ? 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      : isOverCapacity
+                      ? 'border-amber-500/80 bg-amber-950/70 text-amber-200 shadow-lg shadow-amber-950/40 hover:bg-amber-900/60'
+                      : 'border-emerald-500/50 bg-emerald-950/60 text-emerald-300 shadow-lg shadow-emerald-950/40 hover:bg-emerald-900/60'
+                  }`}
+                  title={
+                    selectedTable && isOverCapacity
+                      ? `Alert: ${selectedGuestCount} guests exceeds Table ${selectedTable.name} capacity of ${selectedTable.capacity} seats!`
+                      : undefined
+                  }
+                >
+                  {isOverCapacity ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                  ) : (
+                    <UtensilsCrossed className="h-3.5 w-3.5 text-emerald-400" />
+                  )}
+                  <span>
+                    {selectedTable
+                      ? `Table ${selectedTable.name} · ${selectedGuestCount} ${selectedGuestCount === 1 ? 'guest' : 'guests'}`
+                      : 'Choose a Table'}
+                  </span>
+
+                  {selectedTable && isOverCapacity && (
+                    <span className="rounded-md bg-amber-500/30 border border-amber-400/50 px-1.5 py-0.5 text-[10px] font-black text-amber-300 animate-pulse">
+                      ⚠️ Over Capacity ({selectedGuestCount}/{selectedTable.capacity})
+                    </span>
+                  )}
+
+                  {selectedTable && !isOverCapacity && (
+                    <span className="text-[11px] text-emerald-400/80 font-medium">
+                      ({availableSeats === 0 ? 'Full' : `${availableSeats} free`})
+                    </span>
+                  )}
+
+                  <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                </button>
 
               <button
                 type="button"
@@ -311,7 +339,8 @@ export default function TerminalHeader() {
                 <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
               </button>
             </div>
-          )}
+          );
+        })()}
 
           {orderType === 'Delivery' && (
             <div className="flex items-center gap-1.5">
@@ -472,18 +501,18 @@ export default function TerminalHeader() {
           setAssignedWaiter(waiter);
           if (selectedTable) {
             setTableWaiter(selectedTable.id, waiter?.id || null, waiter?.name || null);
-            if (selectedTable.activeOrderId) {
-              fetch('/api/dine-in-orders', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'assignWaiter',
-                  orderId: selectedTable.activeOrderId,
-                  waiterId: waiter?.id || null,
-                  waiterName: waiter?.name || null,
-                }),
-              }).catch(console.error);
-            }
+            fetch('/api/dine-in-orders', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'assignWaiter',
+                orderId: selectedTable.activeOrderId || null,
+                tableId: selectedTable.id,
+                tableName: `Table ${selectedTable.name}`,
+                waiterId: waiter?.id || null,
+                waiterName: waiter?.name || null,
+              }),
+            }).catch(console.error);
           }
         }}
         currentWaiterId={assignedWaiter?.id || selectedTable?.waiterId}

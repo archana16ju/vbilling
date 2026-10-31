@@ -47,13 +47,15 @@ export default function CompanyThemeLoader() {
             const theme: CompanyTheme = data.theme;
             applyThemeToDom(theme);
 
-            // Sync with terminal design store for product grid highlights
-            updateDesign({
-              accentColor: theme.accentColor,
-              activeBorderColor: theme.activeBorderColor,
-              bannerBgColor: theme.gradientStart,
-              themePreset: (theme.id as any) || 'custom',
-            });
+            // Sync fallback to terminal design store only if no custom terminal design is set
+            if (!useTerminalDesignStore.getState().isCustom) {
+              updateDesign({
+                accentColor: theme.accentColor,
+                activeBorderColor: theme.activeBorderColor,
+                bannerBgColor: theme.gradientStart,
+                themePreset: (theme.id as any) || 'custom',
+              });
+            }
 
             // Cache per-company or for super admin
             try {
@@ -68,19 +70,15 @@ export default function CompanyThemeLoader() {
 
       // 3. Fetch authoritative terminal design for this company
       try {
-        await useTerminalDesignStore.getState().fetchCompanyTerminalDesign();
+        await useTerminalDesignStore.getState().fetchCompanyTerminalDesign(activeCid, true);
       } catch {}
     };
 
     loadTheme();
 
-    // Listen for custom company switch, theme change, or terminal design change events
+    // Listen for custom company switch, theme change, or focus events
     const handleThemeChange = () => {
       loadTheme();
-    };
-
-    const handleDesignChange = () => {
-      useTerminalDesignStore.getState().fetchCompanyTerminalDesign();
     };
 
     // Check periodically for company cookie switch (e.g. from company switcher dropdown)
@@ -92,13 +90,11 @@ export default function CompanyThemeLoader() {
     }, 1500);
 
     window.addEventListener('company-theme-changed', handleThemeChange);
-    window.addEventListener('terminal-design-changed', handleDesignChange);
     window.addEventListener('focus', handleThemeChange);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('company-theme-changed', handleThemeChange);
-      window.removeEventListener('terminal-design-changed', handleDesignChange);
       window.removeEventListener('focus', handleThemeChange);
     };
   }, [updateDesign]);

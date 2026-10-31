@@ -8,8 +8,14 @@ export default async function Home() {
     if (session.role === 'super_admin') {
       redirect('/super-admin');
     }
-    if (session.role === 'company_admin') {
+    if (session.role === 'company_admin' || session.role === 'manager') {
       redirect('/dashboard');
+    }
+    if (session.role === 'chef') {
+      redirect('/kitchen');
+    }
+    if (session.role === 'waiter') {
+      redirect('/assigned-orders');
     }
     if (session.role === 'cashier') {
       redirect('/terminal');

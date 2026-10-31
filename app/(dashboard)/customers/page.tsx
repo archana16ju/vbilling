@@ -26,6 +26,7 @@ import {
   ChevronRight,
   TrendingUp,
   FileText,
+  RefreshCw,
 } from 'lucide-react';
 import { CustomerWithStats } from '@/lib/mysql-billing';
 import { useTerminalStore } from '@/store/useTerminalStore';
@@ -41,6 +42,7 @@ export default function CustomersPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCustomerOrders, setSelectedCustomerOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -128,6 +130,15 @@ export default function CustomersPage() {
       console.error('Failed to fetch customers:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchCustomers(selectedCustomerId || undefined);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
     }
   };
 
@@ -414,6 +425,15 @@ export default function CustomersPage() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-black/30 backdrop-blur-md px-3.5 py-2 text-xs font-bold text-white hover:bg-black/50 transition cursor-pointer disabled:opacity-50"
+              title="Refresh guests"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-pink-300" : "text-zinc-200"}`} />
+              Refresh
+            </button>
             <button
               onClick={handleExportCSV}
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-black/30 backdrop-blur-md px-3.5 py-2 text-xs font-bold text-white hover:bg-black/50 transition cursor-pointer"

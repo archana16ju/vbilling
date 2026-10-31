@@ -161,6 +161,7 @@ export async function getDineInOrders(filters?: {
   servingStatus?: string;
   kitchenStatus?: string;
   activeOnly?: boolean;
+  allTables?: boolean;
 }): Promise<{ success: boolean; orders: DineInOrder[]; error?: string }> {
   try {
     const session = await getSession();
@@ -170,12 +171,19 @@ export async function getDineInOrders(filters?: {
       await ensureLocalMySqlInitialized();
       const pool = getMysqlPool();
 
-      let companyId: string | undefined;
-      try {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-      } catch {
-        companyId = cookieStore.get('auth_company_id')?.value;
+      let companyId: string | undefined = session?.companyId;
+      if (!companyId || session?.role === 'super_admin') {
+        const reqCompanyId = cookieStore.get('auth_company_id')?.value;
+        if (reqCompanyId) {
+          companyId = reqCompanyId;
+        } else {
+          try {
+            const company = await getAuthorizedCompanyContext();
+            companyId = company.id;
+          } catch {
+            companyId = cookieStore.get('auth_company_id')?.value;
+          }
+        }
       }
 
       if (!companyId) {
@@ -191,8 +199,8 @@ export async function getDineInOrders(filters?: {
       `;
       const params: any[] = [companyId];
 
-      // If logged in as Waiter, enforce strict isolation to only their assigned orders!
-      if (session?.role === 'waiter') {
+      // If logged in as Waiter, enforce strict isolation to only their assigned orders (unless checking all tables overview)
+      if (session?.role === 'waiter' && !filters?.allTables) {
         const waiterUserId = session.userId;
         // Check staff id and name associated with this user
         const [staffRows]: any = await pool.query(
@@ -275,7 +283,7 @@ export async function getDineInOrders(filters?: {
     const companyId = cookieStore.get('auth_company_id')?.value || 'comp_default';
     const query: any = { companyId };
 
-    if (session?.role === 'waiter') {
+    if (session?.role === 'waiter' && !filters?.allTables) {
       query.$or = [{ waiterId: session.userId }, { waiterName: session.username }];
     } else if (filters?.waiterId) {
       query.$or = [{ waiterId: filters.waiterId }, { waiterName: filters.waiterId }];
@@ -366,33 +374,61 @@ export async function updateDineInServingStatus(
 }
 
 export async function assignDineInWaiter(
-  orderId: string,
-  waiterId: string | null,
-  waiterName: string | null
+  orderId?: string | null,
+  waiterId?: string | null,
+  waiterName?: string | null,
+  tableId?: string | null,
+  tableName?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const session = await getSession();
+    const cookieStore = await cookies();
+
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
       const pool = getMysqlPool();
-      const cookieStore = await cookies();
-      let companyId: string | undefined;
-      try {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-      } catch {
-        companyId = cookieStore.get('auth_company_id')?.value;
+      let companyId: string | undefined = session?.companyId;
+      if (!companyId || session?.role === 'super_admin') {
+        const reqCompanyId = cookieStore.get('auth_company_id')?.value;
+        if (reqCompanyId) {
+          companyId = reqCompanyId;
+        } else {
+          try {
+            const company = await getAuthorizedCompanyContext();
+            companyId = company.id;
+          } catch {
+            companyId = cookieStore.get('auth_company_id')?.value;
+          }
+        }
       }
 
-      await pool.query(
-        `UPDATE dine_in_orders 
-         SET waiter_id = ?, waiter_name = ?, updated_at = NOW() 
-         WHERE (id = ? OR kot_id = ? OR order_number = ?)
-           ${companyId ? 'AND company_id = ?' : ''}`,
-        companyId ? [waiterId, waiterName, orderId, orderId, orderId, companyId] : [waiterId, waiterName, orderId, orderId, orderId]
-      );
+      const conditions: string[] = [];
+      const params: any[] = [waiterId || null, waiterName || null];
+
+      if (orderId) {
+        conditions.push(`(id = ? OR kot_id = ? OR order_number = ?)`);
+        params.push(orderId, orderId, orderId);
+      }
+
+      if (tableId || tableName) {
+        conditions.push(`((table_id = ? OR table_name = ?) AND serving_status NOT IN ('Served', 'Completed', 'Cancelled'))`);
+        params.push(tableId || '', tableName || '');
+      }
+
+      if (conditions.length === 0) {
+        return { success: false, error: 'No order or table specified' };
+      }
+
+      let sql = `UPDATE dine_in_orders SET waiter_id = ?, waiter_name = ?, updated_at = NOW() WHERE (${conditions.join(' OR ')})`;
+      if (companyId) {
+        sql += ` AND company_id = ?`;
+        params.push(companyId);
+      }
+
+      await pool.query(sql, params);
 
       // Also update sales table if order was already billed
-      if (companyId) {
+      if (companyId && orderId) {
         await pool.query(
           `UPDATE sales SET waiter_id = ?, waiter_name = ? 
            WHERE company_id = ? AND (bill_number = ? OR id = ?)`,
@@ -404,10 +440,23 @@ export async function assignDineInWaiter(
     }
 
     const db = await getDb();
-    await db.collection('dine_in_orders').updateOne(
-      { $or: [{ id: orderId }, { kotId: orderId }, { orderNumber: orderId }] },
-      { $set: { waiterId, waiterName, updatedAt: new Date() } }
-    );
+    const mongoConditions: any[] = [];
+    if (orderId) {
+      mongoConditions.push({ id: orderId }, { kotId: orderId }, { orderNumber: orderId });
+    }
+    if (tableId) {
+      mongoConditions.push({ tableId, servingStatus: { $nin: ['Served', 'Completed', 'Cancelled'] } });
+    }
+    if (tableName) {
+      mongoConditions.push({ tableName, servingStatus: { $nin: ['Served', 'Completed', 'Cancelled'] } });
+    }
+
+    if (mongoConditions.length > 0) {
+      await db.collection('dine_in_orders').updateMany(
+        { $or: mongoConditions },
+        { $set: { waiterId, waiterName, updatedAt: new Date() } }
+      );
+    }
     return { success: true };
   } catch (err: any) {
     console.error('assignDineInWaiter error:', err);
@@ -458,5 +507,63 @@ export async function updateDineInKitchenStatus(
   } catch (err: any) {
     console.error('updateDineInKitchenStatus error:', err);
     return { success: false, error: err.message || 'Failed to update kitchen status' };
+  }
+}
+
+export async function releaseDineInTable(
+  tableId?: string | null,
+  tableName?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cleanTbl = (tableName || '').replace(/^Table\s+/i, '').trim();
+
+    if (isLocalMySqlMode()) {
+      await ensureLocalMySqlInitialized();
+      const pool = getMysqlPool();
+      const cookieStore = await cookies();
+      let companyId: string | undefined;
+      try {
+        const company = await getAuthorizedCompanyContext();
+        companyId = company.id;
+      } catch {
+        companyId = cookieStore.get('auth_company_id')?.value;
+      }
+
+      await pool.query(
+        `UPDATE dine_in_orders 
+         SET serving_status = 'Completed', updated_at = NOW() 
+         WHERE (table_id = ? OR table_name = ? OR table_name = ? OR table_name = ?)
+           AND serving_status NOT IN ('Completed', 'Cancelled')
+           ${companyId ? 'AND company_id = ?' : ''}`,
+        companyId
+          ? [tableId || '', tableName || '', `Table ${tableName || ''}`, cleanTbl, companyId]
+          : [tableId || '', tableName || '', `Table ${tableName || ''}`, cleanTbl]
+      );
+
+      return { success: true };
+    }
+
+    const db = await getDb();
+    const cookieStore = await cookies();
+    const companyId = cookieStore.get('auth_company_id')?.value || 'comp_default';
+
+    await db.collection('dine_in_orders').updateMany(
+      {
+        companyId,
+        $or: [
+          { tableId: tableId || '' },
+          { tableName: tableName || '' },
+          { tableName: `Table ${tableName || ''}` },
+          { tableName: cleanTbl },
+        ],
+        servingStatus: { $nin: ['Completed', 'Cancelled'] },
+      },
+      { $set: { servingStatus: 'Completed', updatedAt: new Date() } }
+    );
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('releaseDineInTable error:', err);
+    return { success: false, error: err.message || 'Failed to release table' };
   }
 }

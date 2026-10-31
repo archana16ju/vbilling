@@ -1,12 +1,11 @@
 'use client'
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { Product } from "@/lib/mock-data"
-import { Package, Plus, Edit2, Trash2 } from "lucide-react"
+import { Package, Plus, Edit2, Trash2, RefreshCw, Trash } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createProduct, updateProduct, deleteProduct as deleteProductDb, getProducts, getCategories } from "@/lib/actions/db"
 import { getRawMaterials } from "@/lib/actions/inventory"
 import { RawMaterial, RecipeItem, ProductUnit } from "@/types/product"
-import { Trash } from "lucide-react"
 
 export default function ProductsPage() {
   const { products, addProduct, editProduct, deleteProduct, categories, setProducts, setCategories } = useTerminalStore()
@@ -18,25 +17,26 @@ export default function ProductsPage() {
   const [availableMaterials, setAvailableMaterials] = useState<RawMaterial[]>([])
   const [currentRecipe, setCurrentRecipe] = useState<RecipeItem[]>([])
 
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const [dbProducts, dbCategories, dbMaterials] = await Promise.all([
+        getProducts(),
+        getCategories(),
+        getRawMaterials().catch(() => [])
+      ])
+      setProducts(dbProducts)
+      setCategories(dbCategories)
+      setAvailableMaterials(dbMaterials)
+    } catch (e) {
+      console.error('Failed to load products from DB:', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Always fetch fresh from DB on page load
   useEffect(() => {
-    async function fetchData() {
-      if (products.length === 0) setLoading(true)
-      try {
-        const [dbProducts, dbCategories, dbMaterials] = await Promise.all([
-          getProducts(),
-          getCategories(),
-          getRawMaterials().catch(() => [])
-        ])
-        setProducts(dbProducts)
-        setCategories(dbCategories)
-        setAvailableMaterials(dbMaterials)
-      } catch (e) {
-        console.error('Failed to load products from DB:', e)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchData()
   }, [])
 
@@ -163,11 +163,20 @@ export default function ProductsPage() {
               Manage menu items, recipes, pricing, ingredients, and inventory units.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={fetchData}
+              disabled={loading}
+              className="flex items-center gap-1.5 rounded-xl border border-pink-400/30 bg-black/40 px-3.5 py-2 text-xs font-bold text-pink-200 hover:bg-black/60 hover:text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+              title="Refresh Products & Recipes"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
             <button 
               onClick={() => handleOpenForm()}
               style={{ color: '#0f172a' }}
-              className="flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
+              className="flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
             >
               <Plus className="h-4 w-4 stroke-[3]" /> Add Product
             </button>

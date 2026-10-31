@@ -16,15 +16,18 @@ import {
   Building2,
   User as UserIcon,
   RefreshCw,
+  RotateCcw,
   Truck,
   ExternalLink,
   UtensilsCrossed,
   Search,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { clearAllSales, getLiveSales, updateSalePayment } from "@/lib/actions/db";
+import { clearAllSales, getLiveSales, updateSalePayment, refundSale } from "@/lib/actions/db";
 import SettlementBillModal from "@/components/sales/SettlementBillModal";
+import RefundBillModal from "@/components/sales/RefundBillModal";
 import { useShortcutsStore } from "@/store/useShortcutsStore";
+import { useTableStore } from "@/store/useTableStore";
 
 const formatShortDateTime = (timestamp?: number | string | Date) => {
   if (!timestamp) return '-';
@@ -50,6 +53,8 @@ export default function SalesPage() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
   const [isSettling, setIsSettling] = useState(false);
+  const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
+  const [isRefunding, setIsRefunding] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -241,6 +246,9 @@ export default function SalesPage() {
           opts.amountReceived,
           opts.changeReturned
         );
+        if (saleToSettle.tableId) {
+          useTableStore.getState().releaseTable(saleToSettle.tableId);
+        }
         await loadSales();
         setToastMsg(`Bill #${saleToSettle.id} successfully settled with ${opts.paymentMethod}!`);
         setTimeout(() => setToastMsg(null), 3500);
@@ -252,6 +260,28 @@ export default function SalesPage() {
       alert("Error settling bill: " + e.message);
     } finally {
       setIsSettling(false);
+    }
+  };
+
+  const handleConfirmRefund = async (sale: Sale, reason: string) => {
+    setIsRefunding(true);
+    try {
+      const res = await refundSale(sale.id, reason);
+      if (res && res.success) {
+        if (useTerminalStore.getState().refundSale) {
+          useTerminalStore.getState().refundSale(sale.id);
+        }
+        await loadSales();
+        setToastMsg(`Bill #${sale.id} successfully refunded!`);
+        setTimeout(() => setToastMsg(null), 3500);
+        setSaleToRefund(null);
+      } else {
+        alert("Failed to refund bill: " + (res?.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Error refunding bill: " + (e?.message || "Unknown error"));
+    } finally {
+      setIsRefunding(false);
     }
   };
 
@@ -603,22 +633,28 @@ export default function SalesPage() {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePrint(sale);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-xl bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
-                        title="Print Receipt (Ctrl + P)"
-                      >
-                        <Printer className="h-3.5 w-3.5" />
-                        <span>Print</span>
-                        {showShortcutBadges && (
-                          <span className="text-[9px] font-mono text-zinc-400 ml-0.5">
-                            {shortcutsStore.getActionDisplayKey('screen_reprint') || 'Ctrl+P'}
-                          </span>
-                        )}
-                      </button>
+                      {sale.paymentStatus === 'refunded' || (sale as any).payment_status === 'refunded' ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-xl bg-rose-950/40 border border-rose-900/50 px-3 py-1.5 text-xs font-bold text-rose-400 cursor-not-allowed opacity-80"
+                          title="This bill has already been refunded"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Refunded</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSaleToRefund(sale);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-950/60 hover:border-rose-700 hover:text-white transition cursor-pointer active:scale-95 shadow-sm"
+                          title="Open refund review and details"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Refund</span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -780,6 +816,17 @@ export default function SalesPage() {
           isProcessing={isSettling}
           onSettle={handleSettleSale}
           onPrint={handlePrint}
+        />
+      )}
+
+      {/* Refund Bill Overlay */}
+      {saleToRefund && (
+        <RefundBillModal
+          isOpen={!!saleToRefund}
+          onClose={() => setSaleToRefund(null)}
+          sale={saleToRefund}
+          isProcessing={isRefunding}
+          onConfirmRefund={handleConfirmRefund}
         />
       )}
     </div>

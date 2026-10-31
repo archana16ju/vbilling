@@ -187,6 +187,7 @@ export default function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
+              prefetch={true}
               title={item.name}
               className={`sidebar-nav-item group ${isActive ? 'active' : ''}`}
             >

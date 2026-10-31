@@ -11,6 +11,7 @@ export interface PersistedTerminalDesign {
   pricePlacement?: 'bottom-right' | 'bottom-left' | 'top-right';
   priceStyle?: 'dark-navy' | 'theme-accent' | 'glass' | 'white';
   themePreset?: string;
+  themeMode?: 'dark' | 'light' | 'system';
   accentColor?: string;
   activeBorderColor?: string;
   bannerBgColor?: string;
@@ -33,6 +34,7 @@ export const DEFAULT_PERSISTED_TERMINAL_DESIGN: PersistedTerminalDesign = {
   pricePlacement: 'bottom-right',
   priceStyle: 'dark-navy',
   themePreset: 'black-cherry',
+  themeMode: 'dark',
   accentColor: '#DB2777',
   activeBorderColor: '#DB2777',
   bannerBgColor: '#1F0715',

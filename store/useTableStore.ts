@@ -32,7 +32,7 @@ const DEFAULT_TABLES: TableItem[] = [
   { id: 't6', name: 'T6', floor: 'Ground floor', capacity: 2, type: 'Standard', status: 'FREE' },
   { id: 't7', name: 'T7', floor: 'Ground floor', capacity: 6, type: 'Booth', status: 'FREE' },
   { id: 't8', name: 'T8', floor: 'Ground floor', capacity: 6, type: 'Booth', status: 'FREE' },
-  { id: 't9', name: 'T9', floor: 'Ground floor', capacity: 2, type: 'Standard', status: 'RUNNING' },
+  { id: 't9', name: 'T9', floor: 'Ground floor', capacity: 2, type: 'Standard', status: 'FREE' },
   { id: 't10', name: 'T10', floor: 'Ground floor', capacity: 4, type: 'Standard', status: 'FREE' },
   { id: 't11', name: 'T11', floor: 'Ground floor', capacity: 4, type: 'AC', status: 'FREE' },
   { id: 't12', name: 'T12', floor: 'Ground floor', capacity: 8, type: 'VIP', status: 'FREE' },
@@ -106,6 +106,23 @@ interface TableState {
   setSelectedGuestCount: (count: number) => void;
   occupyTable: (tableId: string, orderId?: string, amount?: number, guestCount?: number, waiterId?: string | null, waiterName?: string | null) => void;
   releaseTable: (tableId: string) => void;
+  syncTablesFromOrders: (activeOrders: Array<{
+    id: string;
+    table_id?: string | null;
+    tableId?: string | null;
+    table_name?: string | null;
+    tableName?: string | null;
+    serving_status?: string | null;
+    servingStatus?: string | null;
+    guest_count?: number | null;
+    guestCount?: number | null;
+    waiter_id?: string | null;
+    waiterId?: string | null;
+    waiter_name?: string | null;
+    waiterName?: string | null;
+    total_amount?: number | null;
+    totalAmount?: number | null;
+  }>) => void;
   resetToDefaults: () => void;
 }
 
@@ -139,6 +156,12 @@ export const useTableStore = create<TableState>()(
       clearAssignedWaiter: () => set({ assignedWaiter: null }),
       setTableWaiter: (tableId, waiterId, waiterName) => {
         set((state) => ({
+          assignedWaiter:
+            state.selectedTableId === tableId
+              ? waiterId
+                ? { id: waiterId, name: waiterName || '' }
+                : null
+              : state.assignedWaiter,
           tables: state.tables.map((t) =>
             t.id === tableId
               ? { ...t, waiterId, waiterName, updatedAt: Date.now() }
@@ -173,9 +196,15 @@ export const useTableStore = create<TableState>()(
 
       selectTable: (table, guestCount) => {
         const count = guestCount || get().selectedGuestCount || 1;
+        const currentTable = get().tables.find((t) => t.id === table.id) || table;
+        const waiter = currentTable.waiterId
+          ? { id: currentTable.waiterId, name: currentTable.waiterName || '' }
+          : get().assignedWaiter;
+
         set((state) => ({
           selectedTableId: table.id,
           selectedGuestCount: count,
+          assignedWaiter: waiter,
           isTableModalOpen: false,
           orderType: 'Dine In',
           tables: state.tables.map((t) =>
@@ -292,7 +321,21 @@ export const useTableStore = create<TableState>()(
       },
 
       releaseTable: (tableId) => {
+        const currentTable = get().tables.find((t) => t.id === tableId);
+        if (currentTable) {
+          fetch('/api/dine-in-orders', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'releaseTable',
+              tableId: currentTable.id,
+              tableName: currentTable.name,
+            }),
+          }).catch(() => {});
+        }
+
         set((state) => ({
+          selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
           tables: state.tables.map((t) =>
             t.id === tableId
               ? {
@@ -309,6 +352,81 @@ export const useTableStore = create<TableState>()(
               : t
           ),
         }));
+      },
+
+      syncTablesFromOrders: (activeOrders) => {
+        const clean = (s?: string | null) => (s || '').toLowerCase().replace(/^(table\s*|tbl[-_]?)/, '').trim();
+
+        set((state) => {
+          const updatedTables = state.tables.map((table) => {
+            const matchingOrder = activeOrders.find((ord) => {
+              const ordTableId = ord.tableId || ord.table_id;
+              const ordTableName = ord.tableName || ord.table_name;
+              if (!ordTableId && !ordTableName) return false;
+
+              const tableIdClean = clean(table.id);
+              const tableNameClean = clean(table.name);
+              const ordIdClean = clean(ordTableId);
+              const ordNameClean = clean(ordTableName);
+
+              return (
+                table.id === ordTableId ||
+                table.name === ordTableId ||
+                table.name === ordTableName ||
+                `Table ${table.name}` === ordTableName ||
+                tableIdClean === ordIdClean ||
+                tableNameClean === ordIdClean ||
+                tableNameClean === ordNameClean ||
+                tableIdClean === ordNameClean
+              );
+            });
+
+            if (matchingOrder) {
+              const serving = matchingOrder.servingStatus || matchingOrder.serving_status || 'Pending';
+              const isBillPrinted = serving === 'Ready';
+              const guestCount = Number(matchingOrder.guestCount || matchingOrder.guest_count) || table.guestCount || 1;
+              const waiterId = matchingOrder.waiterId || matchingOrder.waiter_id || table.waiterId || null;
+              const waiterName = matchingOrder.waiterName || matchingOrder.waiter_name || table.waiterName || null;
+              const amount = Number(matchingOrder.totalAmount || matchingOrder.total_amount) || table.activeBillAmount;
+
+              return {
+                ...table,
+                status: (isBillPrinted ? 'BILL_PRINTED' : 'RUNNING') as TableStatus,
+                activeOrderId: matchingOrder.id,
+                activeBillAmount: amount,
+                guestCount,
+                waiterId,
+                waiterName,
+                servingStatus: serving,
+                updatedAt: Date.now(),
+              };
+            } else {
+              // If table is currently active in terminal selection, keep it
+              if (state.selectedTableId === table.id) {
+                return table;
+              }
+
+              // If table was marked running from a previous order that is now finished, free it
+              if (table.activeOrderId || table.status === 'RUNNING' || table.status === 'BILL_PRINTED') {
+                return {
+                  ...table,
+                  status: 'FREE' as TableStatus,
+                  activeOrderId: undefined,
+                  activeBillAmount: undefined,
+                  guestCount: undefined,
+                  waiterId: undefined,
+                  waiterName: undefined,
+                  servingStatus: undefined,
+                  updatedAt: Date.now(),
+                };
+              }
+
+              return table;
+            }
+          });
+
+          return { tables: updatedTables };
+        });
       },
 
       resetToDefaults: () => {

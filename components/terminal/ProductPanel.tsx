@@ -64,16 +64,9 @@ export default function ProductPanel() {
     setHighlightedIndex(0);
   }, [searchQuery, selectedCategoryId]);
 
-  // Load authoritative company terminal design and listen for live changes
+  // Load authoritative company terminal design on mount
   useEffect(() => {
-    design.fetchCompanyTerminalDesign();
-
-    const handleDesignChange = () => {
-      design.fetchCompanyTerminalDesign();
-    };
-
-    window.addEventListener('terminal-design-changed', handleDesignChange);
-    return () => window.removeEventListener('terminal-design-changed', handleDesignChange);
+    design.fetchCompanyTerminalDesign(undefined, true);
   }, []);
 
   useEffect(() => {
@@ -299,13 +292,32 @@ export default function ProductPanel() {
 
       {/* Modern Touch Mode Banner (When enabled in image grid) */}
       {!isSearchBased && isImageGrid && design.showTapBanner && (
-        <div className="mx-6 mt-3 mb-1 flex items-center justify-between rounded-2xl px-4 py-2.5 bg-theme-bar border border-theme shadow-lg text-white">
-          <div className="flex items-center gap-2 text-xs font-bold text-white/90">
+        <div
+          style={{
+            backgroundColor: design.bannerBgColor || '#1F0715',
+            color: design.bannerTextColor || '#f4f4f5',
+          }}
+          className="mx-6 mt-3 mb-1 flex items-center justify-between rounded-2xl px-4 py-2.5 border border-theme shadow-lg"
+        >
+          <div
+            className="flex items-center gap-2 text-xs font-bold"
+            style={{ color: design.bannerTextColor || '#f4f4f5' }}
+          >
             <span className="text-sm select-none">👆</span>
             <span>{design.tapBannerText || 'Tap to Add to Cart • Double-tap to +1 Qty'}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-black tracking-wider font-mono text-emerald-300 bg-black/40 px-2.5 py-1 rounded-full border border-emerald-400/40">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div
+            className="flex items-center gap-1.5 text-[10px] font-black tracking-wider font-mono px-2.5 py-1 rounded-full border"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.45)',
+              color: design.accentColor || 'var(--theme-accent, #DB2777)',
+              borderColor: design.activeBorderColor || 'var(--theme-active-border, #DB2777)',
+            }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full animate-pulse"
+              style={{ backgroundColor: design.accentColor || 'var(--theme-accent, #DB2777)' }}
+            />
             <span>{design.tapBannerBadgeText || 'TAP MODE ACTIVE'}</span>
           </div>
         </div>

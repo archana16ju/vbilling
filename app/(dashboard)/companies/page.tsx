@@ -119,6 +119,17 @@ export default function CompaniesPage() {
     }
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchCompanies();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
+  };
+
   useEffect(() => {
     fetchCompanies();
   }, []);
@@ -375,16 +386,27 @@ export default function CompaniesPage() {
                 : 'Select your assigned company to create and manage cashier accounts.'}
             </p>
           </div>
-          {isSuperAdmin && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => handleOpenCompanyModal()}
-              style={{ color: '#0f172a' }}
-              className="inline-flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-2 rounded-xl bg-black/30 hover:bg-black/50 border border-white/20 text-white px-3.5 py-2.5 text-xs font-bold shadow-lg active:scale-95 transition cursor-pointer disabled:opacity-50"
+              title="Refresh companies"
             >
-              <Plus className="h-4 w-4 stroke-[3]" />
-              Create Company
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-pink-300" : "text-zinc-200"}`} />
+              Refresh
             </button>
-          )}
+            {isSuperAdmin && (
+              <button
+                onClick={() => handleOpenCompanyModal()}
+                style={{ color: '#0f172a' }}
+                className="inline-flex items-center gap-2 rounded-xl bg-white text-zinc-950 px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg hover:bg-pink-100 active:scale-95 transition cursor-pointer"
+              >
+                <Plus className="h-4 w-4 stroke-[3]" />
+                Create Company
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

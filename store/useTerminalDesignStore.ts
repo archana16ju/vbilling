@@ -18,6 +18,7 @@ export interface TerminalDesignState {
 
   // Themes and colors
   themePreset: 'black-cherry' | 'ocean-blue' | 'royal-purple' | 'emerald-green' | 'sunset-orange' | 'custom' | string;
+  themeMode: 'dark' | 'light' | 'system';
   accentColor: string;
   activeBorderColor: string;
   bannerBgColor: string;
@@ -35,6 +36,7 @@ export interface TerminalDesignState {
 
   // Persistence metadata
   isLoaded: boolean;
+  isFetching: boolean;
   isSaving: boolean;
   isCustom: boolean;
   activeCompanyId: string;
@@ -42,7 +44,7 @@ export interface TerminalDesignState {
   // Actions
   updateDesign: (updates: Partial<Omit<TerminalDesignState, 'updateDesign' | 'resetDesign' | 'fetchCompanyTerminalDesign' | 'saveToDatabase' | 'resetInDatabase'>>) => void;
   resetDesign: () => void;
-  fetchCompanyTerminalDesign: (companyId?: string) => Promise<void>;
+  fetchCompanyTerminalDesign: (companyId?: string, force?: boolean) => Promise<void>;
   saveToDatabase: (companyId?: string) => Promise<{ success: boolean; error?: string }>;
   resetInDatabase: (companyId?: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -100,6 +102,7 @@ const initialDesignState: Omit<
 
   // Default Theme is Black Cherry (preserving exact HEX values)
   themePreset: 'black-cherry',
+  themeMode: 'dark',
   accentColor: '#DB2777',
   activeBorderColor: '#DB2777',
   bannerBgColor: '#1F0715',
@@ -117,6 +120,7 @@ const initialDesignState: Omit<
 
   // Metadata
   isLoaded: false,
+  isFetching: false,
   isSaving: false,
   isCustom: false,
   activeCompanyId: '',
@@ -130,6 +134,10 @@ function broadcastDesignChange(state: Partial<TerminalDesignState>) {
     } catch {}
   }
 }
+
+// In-flight request deduplication trackers
+let inFlightFetchPromise: Promise<void> | null = null;
+let inFlightCompanyId: string | undefined = undefined;
 
 export const useTerminalDesignStore = create<TerminalDesignState>()(
   persist(
@@ -151,30 +159,66 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
         });
       },
 
-      fetchCompanyTerminalDesign: async (companyId?: string) => {
-        try {
-          const url = companyId
-            ? `/api/companies/terminal-design?companyId=${encodeURIComponent(companyId)}`
-            : '/api/companies/terminal-design';
+      fetchCompanyTerminalDesign: async (companyId?: string, force = false) => {
+        const state = get();
+        const cookieCompanyId =
+          typeof document !== 'undefined'
+            ? document.cookie.match(/(^| )auth_company_id=([^;]+)/)?.[2] || ''
+            : '';
+        const targetCompanyId = companyId || cookieCompanyId;
 
-          const res = await fetch(url, { cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.success && data.design) {
-              set((state) => ({
-                ...state,
-                ...data.design,
-                isLoaded: true,
-                isCustom: !!data.isCustom,
-                activeCompanyId: data.companyId || state.activeCompanyId,
-              }));
-              broadcastDesignChange(data.design);
-            }
+        // 1. Skip redundant fetch if already loaded for this company (unless force reload is requested)
+        if (!force && state.isLoaded && !state.isFetching) {
+          if (targetCompanyId && state.activeCompanyId === targetCompanyId) {
+            return;
           }
-        } catch (err) {
-          console.warn('Failed to fetch company terminal design:', err);
-          set((state) => ({ ...state, isLoaded: true }));
+          if (!targetCompanyId && state.activeCompanyId) {
+            return;
+          }
         }
+
+        // 2. Request deduplication: reuse active promise if a fetch for the same target is already in flight
+        if (inFlightFetchPromise && inFlightCompanyId === targetCompanyId && !force) {
+          return inFlightFetchPromise;
+        }
+
+        set({ isFetching: true });
+        inFlightCompanyId = targetCompanyId;
+
+        inFlightFetchPromise = (async () => {
+          try {
+            const url = targetCompanyId
+              ? `/api/companies/terminal-design?companyId=${encodeURIComponent(targetCompanyId)}`
+              : '/api/companies/terminal-design';
+
+            const res = await fetch(url, { cache: 'no-store' });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.success && data.design) {
+                set((s) => ({
+                  ...s,
+                  ...data.design,
+                  isLoaded: true,
+                  isFetching: false,
+                  isCustom: !!data.isCustom,
+                  activeCompanyId: data.companyId || targetCompanyId || s.activeCompanyId,
+                }));
+              } else {
+                set({ isLoaded: true, isFetching: false });
+              }
+            } else {
+              set({ isLoaded: true, isFetching: false });
+            }
+          } catch (err) {
+            console.warn('Failed to fetch company terminal design:', err);
+            set({ isLoaded: true, isFetching: false });
+          } finally {
+            inFlightFetchPromise = null;
+            inFlightCompanyId = undefined;
+          }
+        })();
+
+        return inFlightFetchPromise;
       },
 
       saveToDatabase: async (companyId?: string) => {
@@ -191,6 +235,7 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
             pricePlacement: state.pricePlacement,
             priceStyle: state.priceStyle,
             themePreset: state.themePreset,
+            themeMode: state.themeMode || 'dark',
             accentColor: state.accentColor,
             activeBorderColor: state.activeBorderColor,
             bannerBgColor: state.bannerBgColor,
@@ -214,7 +259,13 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
 
           const data = await res.json();
           if (res.ok && data.success) {
-            set({ isSaving: false, isCustom: true });
+            set((s) => ({
+              ...s,
+              ...designPayload,
+              isSaving: false,
+              isCustom: true,
+              activeCompanyId: data.companyId || companyId || s.activeCompanyId,
+            }));
             broadcastDesignChange(designPayload);
             return { success: true };
           } else {
@@ -241,11 +292,13 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
 
           const data = await res.json();
           if (res.ok && data.success) {
-            set(() => ({
+            set((s) => ({
+              ...s,
               ...initialDesignState,
               isLoaded: true,
               isSaving: false,
               isCustom: false,
+              activeCompanyId: data.companyId || companyId || s.activeCompanyId,
             }));
             broadcastDesignChange(initialDesignState);
             return { success: true };
@@ -262,10 +315,33 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
     {
       name: 'terminal-design-storage',
       version: 2,
+      partialize: (state) => {
+        // Exclude transient in-flight states & isLoaded flag from storage so server updates always re-validate
+        const { isFetching, isSaving, isLoaded, ...rest } = state;
+        return rest;
+      },
       migrate: (persistedState: any) => ({
         ...initialDesignState,
         ...(persistedState as any),
+        isLoaded: false,
+        isFetching: false,
+        isSaving: false,
       }),
     }
   )
 );
+
+// Cross-tab and window reactive synchronization
+if (typeof window !== 'undefined') {
+  window.addEventListener('terminal-design-changed', (e: any) => {
+    if (e?.detail) {
+      useTerminalDesignStore.setState((s) => ({ ...s, ...e.detail }));
+    }
+  });
+
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === 'terminal_design_broadcast_ts' || e.key === 'terminal-design-storage') {
+      useTerminalDesignStore.getState().fetchCompanyTerminalDesign(undefined, true);
+    }
+  });
+}

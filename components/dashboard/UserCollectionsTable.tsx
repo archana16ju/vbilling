@@ -14,6 +14,9 @@ import {
   CircleDollarSign,
   CheckCircle2,
   XCircle,
+  ChefHat,
+  UtensilsCrossed,
+  Globe,
 } from 'lucide-react';
 
 export interface UserStatsItem {
@@ -119,7 +122,13 @@ export default function UserCollectionsTable({
             ) : (
               usersList.map((user) => {
                 const isSelected = selectedUserId.toLowerCase() === user.username.toLowerCase();
-                const isAdmin = user.role === 'company_admin';
+                const normRole = (user.role || '').toLowerCase().trim();
+                const isSuperAdmin = normRole === 'super_admin';
+                const isAdmin = normRole === 'company_admin' || normRole === 'admin';
+                const isManager = normRole === 'manager';
+                const isChef = normRole === 'chef';
+                const isWaiter = normRole === 'waiter';
+                const isOnline = normRole === 'online';
                 const hasSales = user.totalBills > 0;
 
                 return (
@@ -135,8 +144,16 @@ export default function UserCollectionsTable({
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
                         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-black text-xs ${
-                          isAdmin 
+                          isSuperAdmin || isAdmin 
                             ? 'bg-theme-bar border border-theme text-white shadow-theme-glow' 
+                            : isManager
+                            ? 'bg-purple-950/80 border border-purple-700/60 text-purple-300'
+                            : isChef
+                            ? 'bg-amber-950/80 border border-amber-700/60 text-amber-300'
+                            : isWaiter
+                            ? 'bg-emerald-950/80 border border-emerald-700/60 text-emerald-300'
+                            : isOnline
+                            ? 'bg-indigo-950/80 border border-indigo-700/60 text-indigo-300'
                             : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
                         }`}>
                           {user.name.slice(0, 2).toUpperCase()}
@@ -154,25 +171,35 @@ export default function UserCollectionsTable({
 
                     {/* Role Badge */}
                     <td className="py-3.5 px-3">
-                      {isAdmin ? (
+                      {isSuperAdmin ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-950/60 text-rose-300 border border-rose-800/70">
+                          <ShieldCheck className="h-3 w-3" />
+                          Super Admin
+                        </span>
+                      ) : isAdmin ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black theme-badge border border-theme">
                           <ShieldCheck className="h-3 w-3" />
                           Admin
                         </span>
-                      ) : user.role === 'manager' ? (
+                      ) : isManager ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/60 text-purple-300 border border-purple-800/70">
                           <UserCheck className="h-3 w-3" />
                           Manager
                         </span>
-                      ) : user.role === 'chef' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-950/60 text-orange-300 border border-orange-800/70">
-                          <UserCheck className="h-3 w-3" />
+                      ) : isChef ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-300 border border-amber-800/70">
+                          <ChefHat className="h-3 w-3" />
                           Chef
                         </span>
-                      ) : user.role === 'waiter' ? (
+                      ) : isWaiter ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800/70">
-                          <UserCheck className="h-3 w-3" />
+                          <UtensilsCrossed className="h-3 w-3" />
                           Waiter
+                        </span>
+                      ) : isOnline ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-800/70">
+                          <Globe className="h-3 w-3" />
+                          Online API
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-950/60 text-cyan-300 border border-cyan-800/70">

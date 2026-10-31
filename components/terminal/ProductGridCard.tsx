@@ -10,9 +10,15 @@ interface ProductGridCardProps {
   product: Product;
   isActive?: boolean;
   onSelect?: () => void;
+  themeMode?: 'dark' | 'light';
 }
 
-export default function ProductGridCard({ product, isActive: propIsActive, onSelect }: ProductGridCardProps) {
+export default function ProductGridCard({
+  product,
+  isActive: propIsActive,
+  onSelect,
+  themeMode: propThemeMode,
+}: ProductGridCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart);
   const cart = useTerminalStore((state) => state.cart);
   
@@ -112,6 +118,8 @@ export default function ProductGridCard({ product, isActive: propIsActive, onSel
       }
     : undefined;
 
+  const isLightMode = propThemeMode ? propThemeMode === 'light' : design.themeMode === 'light';
+
   return (
     <div
       onClick={handleCardClick}
@@ -121,6 +129,8 @@ export default function ProductGridCard({ product, isActive: propIsActive, onSel
       } ${getAspectRatioClass()} ${
         isActive
           ? 'border-[3px] border-theme z-10 scale-[1.01] shadow-theme-glow'
+          : isLightMode
+          ? 'border border-zinc-200 hover:border-theme hover:shadow-xl bg-white shadow-md'
           : 'border border-zinc-800 hover:border-theme hover:shadow-xl bg-zinc-900 shadow-md'
       }`}
     >
@@ -190,6 +200,8 @@ export default function ProductGridCard({ product, isActive: propIsActive, onSel
               }
             : design.priceStyle === 'white'
             ? { color: '#0f172a', backgroundColor: '#ffffff' }
+            : design.priceStyle === 'glass'
+            ? { color: '#ffffff', backgroundColor: 'rgba(0, 0, 0, 0.65)' }
             : { color: '#ffffff', backgroundColor: '#1e293b' }
         }
         className={`absolute ${getPricePositionClass()} z-10 rounded-lg px-2.5 py-1 text-sm sm:text-base font-bold tracking-tight transition-transform duration-150 group-hover:scale-105 ${getPriceBadgeClass()}`}

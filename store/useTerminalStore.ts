@@ -25,6 +25,7 @@ export type Sale = {
   roundOff?: number
   total: number
   paymentMethod: string
+  paymentStatus?: string
   timestamp: number
   amountReceived?: number
   changeAmount?: number
@@ -122,6 +123,7 @@ type TerminalState = {
   updateOfflineSaleStatus: (id: string, status: 'COMPLETED' | 'PENDING_SYNC') => void
   markSaleCompleted: (id: string) => void
   updateSalePayment: (billId: string, paymentMethod: string, cashReceived?: number, changeReturned?: number) => void
+  refundSale: (billId: string) => void
 
   printerType: string
   setPrinterType: (type: string) => void
@@ -618,6 +620,25 @@ ${design?.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.to
             paymentMethod,
             amountReceived: cashReceived,
             changeAmount: changeReturned,
+          }
+        : s
+    ),
+  })),
+
+  refundSale: (billId) => set((state) => ({
+    sales: state.sales.map((s) =>
+      s.id === billId || (s as any).billNumber === billId
+        ? {
+            ...s,
+            paymentStatus: 'refunded',
+          }
+        : s
+    ),
+    offlineQueue: state.offlineQueue.map((s) =>
+      s.id === billId || (s as any).billNumber === billId
+        ? {
+            ...s,
+            paymentStatus: 'refunded',
           }
         : s
     ),

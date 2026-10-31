@@ -49,6 +49,19 @@ function mapRowToCompany(row: any): Company {
   };
 }
 
+// Short-lived in-memory cache for authorized company context to accelerate navigation
+const companyContextCache = new Map<string, { company: Company; expiresAt: number }>();
+
+export function clearCompanyContextCache(targetId?: string) {
+  if (targetId) {
+    for (const key of companyContextCache.keys()) {
+      if (key.includes(targetId)) companyContextCache.delete(key);
+    }
+  } else {
+    companyContextCache.clear();
+  }
+}
+
 /**
  * Server-side authorization check:
  * Resolves and validates the active company for the logged-in user.
@@ -59,10 +72,7 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
     throw new Error("getAuthorizedCompanyContext is strictly available in local MySQL mode.");
   }
 
-  await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
   const cookieStore = await cookies();
-
   const session = await getSession();
   const authId = session?.userId || cookieStore.get("auth_id")?.value;
   const rawRole = session?.role || cookieStore.get("auth_role")?.value;
@@ -73,6 +83,15 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
     throw new Error("Unauthorized: User is not authenticated.");
   }
 
+  const cacheKey = `${authRole}:${authId || 'no_id'}:${requestedCompanyId || 'default'}`;
+  const cached = companyContextCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.company;
+  }
+
+  await ensureLocalMySqlInitialized();
+  const pool = getMysqlPool();
+
   // 1. SUPER_ADMIN USER: Can view any company context
   if (authRole === "super_admin") {
     if (requestedCompanyId) {
@@ -81,7 +100,9 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
         [requestedCompanyId]
       );
       if (rows && rows.length > 0) {
-        return mapRowToCompany(rows[0]);
+        const comp = mapRowToCompany(rows[0]);
+        companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
+        return comp;
       }
     }
 
@@ -94,6 +115,7 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
       try {
         cookieStore.set("auth_company_id", defaultCompany.id, { path: "/" });
       } catch {}
+      companyContextCache.set(cacheKey, { company: defaultCompany, expiresAt: Date.now() + 5000 });
       return defaultCompany;
     }
 
@@ -119,6 +141,7 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
       try {
         cookieStore.set("auth_company_id", assignedComp.id, { path: "/" });
       } catch {}
+      companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
       return assignedComp;
     }
 
@@ -135,6 +158,7 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
       try {
         cookieStore.set("auth_company_id", assignedComp.id, { path: "/" });
       } catch {}
+      companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
       return assignedComp;
     }
 
@@ -160,7 +184,9 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
   if (requestedCompanyId) {
     const matched = assignedRows.find((r) => r.id === requestedCompanyId);
     if (matched) {
-      return mapRowToCompany(matched);
+      const comp = mapRowToCompany(matched);
+      companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
+      return comp;
     }
   }
 
@@ -169,6 +195,7 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
     cookieStore.set("auth_company_id", authorizedCompany.id, { path: "/" });
   } catch {}
 
+  companyContextCache.set(cacheKey, { company: authorizedCompany, expiresAt: Date.now() + 5000 });
   return authorizedCompany;
 }
 

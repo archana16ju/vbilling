@@ -66,7 +66,8 @@ export default function SuperAdminPage() {
 
   // Auto-Refresh state
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(30); // 30s default
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Analytics API Data State
@@ -93,6 +94,7 @@ export default function SuperAdminPage() {
 
   // 1. Initial Auth & Data Fetching
   useEffect(() => {
+    setIsMounted(true);
     const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
     const r = match ? match[2] : null;
     setRole(r);
@@ -346,6 +348,18 @@ export default function SuperAdminPage() {
 
         {/* Global Toolbar Buttons */}
         <div className="flex items-center gap-2.5 relative z-10 flex-wrap shrink-0">
+          <button
+            onClick={() => {
+              fetchCompanies();
+              fetchAnalytics();
+            }}
+            disabled={isLoadingCompanies || isAnalyticsLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 hover:bg-black/60 px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer shadow-sm disabled:opacity-50"
+            title="Refresh Companies & Analytics"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoadingCompanies || isAnalyticsLoading ? 'animate-spin text-pink-400' : 'text-zinc-200'}`} />
+            <span>Refresh</span>
+          </button>
           <Link
             href="/users"
             className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/40 hover:bg-black/60 px-3.5 py-2 text-xs font-bold text-white transition cursor-pointer shadow-sm"
@@ -452,8 +466,8 @@ export default function SuperAdminPage() {
             <option value={120}>2 mins</option>
             <option value={0}>Manual Only</option>
           </select>
-          <span className="text-[10px] text-zinc-500 font-mono hidden md:inline">
-            Updated: {lastRefreshedAt.toLocaleTimeString()}
+          <span className="text-[10px] text-zinc-500 font-mono hidden md:inline" suppressHydrationWarning>
+            {isMounted && lastRefreshedAt ? `Updated: ${lastRefreshedAt.toLocaleTimeString()}` : 'Updated: --:--:--'}
           </span>
         </div>
       </div>

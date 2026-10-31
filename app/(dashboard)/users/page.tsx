@@ -16,6 +16,7 @@ import {
   Utensils,
   CreditCard,
   ClipboardList,
+  RefreshCw,
 } from 'lucide-react';
 
 interface CompanyOption {
@@ -70,6 +71,17 @@ export default function UsersPage() {
       }
     } catch (err) {
       console.error('Failed to load companies for dropdown:', err);
+    }
+  };
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([fetchUsers(), fetchCompanies()]);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
     }
   };
 
@@ -328,14 +340,25 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {(isSuperAdmin || isCompanyAdmin) && (
+          <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={() => handleOpenForm()}
-              className="flex items-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer shrink-0"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 rounded-xl bg-black/30 hover:bg-black/50 border border-white/20 text-white px-4 py-2.5 text-sm font-semibold shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh users"
             >
-              <UserPlus className="h-4 w-4" /> Add User
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-pink-300" : "text-zinc-200"}`} />
+              <span>Refresh</span>
             </button>
-          )}
+            {(isSuperAdmin || isCompanyAdmin) && (
+              <button
+                onClick={() => handleOpenForm()}
+                className="flex items-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-sm font-bold text-white shadow-lg active:scale-95 transition-all cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4" /> Add User
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

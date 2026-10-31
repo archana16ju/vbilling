@@ -385,6 +385,7 @@ export default function ReportsPage() {
               title="Refresh Report Data"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isPending ? 'animate-spin text-pink-400' : 'text-zinc-400'}`} />
+              <span>Refresh</span>
             </button>
             <button
               onClick={handleExportCsv}
@@ -617,7 +618,7 @@ export default function ReportsPage() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-lg space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white">Sales by staff</h3>
-              <span className="text-xs text-zinc-500 font-medium">
+              <span className="text-xs text-zinc-500 font-medium" suppressHydrationWarning>
                 {reportData?.chartData?.dateLabel || new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>

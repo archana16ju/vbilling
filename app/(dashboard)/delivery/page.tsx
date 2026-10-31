@@ -717,7 +717,7 @@ export default function DeliveryManagementPage() {
                           </td>
 
                           {/* Order Time */}
-                          <td className="px-5 py-4 whitespace-nowrap text-zinc-400">
+                          <td className="px-5 py-4 whitespace-nowrap text-zinc-400" suppressHydrationWarning>
                             <div>{delivery.orderTime ? new Date(delivery.orderTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</div>
                             <div className="text-[10px] text-zinc-500">{delivery.orderTime ? new Date(delivery.orderTime).toLocaleDateString() : ''}</div>
                           </td>

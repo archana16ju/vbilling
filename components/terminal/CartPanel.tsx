@@ -79,6 +79,7 @@ export default function CartPanel() {
     assignedWaiter,
     clearAssignedWaiter,
     releaseTable,
+    occupyTable,
     isTableModalOpen,
     setIsTableModalOpen,
     selectTable,
@@ -142,6 +143,9 @@ export default function CartPanel() {
       finalAmount?: number;
       paymentMethodOverride?: string;
       isBillOnly?: boolean;
+      keepTableOccupied?: boolean;
+      isSendToKitchen?: boolean;
+      preGeneratedBillId?: string;
     } = {}
   ) => {
     if (cartSafe.length === 0 || isProcessing) return;
@@ -238,10 +242,12 @@ export default function CartPanel() {
       orderNote: orderNote || undefined,
       customerName: selectedCustomer ? selectedCustomer.name : undefined,
       customerPhone: selectedCustomer ? selectedCustomer.phone : undefined,
+      paymentStatus: opts.isBillOnly ? 'unpaid' : 'paid',
+      servingStatus: opts.isSendToKitchen ? 'Pending' : (orderType === 'Dine In' ? 'Served' : 'Completed'),
     };
 
     try {
-      const billId = generateNextBillId();
+      const billId = opts.preGeneratedBillId || generateNextBillId();
 
       // Local MySQL direct persistence
       if (isLocalMode) {
@@ -256,13 +262,30 @@ export default function CartPanel() {
             const completedSale = { ...saleDataToComplete, syncStatus: 'COMPLETED' as const };
             completeSale(completedSale, billId);
             if (selectedTable) {
-              releaseTable(selectedTable.id);
+              if (opts.keepTableOccupied) {
+                occupyTable(
+                  selectedTable.id,
+                  billId,
+                  subtotal,
+                  selectedGuestCount,
+                  assignedWaiter?.id || selectedTable.waiterId,
+                  assignedWaiter?.name || selectedTable.waiterName
+                );
+              } else {
+                releaseTable(selectedTable.id);
+                clearAssignedWaiter?.();
+              }
+            } else if (!opts.keepTableOccupied) {
+              clearAssignedWaiter?.();
             }
-            clearAssignedWaiter?.();
             setShowCashModal(false);
             setAmountReceivedStr('');
             showActionNotification(
-              opts.isBillOnly ? `Bill Only generated: #${billId}` : `Sale completed: #${billId}`
+              opts.isSendToKitchen
+                ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
+                : opts.isBillOnly
+                ? `Bill Only generated: #${billId}`
+                : `Sale completed: #${billId}`
             );
             return;
           }
@@ -288,13 +311,30 @@ export default function CartPanel() {
               const completedSale = { ...saleDataToComplete, syncStatus: 'COMPLETED' as const };
               completeSale(completedSale, billId);
               if (selectedTable) {
-                releaseTable(selectedTable.id);
+                if (opts.keepTableOccupied) {
+                  occupyTable(
+                    selectedTable.id,
+                    billId,
+                    subtotal,
+                    selectedGuestCount,
+                    assignedWaiter?.id || selectedTable.waiterId,
+                    assignedWaiter?.name || selectedTable.waiterName
+                  );
+                } else {
+                  releaseTable(selectedTable.id);
+                  clearAssignedWaiter?.();
+                }
+              } else if (!opts.keepTableOccupied) {
+                clearAssignedWaiter?.();
               }
-              clearAssignedWaiter?.();
               setShowCashModal(false);
               setAmountReceivedStr('');
               showActionNotification(
-                opts.isBillOnly ? `Bill Only generated: #${billId}` : `Sale completed: #${billId}`
+                opts.isSendToKitchen
+                  ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
+                  : opts.isBillOnly
+                  ? `Bill Only generated: #${billId}`
+                  : `Sale completed: #${billId}`
               );
               return;
             }
@@ -317,13 +357,30 @@ export default function CartPanel() {
         addOfflineSale(offlineSale as Sale);
         completeSale(offlineSale as Sale, billId);
         if (selectedTable) {
-          releaseTable(selectedTable.id);
+          if (opts.keepTableOccupied) {
+            occupyTable(
+              selectedTable.id,
+              billId,
+              subtotal,
+              selectedGuestCount,
+              assignedWaiter?.id || selectedTable.waiterId,
+              assignedWaiter?.name || selectedTable.waiterName
+            );
+          } else {
+            releaseTable(selectedTable.id);
+            clearAssignedWaiter?.();
+          }
+        } else if (!opts.keepTableOccupied) {
+          clearAssignedWaiter?.();
         }
-        clearAssignedWaiter?.();
         setShowCashModal(false);
         setAmountReceivedStr('');
         showActionNotification(
-          opts.isBillOnly ? `Bill Only saved: #${billId}` : `Sale completed: #${billId}`
+          opts.isSendToKitchen
+            ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
+            : opts.isBillOnly
+            ? `Bill Only saved: #${billId}`
+            : `Sale completed: #${billId}`
         );
       }
     } catch (e) {
@@ -353,25 +410,63 @@ export default function CartPanel() {
     handlePaymentSubmit({ isBillOnly: true, paymentMethodOverride: 'Bill Only' });
   };
 
-  const handleSendToKitchen = () => {
-    if (cartSafe.length === 0) return;
+  const handleSendToKitchen = async () => {
+    if (cartSafe.length === 0 || isProcessing) return;
+
+    const billId = generateNextBillId();
     const ticketItems = cartSafe.map((item) => ({
       name: item.product.name,
       quantity: item.quantity,
+      price: item.product.price,
       notes: '',
     }));
 
+    const effectiveWaiterId = assignedWaiter?.id || selectedTable?.waiterId || null;
+    const effectiveWaiterName = assignedWaiter?.name || selectedTable?.waiterName || null;
+    const tableName = selectedTable ? `Table ${selectedTable.name}` : 'Dine In';
+
+    // 1. Create KOT ticket in kitchen store
     useKitchenStore.getState().addTicket({
+      orderId: billId,
       orderType: orderType || 'Dine In',
-      tableOrStation: selectedTable ? `Table ${selectedTable.name}` : undefined,
+      tableOrStation: tableName,
       tableId: selectedTable?.id,
-      waiterId: assignedWaiter?.id || selectedTable?.waiterId,
-      waiterName: assignedWaiter?.name || selectedTable?.waiterName,
+      waiterId: effectiveWaiterId,
+      waiterName: effectiveWaiterName,
       items: ticketItems,
       notes: orderNote || undefined,
     });
 
-    showActionNotification('Order sent to Kitchen (KOT Created)!');
+    // 2. Persist to backend database for Orders Collection & Waiter station
+    fetch('/api/dine-in-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: billId,
+        orderNumber: billId,
+        kotId: billId,
+        billId: billId,
+        tableId: selectedTable?.id || null,
+        tableName: tableName,
+        waiterId: effectiveWaiterId,
+        waiterName: effectiveWaiterName,
+        guestCount: selectedGuestCount || 1,
+        items: ticketItems,
+        totalAmount: subtotal,
+        kitchenStatus: 'PREPARING',
+        servingStatus: 'Pending',
+        notes: orderNote || null,
+      }),
+    }).catch((err) => console.error('Failed to save dine-in order:', err));
+
+    // 3. Record as an unsettled bill in the Sales collection ('Bill Only') and keep table occupied
+    await handlePaymentSubmit({
+      isBillOnly: true,
+      paymentMethodOverride: 'Bill Only',
+      keepTableOccupied: true,
+      isSendToKitchen: true,
+      preGeneratedBillId: billId,
+    });
   };
 
   const handleSendBillAndSettle = () => {

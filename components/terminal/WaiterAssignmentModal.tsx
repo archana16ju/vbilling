@@ -48,17 +48,32 @@ export default function WaiterAssignmentModal({
   const [selectedWaiter, setSelectedWaiter] = useState<{ id: string; name: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isNobodySelected, setIsNobodySelected] = useState(false);
+  const [isWaiterRole, setIsWaiterRole] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
+
+    const cookieMatch = document.cookie.match(/(^| )auth_role=([^;]+)/);
+    const cookieRole = cookieMatch ? cookieMatch[2] : null;
+    if (cookieRole === 'waiter') {
+      setIsWaiterRole(true);
+    }
 
     setIsLoading(true);
     fetch('/api/waiters')
       .then((res) => res.json())
       .then((data) => {
+        const waiterFlag = Boolean(data.isWaiterRole || cookieRole === 'waiter');
+        setIsWaiterRole(waiterFlag);
+
         if (data.success && Array.isArray(data.waiters)) {
           setWaiters(data.waiters);
-          if (currentWaiterId) {
+
+          if (waiterFlag && data.waiters.length > 0) {
+            // When waiter is logged in, strictly auto-select only their own waiter profile
+            setSelectedWaiter({ id: data.waiters[0].id, name: data.waiters[0].name });
+            setIsNobodySelected(false);
+          } else if (currentWaiterId) {
             const found = data.waiters.find(
               (w: WaiterItem) => w.id === currentWaiterId || w.userId === currentWaiterId
             );
@@ -161,72 +176,76 @@ export default function WaiterAssignmentModal({
           </div>
         </div>
 
-        {/* Search Bar & Fast Filter */}
-        <div className="p-4 border-b border-zinc-800 bg-zinc-950/60">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search available waiters..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-2xl bg-zinc-900 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-theme transition-colors shadow-inner"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+        {/* Search Bar & Fast Filter (hidden for single waiter view) */}
+        {!isWaiterRole && (
+          <div className="p-4 border-b border-zinc-800 bg-zinc-950/60">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search available waiters..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl bg-zinc-900 border border-zinc-700/80 pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 outline-none focus:border-theme transition-colors shadow-inner"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Waiters Selection List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2.5 no-scrollbar">
-          {/* Nobody Option Card */}
-          <div
-            onClick={handleSelectNobody}
-            className={`group relative flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer ${
-              isNobodySelected
-                ? 'border-zinc-400 bg-zinc-800/80 shadow-md ring-2 ring-zinc-500/30'
-                : 'border-zinc-800/80 bg-zinc-950/40 hover:bg-zinc-800/40 hover:border-zinc-700'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${
-                  isNobodySelected
-                    ? 'border-zinc-400 bg-zinc-700 text-white'
-                    : 'border-zinc-800 bg-zinc-900 text-zinc-500 group-hover:text-zinc-300'
-                }`}
-              >
-                <UserX className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">Nobody</span>
-                  <span className="rounded-md bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
-                    Unassigned
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  Send to kitchen without assigning. Can assign a waiter later.
-                </p>
-              </div>
-            </div>
-
+          {/* Nobody Option Card (hidden for waiter role) */}
+          {!isWaiterRole && (
             <div
-              className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
+              onClick={handleSelectNobody}
+              className={`group relative flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer ${
                 isNobodySelected
-                  ? 'border-zinc-300 bg-white text-zinc-950 font-black'
-                  : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-500'
+                  ? 'border-zinc-400 bg-zinc-800/80 shadow-md ring-2 ring-zinc-500/30'
+                  : 'border-zinc-800/80 bg-zinc-950/40 hover:bg-zinc-800/40 hover:border-zinc-700'
               }`}
             >
-              {isNobodySelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${
+                    isNobodySelected
+                      ? 'border-zinc-400 bg-zinc-700 text-white'
+                      : 'border-zinc-800 bg-zinc-900 text-zinc-500 group-hover:text-zinc-300'
+                  }`}
+                >
+                  <UserX className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">Nobody</span>
+                    <span className="rounded-md bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">
+                      Unassigned
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    Send to kitchen without assigning. Can assign a waiter later.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
+                  isNobodySelected
+                    ? 'border-zinc-300 bg-white text-zinc-950 font-black'
+                    : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-500'
+                }`}
+              >
+                {isNobodySelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="relative py-1">
             <div className="absolute inset-0 flex items-center">
@@ -320,13 +339,23 @@ export default function WaiterAssignmentModal({
 
         {/* Modal Actions Footer */}
         <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleSkipOrNobody}
-            className="rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white px-4 py-2.5 text-xs font-bold text-zinc-400 transition cursor-pointer"
-          >
-            Skip / Nobody
-          </button>
+          {isWaiterRole ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white px-4 py-2.5 text-xs font-bold text-zinc-400 transition cursor-pointer"
+            >
+              Cancel
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSkipOrNobody}
+              className="rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white px-4 py-2.5 text-xs font-bold text-zinc-400 transition cursor-pointer"
+            >
+              Skip / Nobody
+            </button>
+          )}
 
           <button
             type="button"

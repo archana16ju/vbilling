@@ -15,6 +15,7 @@ import {
   FileText,
   AlertCircle,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getStaffList,
@@ -191,6 +192,23 @@ export default function StaffPage() {
     setLoading(false);
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (activeTab === 'today') await loadTodayData();
+      else if (activeTab === 'month') await loadMonthData();
+      else if (activeTab === 'report') await loadReportData();
+      else if (activeTab === 'salaries') await loadSalariesData();
+      else if (activeTab === 'payroll') await loadPayrollData();
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 300);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'today') loadTodayData();
     else if (activeTab === 'month') loadMonthData();
@@ -332,6 +350,16 @@ export default function StaffPage() {
             );
           })}
         </div>
+
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+          title="Refresh staff data"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin text-emerald-400" : "text-zinc-400"}`} />
+          <span>Refresh</span>
+        </button>
 
         <button
           onClick={() => setIsAddStaffOpen(true)}

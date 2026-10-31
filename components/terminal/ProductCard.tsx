@@ -1,12 +1,16 @@
 'use client'
 import { Product } from "@/lib/mock-data"
 import { useTerminalStore } from "@/store/useTerminalStore"
+import { useTerminalDesignStore } from "@/store/useTerminalDesignStore"
 
 export default function ProductCard({ product }: { product: Product }) {
   const addToCart = useTerminalStore((state) => state.addToCart)
+  const design = useTerminalDesignStore()
   
   if (!product) return null;
   const productName = product.name || 'Unknown Product';
+  const currency = design.currencySymbol || '₹';
+  const accentColor = design.accentColor || 'var(--theme-accent, #DB2777)';
 
   return (
     <div className="grid grid-cols-12 items-center gap-4 border-b border-zinc-800/60 bg-zinc-950 px-6 py-4 transition-colors hover:bg-zinc-900/60">
@@ -20,7 +24,7 @@ export default function ProductCard({ product }: { product: Product }) {
         ) : (
           <div 
             className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-zinc-900 border border-zinc-800 font-black text-base shadow-sm"
-            style={{ color: 'var(--theme-accent, #DB2777)' }}
+            style={{ color: accentColor }}
           >
             {productName.charAt(0).toUpperCase()}
           </div>
@@ -32,7 +36,9 @@ export default function ProductCard({ product }: { product: Product }) {
       </div>
       
       <div className="col-span-2 text-right">
-        <span className="text-lg font-black" style={{ color: 'var(--theme-accent, #DB2777)' }}>₹{product.price || 0}</span>
+        <span className="text-lg font-black" style={{ color: accentColor }}>
+          {currency}{Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
+        </span>
       </div>
       
       <div className="col-span-3 flex justify-end">

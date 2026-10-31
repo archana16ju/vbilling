@@ -115,50 +115,70 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'No active company found.' }, { status: 404 });
       }
 
-      // 1. Fetch Users under this Company
-      const [userRows] = await pool.query<RowDataPacket[]>(
-        `SELECT id, name, username, role, is_active FROM users WHERE company_id = ? AND is_active = 1`,
-        [companyId]
-      );
-
-      // 2. Query ALL sales in the resolved date range for this company
-      const [salesRows] = await pool.query<RowDataPacket[]>(
-        `SELECT s.id, s.bill_number, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
-                s.payment_method, s.payment_status, s.order_type, s.order_source, s.customer_name, 
-                s.created_by, s.created_at, s.items
-         FROM sales s
-         WHERE s.company_id = ? 
-           AND s.payment_status != 'cancelled'
-           AND s.created_at >= ? AND s.created_at <= ?
-         ORDER BY s.created_at DESC`,
-        [companyId, range.startSql, range.endSql]
-      );
-
-      // 3. Inventory Telemetry
-      const [prodCountRows] = await pool.query<RowDataPacket[]>(
-        `SELECT COUNT(*) as cnt FROM products WHERE company_id = ?`,
-        [companyId]
-      );
-      const [catCountRows] = await pool.query<RowDataPacket[]>(
-        `SELECT COUNT(*) as cnt FROM categories WHERE company_id = ?`,
-        [companyId]
-      );
-      const [lowStockRows] = await pool.query<RowDataPacket[]>(
-        `SELECT COUNT(*) as cnt FROM products WHERE company_id = ? AND stock <= 5`,
-        [companyId]
-      );
+      // 1. Fetch Users, Staff, Sales, and Inventory Telemetry concurrently
+      const [
+        [userRows],
+        [staffRows],
+        [salesRows],
+        [prodCountRows],
+        [catCountRows],
+        [lowStockRows],
+      ] = await Promise.all([
+        pool.query<RowDataPacket[]>(
+          `SELECT id, name, username, role, is_active FROM users WHERE company_id = ? AND is_active = 1`,
+          [companyId]
+        ),
+        pool.query<RowDataPacket[]>(
+          `SELECT id, name, username, role, is_active FROM staff WHERE company_id = ? AND is_active = 1`,
+          [companyId]
+        ),
+        pool.query<RowDataPacket[]>(
+          `SELECT s.id, s.bill_number, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
+                  s.payment_method, s.payment_status, s.order_type, s.order_source, s.customer_name, 
+                  s.created_by, s.created_at, s.items
+           FROM sales s
+           WHERE s.company_id = ? 
+             AND s.payment_status != 'cancelled'
+             AND s.created_at >= ? AND s.created_at <= ?
+           ORDER BY s.created_at DESC`,
+          [companyId, range.startSql, range.endSql]
+        ),
+        pool.query<RowDataPacket[]>(
+          `SELECT COUNT(*) as cnt FROM products WHERE company_id = ?`,
+          [companyId]
+        ),
+        pool.query<RowDataPacket[]>(
+          `SELECT COUNT(*) as cnt FROM categories WHERE company_id = ?`,
+          [companyId]
+        ),
+        pool.query<RowDataPacket[]>(
+          `SELECT COUNT(*) as cnt FROM products WHERE company_id = ? AND stock <= 5`,
+          [companyId]
+        ),
+      ]);
 
       const totalProducts = prodCountRows[0]?.cnt || 0;
       const totalCategories = catCountRows[0]?.cnt || 0;
       const lowStockCount = lowStockRows[0]?.cnt || 0;
 
       // 4. Build User-Wise Collections & Performance Breakdown
+      const normalizeRole = (r?: string): string => {
+        const raw = (r || '').toLowerCase().trim();
+        if (raw === 'super_admin' || raw.includes('superadmin')) return 'super_admin';
+        if (raw === 'admin' || raw === 'company_admin' || raw.includes('company_admin')) return 'company_admin';
+        if (raw === 'manager') return 'manager';
+        if (raw === 'chef' || raw.includes('cook')) return 'chef';
+        if (raw === 'waiter' || raw.includes('server')) return 'waiter';
+        if (raw.includes('zomato') || raw.includes('swiggy') || raw.includes('online') || raw.includes('webhook') || raw.includes('api')) return 'online';
+        return 'cashier';
+      };
+
       // Initialize map for known registered users
       const userMap = new Map<string, {
         id: string;
         username: string;
         name: string;
-        role: 'company_admin' | 'cashier';
+        role: string;
         totalBills: number;
         totalCollections: number;
         subtotal: number;
@@ -179,7 +199,7 @@ export async function GET(request: Request) {
           id: u.id,
           username: u.username || u.name,
           name: u.name || u.username,
-          role: u.role === 'company_admin' ? 'company_admin' : 'cashier',
+          role: normalizeRole(u.role),
           totalBills: 0,
           totalCollections: 0,
           subtotal: 0,
@@ -192,6 +212,35 @@ export async function GET(request: Request) {
           online: 0,
           other: 0,
         });
+      }
+
+      // Merge / sync staff roles if staff table has more specific designation
+      for (const st of staffRows) {
+        const sKey = (st.username || st.name || '').toLowerCase();
+        const existing = userMap.get(sKey);
+        if (existing) {
+          if (existing.role === 'cashier' && st.role) {
+            existing.role = normalizeRole(st.role);
+          }
+        } else {
+          userMap.set(sKey, {
+            id: st.id,
+            username: st.username || st.name,
+            name: st.name || st.username,
+            role: normalizeRole(st.role),
+            totalBills: 0,
+            totalCollections: 0,
+            subtotal: 0,
+            discount: 0,
+            tax: 0,
+            cash: 0,
+            upi: 0,
+            card: 0,
+            billOnly: 0,
+            online: 0,
+            other: 0,
+          });
+        }
       }
 
       let companyTotalCollections = 0;
@@ -208,13 +257,31 @@ export async function GET(request: Request) {
 
         companyTotalCollections += total;
 
-        if (!userMap.has(creatorKey)) {
-          // Add ad-hoc user found in sales
-          userMap.set(creatorKey, {
+        let uStats = userMap.get(creatorKey);
+        if (!uStats) {
+          for (const u of userMap.values()) {
+            if (u.name.toLowerCase() === creatorKey || u.username.toLowerCase() === creatorKey) {
+              uStats = u;
+              break;
+            }
+          }
+        }
+
+        if (!uStats) {
+          const matchingStaff = staffRows.find(
+            (st: any) =>
+              (st.username && st.username.toLowerCase() === creatorKey) ||
+              (st.name && st.name.toLowerCase() === creatorKey)
+          );
+          const assignedRole = matchingStaff
+            ? normalizeRole(matchingStaff.role)
+            : normalizeRole(creatorKey);
+
+          uStats = {
             id: `u_${creatorKey}`,
             username: creatorRaw,
-            name: creatorRaw.charAt(0).toUpperCase() + creatorRaw.slice(1),
-            role: creatorKey.includes('admin') ? 'company_admin' : 'cashier',
+            name: matchingStaff?.name || (creatorRaw.charAt(0).toUpperCase() + creatorRaw.slice(1)),
+            role: assignedRole,
             totalBills: 0,
             totalCollections: 0,
             subtotal: 0,
@@ -226,10 +293,9 @@ export async function GET(request: Request) {
             billOnly: 0,
             online: 0,
             other: 0,
-          });
+          };
+          userMap.set(creatorKey, uStats);
         }
-
-        const uStats = userMap.get(creatorKey)!;
         uStats.totalBills += 1;
         uStats.totalCollections += total;
         uStats.subtotal += subtotal;

@@ -829,9 +829,68 @@ export async function mysqlUpdateSalePayment(
        WHERE company_id = ? AND (id = ? OR bill_number = ? OR id = ?)`,
       [paymentMethod, company.id, billId, billId, saleDbId]
     );
+
+    // Also update any matching dine_in_orders to marked Served
+    await pool.query(
+      `UPDATE dine_in_orders 
+       SET serving_status = 'Served', updated_at = NOW() 
+       WHERE company_id = ? AND (bill_id = ? OR order_number = ?)`,
+      [company.id, billId, billId]
+    ).catch(() => {});
+
     return { success: true };
   } catch (err: any) {
     console.error('mysqlUpdateSalePayment error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function mysqlRefundSale(
+  billId: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  try {
+    const saleDbId = billId.startsWith('BILL-') ? `${company.id}_${billId}` : billId;
+    await pool.query(
+      `UPDATE sales 
+       SET payment_status = 'refunded' 
+       WHERE company_id = ? AND (id = ? OR bill_number = ? OR id = ?)`,
+      [company.id, billId, billId, saleDbId]
+    );
+
+    const [pRows]: any = await pool.query(
+      `SELECT * FROM payments WHERE company_id = ? AND (sale_id = ? OR sale_id = ? OR reference_number = ?)`,
+      [company.id, saleDbId, billId, billId]
+    );
+
+    if (pRows && pRows.length > 0) {
+      await pool.query(
+        `UPDATE payments SET status = 'refunded' WHERE company_id = ? AND (sale_id = ? OR sale_id = ? OR reference_number = ?)`,
+        [company.id, saleDbId, billId, billId]
+      );
+    } else {
+      const [sRows]: any = await pool.query(
+        `SELECT * FROM sales WHERE company_id = ? AND (id = ? OR bill_number = ? OR id = ?) LIMIT 1`,
+        [company.id, billId, billId, saleDbId]
+      );
+      if (sRows && sRows.length > 0) {
+        const s = sRows[0];
+        const payId = 'pay-' + Date.now();
+        await pool.query(
+          `INSERT INTO payments (id, company_id, sale_id, payment_method, amount, status, reference_number, notes)
+           VALUES (?, ?, ?, ?, ?, 'refunded', ?, ?)`,
+          [payId, company.id, saleDbId, s.payment_method || 'Cash', s.total, billId, reason || 'Refund issued']
+        );
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('mysqlRefundSale error:', err.message);
     return { success: false, error: err.message };
   }
 }
@@ -1042,17 +1101,20 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
         ]
       );
 
-      // Update matching dine_in_orders with bill_id and mark serving_status = 'Served'
+      // Update matching dine_in_orders with bill_id and mark serving_status = 'Served' if paid
       if (finalSale.orderType === 'Dine In') {
         try {
           if (finalSale.tableId || finalSale.tableName) {
+            const isUnpaidBill = finalSale.paymentStatus === 'unpaid' || finalSale.paymentMethod === 'Bill Only';
             await conn.query(
               `UPDATE dine_in_orders 
-               SET bill_id = ?, serving_status = 'Served', updated_at = NOW() 
+               SET bill_id = ?, 
+                   serving_status = CASE WHEN ? = 1 THEN serving_status ELSE 'Served' END, 
+                   updated_at = NOW() 
                WHERE company_id = ? 
                  AND (table_id = ? OR table_name = ?) 
                  AND (bill_id IS NULL OR bill_id = '')`,
-              [finalBillNumber, company.id, finalSale.tableId || '', finalSale.tableName || '']
+              [finalBillNumber, isUnpaidBill ? 1 : 0, company.id, finalSale.tableId || '', finalSale.tableName || '']
             );
           }
         } catch (dioErr) {
@@ -1389,8 +1451,8 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
       return rows.map(mapRowToSale);
     }
 
-    // 2. COMPANY ADMIN: Sees all sales belonging to their assigned company
-    if (authRole === "company_admin") {
+    // 2. COMPANY ADMIN & MANAGER: Sees all sales belonging to their assigned company
+    if (authRole === "company_admin" || authRole === "manager") {
       const company = await getAuthorizedCompanyContext();
       await assertCompanyModuleEnabled(company.id, 'sales');
       const [rows] = await pool.query<RowDataPacket[]>(

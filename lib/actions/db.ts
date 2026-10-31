@@ -17,6 +17,7 @@ import {
   mysqlGetNextBillId,
   mysqlRecordSale,
   mysqlUpdateSalePayment,
+  mysqlRefundSale,
   mysqlGetLiveSales,
   mysqlClearAllSales,
   mysqlGetDeliveryPersons,
@@ -454,6 +455,38 @@ export async function updateSalePayment(
     return { success: true };
   } catch (err: any) {
     console.error('updateSalePayment error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function refundSale(billId: string, reason?: string) {
+  if (isLocalMySqlMode()) {
+    return await mysqlRefundSale(billId, reason);
+  }
+  try {
+    const db = await getDb();
+    await db.collection('sales').updateOne(
+      { $or: [{ id: billId }, { _id: billId as any }, { billNumber: billId }] },
+      {
+        $set: {
+          payment_status: 'refunded',
+          paymentStatus: 'refunded',
+          refundedAt: Date.now(),
+          refundReason: reason || null,
+        },
+      }
+    );
+    await db.collection('payments').updateMany(
+      { $or: [{ sale_id: billId }, { reference_number: billId }, { saleId: billId }] },
+      {
+        $set: {
+          status: 'refunded',
+        },
+      }
+    );
+    return { success: true };
+  } catch (err: any) {
+    console.error('refundSale error:', err);
     return { success: false, error: err.message };
   }
 }
