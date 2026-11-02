@@ -131,13 +131,14 @@ function broadcastDesignChange(state: Partial<TerminalDesignState>) {
     try {
       window.dispatchEvent(new CustomEvent('terminal-design-changed', { detail: state }));
       localStorage.setItem('terminal_design_broadcast_ts', Date.now().toString());
-    } catch {}
+    } catch { }
   }
 }
 
-// In-flight request deduplication trackers
+// In-flight request tracking
 let inFlightFetchPromise: Promise<void> | null = null;
 let inFlightCompanyId: string | undefined = undefined;
+let fetchRequestId = 0;
 
 export const useTerminalDesignStore = create<TerminalDesignState>()(
   persist(
@@ -145,11 +146,8 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
       ...initialDesignState,
 
       updateDesign: (updates) => {
-        set((state) => {
-          const next = { ...state, ...updates };
-          broadcastDesignChange(next);
-          return next;
-        });
+        set((state) => ({ ...state, ...updates }));
+        broadcastDesignChange(updates);
       },
 
       resetDesign: () => {
@@ -160,6 +158,7 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
       },
 
       fetchCompanyTerminalDesign: async (companyId?: string, force = false) => {
+        const requestId = ++fetchRequestId;
         const state = get();
         const cookieCompanyId =
           typeof document !== 'undefined'
@@ -192,8 +191,13 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
               : '/api/companies/terminal-design';
 
             const res = await fetch(url, { cache: 'no-store' });
+
+            if (requestId !== fetchRequestId) return;
+
             if (res.ok) {
               const data = await res.json();
+
+              if (requestId !== fetchRequestId) return;
               if (data && data.success && data.design) {
                 set((s) => ({
                   ...s,
@@ -204,17 +208,34 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
                   activeCompanyId: data.companyId || targetCompanyId || s.activeCompanyId,
                 }));
               } else {
-                set({ isLoaded: true, isFetching: false });
+                set({
+                  ...initialDesignState,
+                  isLoaded: true,
+                  isFetching: false,
+                  activeCompanyId: targetCompanyId || '',
+                });
               }
             } else {
-              set({ isLoaded: true, isFetching: false });
+              set({
+                ...initialDesignState,
+                isLoaded: true,
+                isFetching: false,
+                activeCompanyId: targetCompanyId || '',
+              });
             }
           } catch (err) {
             console.warn('Failed to fetch company terminal design:', err);
-            set({ isLoaded: true, isFetching: false });
+            set({
+              ...initialDesignState,
+              isLoaded: true,
+              isFetching: false,
+              activeCompanyId: targetCompanyId || '',
+            });
           } finally {
-            inFlightFetchPromise = null;
-            inFlightCompanyId = undefined;
+            if (requestId === fetchRequestId) {
+              inFlightFetchPromise = null;
+              inFlightCompanyId = undefined;
+            }
           }
         })();
 

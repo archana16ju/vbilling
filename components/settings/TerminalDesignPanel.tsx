@@ -332,11 +332,10 @@ export default function TerminalDesignPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveSubTab(tab.id as any)}
-                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer ${
-                    isActive
-                      ? 'btn-theme-primary text-white shadow-theme-glow preserve-white font-black'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                  }`}
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer ${isActive
+                    ? 'btn-theme-primary text-white shadow-theme-glow preserve-white font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -359,21 +358,19 @@ export default function TerminalDesignPanel() {
                   {/* Option 1: Classic List (Default) */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'default' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'default'
-                        ? 'border-emerald-500 bg-emerald-950/30 shadow-md ring-2 ring-emerald-500/20'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'default'
+                      ? 'border-emerald-500 bg-emerald-950/30 shadow-md ring-2 ring-emerald-500/20'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                   >
                     {/* Header: Icon, Title, Badge & Radio */}
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'default'
-                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'default'
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                         >
                           <Table className="h-5 w-5" />
                         </div>
@@ -397,11 +394,10 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'default'
-                              ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'default'
+                            ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                         >
                           {design.displayStyle === 'default' && <Check className="h-3 w-3 stroke-[3]" />}
                         </div>
@@ -430,17 +426,16 @@ export default function TerminalDesignPanel() {
                   {/* Option 2: Visual Image Grid */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'image-grid' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'image-grid'
-                        ? 'border-theme bg-theme-badge/20 shadow-md ring-2 ring-theme/30'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'image-grid'
+                      ? 'border-theme bg-theme-badge/20 shadow-md ring-2 ring-theme/30'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                     style={
                       design.displayStyle === 'image-grid'
                         ? {
-                            borderColor: 'var(--theme-accent, #DB2777)',
-                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
-                          }
+                          borderColor: 'var(--theme-accent, #DB2777)',
+                          backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                        }
                         : undefined
                     }
                   >
@@ -448,17 +443,16 @@ export default function TerminalDesignPanel() {
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'image-grid'
-                              ? 'shadow-xs text-white'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'image-grid'
+                            ? 'shadow-xs text-white'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                           style={
                             design.displayStyle === 'image-grid'
                               ? {
-                                  backgroundColor: 'var(--theme-accent, #DB2777)',
-                                  borderColor: 'var(--theme-accent, #DB2777)',
-                                }
+                                backgroundColor: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                              }
                               : undefined
                           }
                         >
@@ -497,17 +491,16 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'image-grid'
-                              ? 'text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'image-grid'
+                            ? 'text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                           style={
                             design.displayStyle === 'image-grid'
                               ? {
-                                  backgroundColor: 'var(--theme-accent, #DB2777)',
-                                  borderColor: 'var(--theme-accent, #DB2777)',
-                                }
+                                backgroundColor: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                              }
                               : undefined
                           }
                         >
@@ -540,21 +533,19 @@ export default function TerminalDesignPanel() {
                   {/* Option 3: Search-Based Fast Billing */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'search-based' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'search-based'
-                        ? 'border-indigo-500 bg-indigo-950/30 shadow-md ring-2 ring-indigo-500/20'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'search-based'
+                      ? 'border-indigo-500 bg-indigo-950/30 shadow-md ring-2 ring-indigo-500/20'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                   >
                     {/* Header: Icon, Title, Badge & Radio */}
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'search-based'
-                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'search-based'
+                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                         >
                           <ScanBarcode className="h-5 w-5" />
                         </div>
@@ -579,11 +570,10 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'search-based'
-                              ? 'border-indigo-500 bg-indigo-600 text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'search-based'
+                            ? 'border-indigo-500 bg-indigo-600 text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                         >
                           {design.displayStyle === 'search-based' && (
                             <Check className="h-3 w-3 stroke-[3]" />
@@ -629,11 +619,10 @@ export default function TerminalDesignPanel() {
                         key={item.cols}
                         type="button"
                         onClick={() => design.updateDesign({ gridColumns: item.cols })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.gridColumns === item.cols
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.gridColumns === item.cols
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -656,11 +645,10 @@ export default function TerminalDesignPanel() {
                         key={item.ratio}
                         type="button"
                         onClick={() => design.updateDesign({ cardAspectRatio: item.ratio })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardAspectRatio === item.ratio
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardAspectRatio === item.ratio
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -683,11 +671,10 @@ export default function TerminalDesignPanel() {
                         key={item.radius}
                         type="button"
                         onClick={() => design.updateDesign({ cardRadius: item.radius })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardRadius === item.radius
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardRadius === item.radius
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -710,11 +697,10 @@ export default function TerminalDesignPanel() {
                         key={item.gap}
                         type="button"
                         onClick={() => design.updateDesign({ cardGap: item.gap })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardGap === item.gap
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardGap === item.gap
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -748,11 +734,10 @@ export default function TerminalDesignPanel() {
                       key={pos.id}
                       type="button"
                       onClick={() => design.updateDesign({ namePlacement: pos.id })}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        design.namePlacement === pos.id
-                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
-                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
-                      }`}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${design.namePlacement === pos.id
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
+                        }`}
                     >
                       <div className="text-xs font-bold text-white">{pos.label}</div>
                       <div className="text-[11px] text-zinc-400 mt-0.5">{pos.desc}</div>
@@ -782,11 +767,10 @@ export default function TerminalDesignPanel() {
                         key={style.id}
                         type="button"
                         onClick={() => design.updateDesign({ priceStyle: style.id })}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                          design.priceStyle === style.id
-                            ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
-                            : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
-                        }`}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${design.priceStyle === style.id
+                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
+                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
+                          }`}
                       >
                         <div className="text-xs font-bold text-white">{style.label}</div>
                         <div className="text-[11px] text-zinc-400 mt-0.5">{style.desc}</div>
@@ -809,11 +793,10 @@ export default function TerminalDesignPanel() {
                         key={p.pos}
                         type="button"
                         onClick={() => design.updateDesign({ pricePlacement: p.pos })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.pricePlacement === p.pos
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.pricePlacement === p.pos
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {p.label}
                       </button>
@@ -832,11 +815,10 @@ export default function TerminalDesignPanel() {
                         key={sym}
                         type="button"
                         onClick={() => design.updateDesign({ currencySymbol: sym })}
-                        className={`h-9 w-12 rounded-xl text-sm font-bold border transition-all cursor-pointer ${
-                          design.currencySymbol === sym
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800'
-                        }`}
+                        className={`h-9 w-12 rounded-xl text-sm font-bold border transition-all cursor-pointer ${design.currencySymbol === sym
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800'
+                          }`}
                       >
                         {sym}
                       </button>
@@ -926,11 +908,10 @@ export default function TerminalDesignPanel() {
                           design.updateDesign({ themeMode: m.id });
                           setPreviewTheme(m.id === 'system' ? (document.documentElement.classList.contains('light-mode') ? 'light' : 'dark') : m.id);
                         }}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/40 shadow-md'
-                            : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60 hover:border-zinc-700'
-                        }`}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/40 shadow-md'
+                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60 hover:border-zinc-700'
+                          }`}
                       >
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -938,11 +919,10 @@ export default function TerminalDesignPanel() {
                               <Icon className={`h-4 w-4 ${m.iconColor}`} />
                               <span className="text-xs font-black text-white">{m.title}</span>
                             </div>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                              isSelected
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-zinc-800 text-zinc-400'
-                            }`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isSelected
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-400'
+                              }`}>
                               {m.badge}
                             </span>
                           </div>
@@ -973,11 +953,10 @@ export default function TerminalDesignPanel() {
                       key={key}
                       type="button"
                       onClick={() => applyThemePreset(key)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
-                        design.themePreset === key
-                          ? 'border-theme ring-2 ring-theme/30 bg-theme-badge/20 shadow-md'
-                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60'
-                      }`}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${design.themePreset === key
+                        ? 'border-theme ring-2 ring-theme/30 bg-theme-badge/20 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60'
+                        }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span
@@ -1208,11 +1187,10 @@ export default function TerminalDesignPanel() {
                     type="button"
                     onClick={() => setPreviewTheme('dark')}
                     title="Preview in Dark Mode"
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                      previewTheme === 'dark'
-                        ? 'bg-zinc-800 text-white shadow-xs'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${previewTheme === 'dark'
+                      ? 'bg-zinc-800 text-white shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                      }`}
                   >
                     <Moon className="h-3 w-3 text-indigo-400" />
                     <span>Dark</span>
@@ -1221,11 +1199,10 @@ export default function TerminalDesignPanel() {
                     type="button"
                     onClick={() => setPreviewTheme('light')}
                     title="Preview in Light Mode"
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                      previewTheme === 'light'
-                        ? 'bg-white text-zinc-900 shadow-xs'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${previewTheme === 'light'
+                      ? 'bg-white text-zinc-900 shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                      }`}
                   >
                     <Sun className="h-3 w-3 text-amber-500" />
                     <span>Light</span>
@@ -1247,17 +1224,15 @@ export default function TerminalDesignPanel() {
 
             {/* Preview Body */}
             <div
-              className={`p-4 min-h-[500px] transition-colors duration-200 ${
-                isLightPreview ? 'bg-slate-100 text-zinc-900' : 'bg-zinc-950 text-white'
-              }`}
+              className={`p-4 min-h-[500px] transition-colors duration-200 ${isLightPreview ? 'bg-slate-100 text-zinc-900' : 'bg-zinc-950 text-white'
+                }`}
             >
               {/* Category & Search mock bar */}
               <div
-                className={`mb-3 p-3 rounded-xl border flex items-center justify-between transition-colors shadow-xs ${
-                  isLightPreview
-                    ? 'bg-white border-zinc-200 text-zinc-900'
-                    : 'bg-zinc-900/90 border-zinc-800 text-white'
-                }`}
+                className={`mb-3 p-3 rounded-xl border flex items-center justify-between transition-colors shadow-xs ${isLightPreview
+                  ? 'bg-white border-zinc-200 text-zinc-900'
+                  : 'bg-zinc-900/90 border-zinc-800 text-white'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className={`font-bold text-sm ${isLightPreview ? 'text-zinc-900' : 'text-white'}`}>
@@ -1285,9 +1260,8 @@ export default function TerminalDesignPanel() {
                   style={{
                     backgroundColor: design.bannerBgColor || (isLightPreview ? '#FDF2F8' : '#1F0715'),
                   }}
-                  className={`mb-3 flex items-center justify-between rounded-xl px-3 py-2 border shadow-xs ${
-                    isLightPreview ? 'border-pink-200/80' : 'border-zinc-800'
-                  }`}
+                  className={`mb-3 flex items-center justify-between rounded-xl px-3 py-2 border shadow-xs ${isLightPreview ? 'border-pink-200/80' : 'border-zinc-800'
+                    }`}
                 >
                   <div
                     className="flex items-center gap-2 text-xs font-semibold"
@@ -1326,11 +1300,10 @@ export default function TerminalDesignPanel() {
               {/* Product Grid, Classic List, or Search-Based Preview */}
               {design.displayStyle === 'search-based' ? (
                 <div
-                  className={`rounded-xl border p-4 space-y-3 transition-colors ${
-                    isLightPreview
-                      ? 'bg-white border-zinc-200'
-                      : 'bg-zinc-900 border-zinc-800'
-                  }`}
+                  className={`rounded-xl border p-4 space-y-3 transition-colors ${isLightPreview
+                    ? 'bg-white border-zinc-200'
+                    : 'bg-zinc-900 border-zinc-800'
+                    }`}
                 >
                   <div className="relative">
                     <input
@@ -1338,11 +1311,10 @@ export default function TerminalDesignPanel() {
                       placeholder="Try typing in preview (e.g. Avocado, Apple)..."
                       value={previewSearch}
                       onChange={(e) => setPreviewSearch(e.target.value)}
-                      className={`w-full rounded-xl border p-2 pl-8 text-xs font-medium outline-none focus:border-theme transition ${
-                        isLightPreview
-                          ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
-                          : 'border-zinc-800 bg-zinc-950 text-white'
-                      }`}
+                      className={`w-full rounded-xl border p-2 pl-8 text-xs font-medium outline-none focus:border-theme transition ${isLightPreview
+                        ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
+                        : 'border-zinc-800 bg-zinc-950 text-white'
+                        }`}
                     />
                     <span className="absolute left-2.5 top-2.5 text-xs text-zinc-400">🔍</span>
                     {previewSearch && (
@@ -1376,11 +1348,10 @@ export default function TerminalDesignPanel() {
                       <button
                         type="button"
                         onClick={() => setPreviewSearch('avocado')}
-                        className={`mt-3 inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-bold cursor-pointer transition ${
-                          isLightPreview
-                            ? 'border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
-                            : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
-                        }`}
+                        className={`mt-3 inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-bold cursor-pointer transition ${isLightPreview
+                          ? 'border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                          }`}
                       >
                         Simulate Scan: &quot;avocado&quot;
                       </button>
@@ -1394,11 +1365,10 @@ export default function TerminalDesignPanel() {
                       ).map((prod) => (
                         <div
                           key={prod.id}
-                          className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
-                            isLightPreview
-                              ? 'border-zinc-200 bg-zinc-50 hover:border-zinc-300'
-                              : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
-                          }`}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border transition ${isLightPreview
+                            ? 'border-zinc-200 bg-zinc-50 hover:border-zinc-300'
+                            : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
+                            }`}
                         >
                           <div className="flex items-center gap-2.5">
                             <img
@@ -1434,18 +1404,16 @@ export default function TerminalDesignPanel() {
                 </div>
               ) : !isImageGrid ? (
                 <div
-                  className={`rounded-xl border overflow-hidden transition-colors ${
-                    isLightPreview
-                      ? 'bg-white border-zinc-200'
-                      : 'bg-zinc-900 border-zinc-800'
-                  }`}
+                  className={`rounded-xl border overflow-hidden transition-colors ${isLightPreview
+                    ? 'bg-white border-zinc-200'
+                    : 'bg-zinc-900 border-zinc-800'
+                    }`}
                 >
                   <div
-                    className={`grid grid-cols-12 gap-2 border-b px-4 py-2 text-[10px] font-bold tracking-wider uppercase ${
-                      isLightPreview
-                        ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
-                        : 'border-zinc-800 bg-zinc-950 text-zinc-400'
-                    }`}
+                    className={`grid grid-cols-12 gap-2 border-b px-4 py-2 text-[10px] font-bold tracking-wider uppercase ${isLightPreview
+                      ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-400'
+                      }`}
                   >
                     <div className="col-span-7">PRODUCT</div>
                     <div className="col-span-2 text-right">PRICE</div>
@@ -1478,13 +1446,11 @@ export default function TerminalDesignPanel() {
                 </div>
               ) : (
                 <div
-                  className={`grid ${
-                    design.gridColumns === 3
+                  className={`grid ${design.gridColumns === 3
                       ? 'grid-cols-3'
                       : design.gridColumns === 5
-                      ? 'grid-cols-4'
-                      : 'grid-cols-4'
-                  } ${design.cardGap || 'gap-3'}`}
+                        ? 'grid-cols-5'
+                        : 'grid-cols-4'} ${design.cardGap || 'gap-3'}`}
                 >
                   {PREVIEW_PRODUCTS.map((prod) => (
                     <ProductGridCard

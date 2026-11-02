@@ -25,8 +25,8 @@ export default function TerminalPage() {
       design.themeMode === 'light'
         ? 'light'
         : design.themeMode === 'dark'
-        ? 'dark'
-        : currentDocTheme;
+          ? 'dark'
+          : currentDocTheme;
 
     root.setAttribute('data-theme', effectiveMode);
     if (effectiveMode === 'light') {
@@ -61,16 +61,15 @@ export default function TerminalPage() {
     design.themeMode === 'light'
       ? 'light'
       : design.themeMode === 'dark'
-      ? 'dark'
-      : (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+        ? 'dark'
+        : (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
 
   const isLight = effectiveThemeMode === 'light';
 
   return (
     <main
-      className={`flex h-screen flex-col overflow-hidden transition-colors duration-150 ${
-        isLight ? 'bg-slate-50 text-zinc-900 light-mode' : 'bg-zinc-950 text-white dark-mode'
-      }`}
+      className={`flex h-screen flex-col overflow-hidden transition-colors duration-150 ${isLight ? 'bg-slate-50 text-zinc-900 light-mode' : 'bg-zinc-950 text-white dark-mode'
+        }`}
       data-theme={effectiveThemeMode}
     >
       <TerminalHeader />
@@ -84,7 +83,7 @@ export default function TerminalPage() {
           <ProductPanel />
         </div>
 
-        <div className={`w-[380px] shrink-0 border-l xl:w-[420px] ${isLight ? 'border-zinc-200' : 'border-zinc-800'}`}>
+        <div className={`w-[330px] shrink-0 border-l xl:w-[320px] ${isLight ? 'border-zinc-200' : 'border-zinc-800'}`}>
           <CartPanel />
         </div>
       </div>
