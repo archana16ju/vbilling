@@ -1,6 +1,7 @@
 'use client'
 import {
   Wifi,
+  WifiOff,
   UserCircle,
   LayoutDashboard,
   Building2,
@@ -510,24 +511,26 @@ export default function TerminalHeader() {
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />
 
-        {/* ── Online / Offline indicator ── */}
-        <Tip label={isOnline && isBackendOnline ? 'All bills synced' : offlineQueue.length > 0 ? `${offlineQueue.length} pending sync` : 'Offline'}>
-          <div className="flex flex-col items-center gap-0.5">
-            <div className={`flex items-center gap-1.5 text-[11px] font-bold ${isOnline && isBackendOnline ? 'text-emerald-400' : 'text-rose-500'}`}>
-              <div
-                className={`h-2 w-2 rounded-full ${isOnline && isBackendOnline
-                  ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
-                  : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'}`}
-              />
-              <span className="hidden sm:inline">{isOnline && isBackendOnline ? 'ONLINE' : 'OFFLINE'}</span>
-            </div>
-            {offlineQueue.length > 0 && (
-              <span className="text-[9px] font-black text-amber-400 leading-none">
-                {isSyncing ? `SYNC ${offlineQueue.length}…` : `${offlineQueue.length} PENDING`}
-              </span>
-            )}
-          </div>
-        </Tip>
+       {/* ── Online / Offline Wi-Fi icon ── */}
+<Tip
+  label={
+    isOnline && isBackendOnline
+      ? 'Online'
+      : 'Offline'
+  }
+>
+  {isOnline && isBackendOnline ? (
+    <Wifi
+      className="h-6 w-6 text-emerald-500 dark:text-emerald-400 drop-shadow-[0_0_7px_rgba(52,211,153,0.85)] transition-all duration-300"
+      strokeWidth={2.8}
+    />
+  ) : (
+    <WifiOff
+      className="h-6 w-6 text-rose-600 dark:text-rose-400 drop-shadow-[0_0_7px_rgba(244,63,94,0.65)] transition-all duration-300"
+      strokeWidth={2.8}
+    />
+  )}
+</Tip>
 
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />

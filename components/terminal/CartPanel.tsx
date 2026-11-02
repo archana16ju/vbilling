@@ -786,12 +786,12 @@ export default function CartPanel() {
       )}
 
       {/* Cart Top Header */}
-      <div className="border-b border-zinc-800 p-4 bg-zinc-900/50">
+      <div className="border-b border-zinc-800 px-3 py-2 bg-zinc-900/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <h2 className="text-base font-black text-white">Current Order</h2>
+            <h2 className="text-sm font-black text-white">Current Order</h2>
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-bold border"
+              className="rounded-full px-1.5 py-0.5 text-[9px] font-bold border"
               style={{
                 backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
                 borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
@@ -807,7 +807,7 @@ export default function CartPanel() {
               type="button"
               onClick={clearCart}
               disabled={cartSafe.length === 0}
-              className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-400 hover:text-rose-400 hover:border-rose-800 hover:bg-rose-950/30 transition disabled:opacity-40 cursor-pointer"
+             className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[9px] font-bold text-zinc-400 hover:text-rose-400 hover:border-rose-800 hover:bg-rose-950/30 transition disabled:opacity-40 cursor-pointer"
               title="Clear receipt"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -842,7 +842,7 @@ export default function CartPanel() {
       </div>
 
       {/* Quick Action Buttons: + Note and + Customer (as shown in reference image) */}
-      <div className="border-t border-zinc-800/80 bg-zinc-950/70 p-3 pt-2.5 pb-2.5">
+      <div className="border-t border-zinc-800/80 bg-zinc-950/70 px-2 py-1">
         <div className="grid grid-cols-2 gap-1">
           <button
             type="button"
@@ -850,8 +850,7 @@ export default function CartPanel() {
               setTempOrderNote(orderNote || '');
               setIsNoteModalOpen(true);
             }}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-2.5 px-3 text-xs font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"
-            title="Order Note"
+className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-1 px-2 text-[10px] font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"            title="Order Note"
           >
             <Plus className="h-3.5 w-3.5 text-zinc-400" />
             <span className="truncate max-w-[110px]">
@@ -862,8 +861,7 @@ export default function CartPanel() {
           <button
             type="button"
             onClick={() => setIsCustomerModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-2.5 px-3 text-xs font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"
-            title="Customer"
+className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-1 px-2 text-[10px] font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"            title="Customer"
           >
             <Plus className="h-3.5 w-3.5 text-zinc-400" />
             <span className="truncate max-w-[110px]">
@@ -874,9 +872,9 @@ export default function CartPanel() {
       </div>
 
       {/* Calculation & Checkout Footer */}
-      <div className="border-t border-zinc-800 bg-zinc-900/80 p-3">
+      <div className="border-t border-zinc-800 bg-zinc-900/80 p-2">
         {/* Totals Breakdown */}
-        <div className="mb-2 space-y-0.5 text-xs">
+        <div className="mb-1 space-y-0 text-[11px]">
           <div className="flex justify-between text-zinc-400">
             <span>Subtotal</span>
             <span className="font-mono font-bold text-zinc-200">₹{subtotal.toFixed(2)}</span>
@@ -915,13 +913,13 @@ export default function CartPanel() {
             </div>
           )}
 
-          <div className="my-1.5 border-t border-zinc-800 border-dashed" />
+          <div className="my-1 border-t border-zinc-800 border-dashed" />
 
 
-          <div className="flex items-baseline justify-between text-base font-black text-white">
+          <div className="flex items-baseline justify-between text-sm font-black text-white">
             <span>Grand Total</span>
             <span
-              className="text-base font-mono font-black"
+             className="text-sm font-mono font-black"
               style={{ color: 'var(--theme-accent, #DB2777)' }}
             >
               ₹{total.toFixed(2)}
@@ -941,20 +939,20 @@ export default function CartPanel() {
               }`}
           >
             <Banknote className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Cash</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Cash</span>
           </button>
 
           {/* Card Tab */}
           <button
             type="button"
             onClick={() => setPaymentMethod('Card')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl border p-2.5 transition-all cursor-pointer ${paymentMethod === 'Card'
+            className={`flex items-center justify-center gap-1.5 rounded-xl border py-1.5 px-1 transition-all cursor-pointer ${paymentMethod === 'Card'
               ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 font-bold'
               : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
               }`}
           >
             <CreditCard className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Card</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Card</span>
           </button>
 
           {/* UPI Tab */}
@@ -967,7 +965,7 @@ export default function CartPanel() {
               }`}
           >
             <Wallet className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">UPI</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">UPI</span>
           </button>
         </div>
 
@@ -1016,8 +1014,7 @@ export default function CartPanel() {
             type="button"
             onClick={handleCheckout}
             disabled={cartSafe.length === 0 || isProcessing}
-            className="w-full flex items-center justify-center gap-1 rounded-xl bg-theme-bar hover:opacity-95 active:scale-98 py-2 px-3 text-sm font-black text-white transition disabled:opacity-40 shadow-theme-glow border border-theme cursor-pointer"
-            title="Bill and Settle"
+className="w-full flex items-center justify-center gap-1 rounded-xl bg-theme-bar hover:opacity-95 active:scale-98 py-1.5 px-2 text-xs font-black text-white transition disabled:opacity-40 shadow-theme-glow border border-theme cursor-pointer"            title="Bill and Settle"
           >
             <Check className="h-4 w-4" />
             <span>{isProcessing ? 'Processing...' : 'Bill and Settle'}</span>
@@ -1028,10 +1025,9 @@ export default function CartPanel() {
             type="button"
             onClick={handleSendToKitchen}
             disabled={cartSafe.length === 0}
-            className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:scale-98 py-3 px-4 text-xs font-black text-white transition disabled:opacity-40 shadow-md shadow-amber-600/30 cursor-pointer"
-            title="Send to Kitchen"
+className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:scale-98 py-1.5 px-3 text-[11px] font-black text-white transition disabled:opacity-40 shadow-md shadow-amber-600/30 cursor-pointer"            title="Send to Kitchen"
           >
-            <ChefHat className="h-5 w-4 text-amber-200" />
+            <ChefHat className="h-4 w-3.5 text-amber-200" />
             <span>Send to Kitchen</span>
           </button>
         </div>

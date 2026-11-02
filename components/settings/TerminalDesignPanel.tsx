@@ -603,9 +603,16 @@ export default function TerminalDesignPanel() {
                 </div>
               </div>
 
-              {/* Grid Column Selector (When in image grid) */}
+              {/* Grid Column Selector (Only applies for Visual Image Grid) */}
               <div className="pt-4 border-t border-zinc-800/80 space-y-4">
-                <div>
+                {!isImageGrid && (
+                  <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400">
+                    <span className="text-base">🔒</span>
+                    <span>Grid settings below only apply to <strong className="text-zinc-200">Visual Image Grid</strong> layout. Select it above to enable these options.</span>
+                  </div>
+                )}
+
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Grid Columns
                   </label>
@@ -631,7 +638,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Card Aspect Ratio */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Aspect Ratio
                   </label>
@@ -657,7 +664,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Card Corner Radius */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Corner Radius
                   </label>
@@ -683,7 +690,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Grid Spacing / Gap */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Spacing (Gap)
                   </label>
