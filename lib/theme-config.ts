@@ -92,7 +92,7 @@ export const PREDEFINED_THEMES: Record<string, CompanyTheme> = {
  * Injects CSS custom properties into document.documentElement so all modules
  * immediately re-render using the active company theme and appearance mode.
  */
-export function applyThemeToDom(theme?: Partial<CompanyTheme> | null) {
+export function applyThemeToDom(theme?: Partial<CompanyTheme> | null, forceApplyMode: boolean = false) {
   if (typeof document === 'undefined') return;
 
   const t = {
@@ -100,35 +100,38 @@ export function applyThemeToDom(theme?: Partial<CompanyTheme> | null) {
     ...(theme || {}),
   };
 
-  const mode = t.mode === 'light' ? 'light' : 'dark';
   const root = document.documentElement;
+  const isTerminal = !forceApplyMode && typeof window !== 'undefined' && window.location.pathname.startsWith('/terminal');
 
-  // Set mode attribute and class for instant theme toggle on html and body
-  root.setAttribute('data-theme', mode);
-  if (mode === 'light') {
-    root.classList.add('light-mode');
-    root.classList.remove('dark-mode');
-    root.classList.remove('dark');
-  } else {
-    root.classList.add('dark-mode');
-    root.classList.add('dark');
-    root.classList.remove('light-mode');
-  }
-
-  if (document.body) {
-    document.body.setAttribute('data-theme', mode);
+  // If on terminal and not forced, DO NOT overwrite terminal's own independent dark/light mode with dashboard mode!
+  if (!isTerminal) {
+    const mode = t.mode === 'light' ? 'light' : 'dark';
+    root.setAttribute('data-theme', mode);
     if (mode === 'light') {
-      document.body.classList.add('light-mode');
-      document.body.classList.remove('dark-mode');
-      document.body.classList.remove('dark');
+      root.classList.add('light-mode');
+      root.classList.remove('dark-mode');
+      root.classList.remove('dark');
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'light');
+        document.body.classList.add('light-mode');
+        document.body.classList.remove('dark-mode');
+        document.body.classList.remove('dark');
+      }
     } else {
-      document.body.classList.add('dark-mode');
-      document.body.classList.add('dark');
-      document.body.classList.remove('light-mode');
+      root.classList.add('dark-mode');
+      root.classList.add('dark');
+      root.classList.remove('light-mode');
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'dark');
+        document.body.classList.add('dark-mode');
+        document.body.classList.add('dark');
+        document.body.classList.remove('light-mode');
+      }
     }
+    root.style.setProperty('--theme-mode', mode);
   }
 
-  root.style.setProperty('--theme-mode', mode);
+  // Always apply company theme color vars and gradients across both Dashboard and Terminal
   root.style.setProperty('--theme-gradient-start', t.gradientStart);
   root.style.setProperty('--theme-gradient-mid', t.gradientMid);
   root.style.setProperty('--theme-gradient-end', t.gradientEnd);

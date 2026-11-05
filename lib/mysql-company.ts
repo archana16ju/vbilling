@@ -708,7 +708,22 @@ export async function switchActiveCompany(companyId: string): Promise<{ success:
   }
 
   const selected = mapRowToCompany(rows[0]);
-  cookieStore.set("auth_company_id", selected.id, { path: "/" });
+
+  // Clear in-memory company context cache immediately
+  clearCompanyContextCache();
+
+  // Update session token so getSession() and /api/auth/me reflect the switched company
+  try {
+    const { updateSessionCompany } = await import('./auth-session');
+    await updateSessionCompany(selected.id, selected.name);
+  } catch {}
+
+  cookieStore.set("auth_company_id", selected.id, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+    sameSite: "lax",
+    secure: false,
+  });
 
   return { success: true, company: selected };
 }

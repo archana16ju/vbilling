@@ -1,14 +1,24 @@
 import { Product } from "./mock-data"
+import { SelectedAddon } from "@/types/addons"
 
 export type CartItemData = {
   product: Product
   quantity: number
   notes?: string
+  lineId?: string
+  selectedAddOns?: SelectedAddon[]
+}
+
+export const calculateItemAddonsUnitPrice = (item: CartItemData): number => {
+  if (!item || !Array.isArray(item.selectedAddOns)) return 0;
+  return item.selectedAddOns.reduce((sum, a) => sum + ((Number(a.price) || 0) * (Number(a.quantity) || 1)), 0);
 }
 
 export const calculateItemSubtotal = (item: CartItemData): number => {
   if (!item || !item.product) return 0;
-  return (item.product.price || 0) * (item.quantity || 0)
+  const addonsUnitPrice = calculateItemAddonsUnitPrice(item);
+  const unitPrice = (Number(item.product.price) || 0) + addonsUnitPrice;
+  return unitPrice * (Number(item.quantity) || 0);
 }
 
 export const calculateItemDiscount = (item: CartItemData): number => {
@@ -20,37 +30,42 @@ export const calculateItemDiscount = (item: CartItemData): number => {
 
 export const calculateItemTax = (item: CartItemData): number => {
   if (!item || !item.product) return 0;
-  const subtotal = calculateItemSubtotal(item)
-  const discount = calculateItemDiscount(item)
-  const afterDiscount = subtotal - discount
-  // If no tax is set on product, assume 0
-  const taxRate = item.product.tax || 0
-  return afterDiscount * (taxRate / 100)
+  const qty = Number(item.quantity) || 0;
+  const basePrice = Number(item.product.price) || 0;
+  const discountRate = Number(item.product.discount) || 0;
+  const baseDiscount = (basePrice * qty) * (discountRate / 100);
+  const baseTaxable = (basePrice * qty) - baseDiscount;
+  const baseTax = baseTaxable * ((Number(item.product.tax) || 0) / 100);
+
+  let addonsTax = 0;
+  if (Array.isArray(item.selectedAddOns)) {
+    for (const a of item.selectedAddOns) {
+      const aPrice = (Number(a.price) || 0) * (Number(a.quantity) || 1) * qty;
+      const aTaxRate = a.tax !== undefined && a.tax !== null ? Number(a.tax) : (Number(item.product.tax) || 0);
+      addonsTax += aPrice * (aTaxRate / 100);
+    }
+  }
+
+  return baseTax + addonsTax;
 }
 
 export const calculateItemCgst = (item: CartItemData): { rate: number; amount: number } => {
   if (!item || !item.product) return { rate: 0, amount: 0 };
-  const subtotal = calculateItemSubtotal(item);
-  const discount = calculateItemDiscount(item);
-  const afterDiscount = subtotal - discount;
-  const taxRate = item.product.tax || 0;
-  const cgstRate = taxRate / 2; // Divide total tax rate equally
+  const tax = calculateItemTax(item);
+  const taxRate = (item.product.tax || 0) / 2;
   return {
-    rate: cgstRate,
-    amount: afterDiscount * (cgstRate / 100)
+    rate: taxRate,
+    amount: tax / 2
   };
 }
 
 export const calculateItemSgst = (item: CartItemData): { rate: number; amount: number } => {
   if (!item || !item.product) return { rate: 0, amount: 0 };
-  const subtotal = calculateItemSubtotal(item);
-  const discount = calculateItemDiscount(item);
-  const afterDiscount = subtotal - discount;
-  const taxRate = item.product.tax || 0;
-  const sgstRate = taxRate / 2; // Divide total tax rate equally
+  const tax = calculateItemTax(item);
+  const taxRate = (item.product.tax || 0) / 2;
   return {
-    rate: sgstRate,
-    amount: afterDiscount * (sgstRate / 100)
+    rate: taxRate,
+    amount: tax / 2
   };
 }
 

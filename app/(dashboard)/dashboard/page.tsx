@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   TrendingUp,
@@ -29,11 +29,38 @@ import {
   CircleDollarSign,
   XCircle,
 } from 'lucide-react';
-import CollectionsTimelineChart from '@/components/dashboard/CollectionsTimelineChart';
-import PaymentCollectionsDonut from '@/components/dashboard/PaymentCollectionsDonut';
-import HourlyRushChart from '@/components/dashboard/HourlyRushChart';
+import dynamic from 'next/dynamic';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import UserCollectionsTable, { UserStatsItem } from '@/components/dashboard/UserCollectionsTable';
-import LiveCollectionsFeed, { RecentBillItem } from '@/components/dashboard/LiveCollectionsFeed';
+import UpcomingShiftsCard from '@/components/dashboard/UpcomingShiftsCard';
+import { RecentBillItem } from '@/components/dashboard/LiveCollectionsFeed';
+import {
+  KpiGridSkeleton,
+  ChartSkeleton,
+  DonutSkeleton,
+  FeedSkeleton,
+} from '@/components/dashboard/DashboardSkeletons';
+
+// Dynamic lazy-loaded heavy chart & feed components with skeleton fallbacks
+const CollectionsTimelineChart = dynamic(
+  () => import('@/components/dashboard/CollectionsTimelineChart'),
+  { ssr: false, loading: () => <ChartSkeleton height="h-80" /> }
+);
+
+const PaymentCollectionsDonut = dynamic(
+  () => import('@/components/dashboard/PaymentCollectionsDonut'),
+  { ssr: false, loading: () => <DonutSkeleton /> }
+);
+
+const HourlyRushChart = dynamic(
+  () => import('@/components/dashboard/HourlyRushChart'),
+  { ssr: false, loading: () => <ChartSkeleton height="h-56" /> }
+);
+
+const LiveCollectionsFeed = dynamic(
+  () => import('@/components/dashboard/LiveCollectionsFeed'),
+  { ssr: false, loading: () => <FeedSkeleton /> }
+);
 
 interface DashboardData {
   company: {
@@ -105,36 +132,46 @@ interface DashboardData {
 export default function DashboardPage() {
   const [preset, setPreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all'>('today');
   const [selectedUserId, setSelectedUserId] = useState<string>('all');
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  const queryClient = useQueryClient();
 
-  const fetchDashboardStats = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/dashboard/stats?preset=${preset}&userId=${selectedUserId}`, {
-        cache: 'no-store',
-      });
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((me) => {
+        if (me && me.authenticated) {
+          if (me.role === 'waiter') window.location.href = '/tables';
+          else if (me.role === 'chef') window.location.href = '/kitchen';
+          else if (me.role === 'delivery_staff') window.location.href = '/delivery';
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const {
+    data,
+    isLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery<DashboardData>({
+    queryKey: ['dashboard-stats', preset, selectedUserId],
+    queryFn: async () => {
+      const res = await fetch(`/api/dashboard/stats?preset=${preset}&userId=${selectedUserId}`);
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || `HTTP error ${res.status}`);
       }
-      const json: DashboardData = await res.json();
-      setData(json);
-      setLastRefreshed(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    } catch (err: any) {
-      console.error('Fetch dashboard stats error:', err);
-      setError(err.message || 'Failed to load dashboard metrics');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [preset, selectedUserId]);
+      return res.json();
+    },
+    staleTime: 30 * 1000,
+    placeholderData: (previousData) => previousData,
+  });
 
-  useEffect(() => {
-    fetchDashboardStats();
-  }, [fetchDashboardStats]);
+  const error = queryError ? (queryError as Error).message : null;
+  const lastRefreshed = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '';
 
   const currencySymbol = '₹';
   const overview = data?.overview;
@@ -193,12 +230,40 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            <div className="rounded-2xl bg-black/30 border border-white/20 p-3.5 backdrop-blur-md text-right min-w-[110px]">
+            <div className="rounded-2xl bg-black/30 border border-white/20 p-3.5 backdrop-blur-md text-right min-w-[100px]">
               <span className="text-[10px] uppercase font-bold text-white/70 block">Total Bills</span>
               <span className="text-xl font-black text-white font-mono">
                 {overview ? overview.totalBills : '0'}
               </span>
             </div>
+
+            <Link
+              href="/products"
+              className="rounded-2xl bg-black/30 hover:bg-black/50 border border-white/20 p-3.5 backdrop-blur-md text-right min-w-[105px] transition-all cursor-pointer group"
+              title="View all products"
+            >
+              <span className="text-[10px] uppercase font-bold text-white/70 block flex items-center justify-end gap-1 group-hover:text-pink-300">
+                <Package className="h-3 w-3" />
+                <span>Products</span>
+              </span>
+              <span className="text-xl font-black text-white font-mono">
+                {overview ? overview.totalProducts : '0'}
+              </span>
+            </Link>
+
+            <Link
+              href="/categories"
+              className="rounded-2xl bg-black/30 hover:bg-black/50 border border-white/20 p-3.5 backdrop-blur-md text-right min-w-[105px] transition-all cursor-pointer group"
+              title="View all categories"
+            >
+              <span className="text-[10px] uppercase font-bold text-white/70 block flex items-center justify-end gap-1 group-hover:text-amber-300">
+                <Layers className="h-3 w-3" />
+                <span>Category</span>
+              </span>
+              <span className="text-xl font-black text-white font-mono">
+                {overview ? overview.totalCategories : '0'}
+              </span>
+            </Link>
           </div>
         </div>
       </div>
@@ -258,6 +323,7 @@ export default function DashboardPage() {
                     u.role === 'chef' ? '👨‍🍳 Chef' :
                     u.role === 'waiter' ? '🍽️ Waiter' :
                     u.role === 'cashier' ? '👤 Cashier' :
+                    u.role === 'delivery_staff' ? '🚚 Delivery Staff' :
                     `👤 ${u.role}`;
                   return (
                     <option key={u.id} value={u.username}>
@@ -271,13 +337,13 @@ export default function DashboardPage() {
 
           {/* Refresh Button */}
           <button
-            onClick={() => fetchDashboardStats()}
-            disabled={isLoading}
+            onClick={() => refetch()}
+            disabled={isFetching}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-200 border border-zinc-700 transition cursor-pointer active:scale-95 disabled:opacity-50"
             title="Refresh live metrics"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-theme-accent' : 'text-zinc-400'}`} />
-            <span className="hidden sm:inline">{isLoading ? 'Syncing...' : 'Refresh'}</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin text-theme-accent' : 'text-zinc-400'}`} />
+            <span className="hidden sm:inline">{isFetching ? 'Syncing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -299,7 +365,8 @@ export default function DashboardPage() {
                    activeUserObj.role === 'manager' ? 'Manager' :
                    activeUserObj.role === 'chef' ? 'Chef' :
                    activeUserObj.role === 'waiter' ? 'Waiter' :
-                   activeUserObj.role === 'cashier' ? 'Cashier' : activeUserObj.role}
+                   activeUserObj.role === 'cashier' ? 'Cashier' :
+                   activeUserObj.role === 'delivery_staff' ? 'Delivery Staff' : activeUserObj.role}
                 </span>
               </div>
               <h2 className="text-base font-black text-white">
@@ -331,14 +398,17 @@ export default function DashboardPage() {
       {error && (
         <div className="rounded-2xl border border-red-500/30 bg-red-950/40 p-4 text-xs font-bold text-red-200 flex items-center justify-between">
           <span>Error loading dashboard metrics: {error}</span>
-          <button onClick={() => fetchDashboardStats()} className="underline hover:text-white cursor-pointer">
+          <button onClick={() => refetch()} className="underline hover:text-white cursor-pointer">
             Retry
           </button>
         </div>
       )}
 
-      {/* 4. Complete Collections Report (Hero KPI Cards Grid) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* 4. Complete Collections & Catalog Report (Hero KPI Cards Grid) */}
+      {isLoading && !data ? (
+        <KpiGridSkeleton />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Card 1: Total Gross Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-theme relative overflow-hidden group">
           <div className="flex items-center justify-between">
@@ -350,9 +420,7 @@ export default function DashboardPage() {
                 {currencySymbol}{overview ? overview.totalCollections.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-105 transition">
-              <CircleDollarSign className="h-5 w-5 text-theme-accent" />
-            </div>
+            <CircleDollarSign className="h-6 w-6 text-theme-accent shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.totalBills : 0} bills invoiced</span>
@@ -373,9 +441,7 @@ export default function DashboardPage() {
                 {currencySymbol}{overview ? overview.collections.cash.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 group-hover:scale-105 transition">
-              <Banknote className="h-5 w-5" />
-            </div>
+            <Banknote className="h-6 w-6 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.cash.count : 0} cash bills</span>
@@ -396,9 +462,7 @@ export default function DashboardPage() {
                 {currencySymbol}{overview ? overview.collections.upi.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 group-hover:scale-105 transition">
-              <QrCode className="h-5 w-5" />
-            </div>
+            <QrCode className="h-6 w-6 text-purple-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.upi.count : 0} UPI bills</span>
@@ -419,9 +483,7 @@ export default function DashboardPage() {
                 {currencySymbol}{overview ? overview.collections.card.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 group-hover:scale-105 transition">
-              <CreditCard className="h-5 w-5" />
-            </div>
+            <CreditCard className="h-6 w-6 text-cyan-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.card.count : 0} card bills</span>
@@ -442,9 +504,7 @@ export default function DashboardPage() {
                 {currencySymbol}{overview ? overview.collections.billOnly.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-105 transition">
-              <Clock className="h-5 w-5" />
-            </div>
+            <Clock className="h-6 w-6 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.billOnly.count : 0} unsettled</span>
@@ -452,34 +512,62 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Card 6: Products & Stock Telemetry */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-pink-500/50 relative overflow-hidden group">
+        {/* Card 6: Total Products */}
+        <Link
+          href="/products"
+          className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-pink-500/60 hover:bg-zinc-900/90 relative overflow-hidden group cursor-pointer block"
+          title="Open Products & Menu Collection"
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                Catalog & Stock
+              <p className="text-[11px] font-bold uppercase tracking-wider text-pink-400 flex items-center gap-1">
+                <span>Total Products</span>
+                <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
               <h3 className="mt-2 text-2xl font-black text-white font-mono">
                 {overview ? overview.totalProducts : 0}
               </h3>
             </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-pink-500/10 text-pink-400 border border-pink-500/20 group-hover:scale-105 transition">
-              <Package className="h-5 w-5" />
-            </div>
+            <Package className="h-6 w-6 text-pink-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
-            <span>{overview ? overview.totalCategories : 0} categories</span>
+            <span className="text-zinc-400">Catalog Menu</span>
             {overview && overview.lowStockCount > 0 ? (
               <span className="font-mono text-amber-400 flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
                 {overview.lowStockCount} low
               </span>
             ) : (
-              <span className="font-mono text-emerald-400">Stock healthy</span>
+              <span className="font-mono text-emerald-400">Healthy Stock</span>
             )}
           </p>
-        </div>
+        </Link>
+
+        {/* Card 7: Total Category */}
+        <Link
+          href="/categories"
+          className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-amber-500/60 hover:bg-zinc-900/90 relative overflow-hidden group cursor-pointer block"
+          title="Open Categories Collection"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                <span>Total Category</span>
+                <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </p>
+              <h3 className="mt-2 text-2xl font-black text-white font-mono">
+                {overview ? overview.totalCategories : 0}
+              </h3>
+            </div>
+            <Layers className="h-6 w-6 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
+          </div>
+          <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
+            <span className="text-zinc-400">Menu Groups</span>
+            <span className="font-mono text-zinc-400 group-hover:text-zinc-200 transition">View All →</span>
+          </p>
+        </Link>
       </div>
+      )}
 
       {/* 5. Dynamic Interactive Graphs Grid ("dyanmic graft design") */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -510,6 +598,11 @@ export default function DashboardPage() {
           hourlyData={data?.hourlyRush || []}
           currencySymbol={currencySymbol}
         />
+      </div>
+
+      {/* Shift Management Live Roster & Upcoming Alerts */}
+      <div>
+        <UpcomingShiftsCard />
       </div>
 
       {/* 7. Dedicated Staff & User Collections Report */}

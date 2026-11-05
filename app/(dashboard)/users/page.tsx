@@ -17,6 +17,7 @@ import {
   CreditCard,
   ClipboardList,
   RefreshCw,
+  Truck,
 } from 'lucide-react';
 
 interface CompanyOption {
@@ -296,6 +297,13 @@ export default function UsersPage() {
             Waiter
           </span>
         );
+      case 'delivery_staff':
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-pink-500/15 text-pink-300 border border-pink-500/30">
+            <Truck className="h-3 w-3 text-pink-400" />
+            Delivery Staff
+          </span>
+        );
       default:
         return (
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
@@ -424,6 +432,7 @@ export default function UsersPage() {
                       <option value="cashier">Cashier</option>
                       <option value="chef">Chef</option>
                       <option value="waiter">Waiter</option>
+                      <option value="delivery_staff">Delivery Staff</option>
                     </>
                   )}
                   {isCompanyAdmin && (
@@ -432,6 +441,7 @@ export default function UsersPage() {
                       <option value="cashier">Cashier</option>
                       <option value="chef">Chef</option>
                       <option value="waiter">Waiter</option>
+                      <option value="delivery_staff">Delivery Staff</option>
                     </>
                   )}
                 </select>

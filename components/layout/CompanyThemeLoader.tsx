@@ -47,15 +47,13 @@ export default function CompanyThemeLoader() {
             const theme: CompanyTheme = data.theme;
             applyThemeToDom(theme);
 
-            // Sync fallback to terminal design store only if no custom terminal design is set
-            if (!useTerminalDesignStore.getState().isCustom) {
-              updateDesign({
-                accentColor: theme.accentColor,
-                activeBorderColor: theme.activeBorderColor,
-                bannerBgColor: theme.gradientStart,
-                themePreset: (theme.id as any) || 'custom',
-              });
-            }
+            // Sync theme palette (colors/gradients) from dashboard to terminal design store
+            useTerminalDesignStore.getState().updateDesign({
+              accentColor: theme.accentColor,
+              activeBorderColor: theme.activeBorderColor,
+              bannerBgColor: theme.gradientStart,
+              themePreset: (theme.id as any) || 'custom',
+            });
 
             // Cache per-company or for super admin
             try {

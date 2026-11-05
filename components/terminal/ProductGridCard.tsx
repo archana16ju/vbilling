@@ -10,6 +10,7 @@ interface ProductGridCardProps {
   product: Product;
   isActive?: boolean;
   onSelect?: () => void;
+  onSelectProduct?: (product: Product) => void;
   themeMode?: 'dark' | 'light';
 }
 
@@ -17,6 +18,7 @@ export default function ProductGridCard({
   product,
   isActive: propIsActive,
   onSelect,
+  onSelectProduct,
   themeMode: propThemeMode,
 }: ProductGridCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart);
@@ -45,21 +47,29 @@ export default function ProductGridCard({
     setLocalActive(true);
     setTimeout(() => setLocalActive(false), 900);
 
+    const triggerAdd = () => {
+      if (onSelectProduct) {
+        onSelectProduct(product);
+      } else {
+        addToCart(product);
+      }
+    };
+
     if (design.quickDoubleTap) {
       if (clickTimeoutRef.current) {
         // Double tap detected
         clearTimeout(clickTimeoutRef.current);
         clickTimeoutRef.current = null;
-        addToCart(product);
+        triggerAdd();
         return;
       }
 
       clickTimeoutRef.current = setTimeout(() => {
         clickTimeoutRef.current = null;
-        addToCart(product);
+        triggerAdd();
       }, 220);
     } else {
-      addToCart(product);
+      triggerAdd();
     }
   };
 

@@ -1,3 +1,4 @@
+import { SelectedAddon } from '@/types/addons';
 import { usePrinterDesignStore } from './usePrinterDesignStore';
 import { generateReceiptHtml } from '@/lib/printSystem';
 import { create } from 'zustand'
@@ -33,6 +34,8 @@ export type Sale = {
   isDiscountPercentage?: boolean
   syncStatus?: 'COMPLETED' | 'PENDING_SYNC'
   createdBy?: string
+  creatorRole?: string
+  creatorName?: string
   companyId?: string
   companyName?: string
   tableId?: string
@@ -104,6 +107,7 @@ type TerminalState = {
   deleteProduct: (id: string) => void
   
   addToCart: (product: Product) => void
+  addToCartWithAddons: (product: Product, selectedAddOns: SelectedAddon[], quantity?: number) => void
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   updateItemNotes: (productId: string, notes: string) => void
@@ -163,6 +167,11 @@ type TerminalState = {
   setActiveCompanyId?: (id: string) => void
   generateNextBillId: (companyId?: string) => string
   reconcileBillSequence: (serverCount: number, companyId?: string, force?: boolean) => void
+
+  terminalModeOverride: 'dark' | 'light' | null
+  setTerminalModeOverride: (mode: 'dark' | 'light' | null) => void
+  terminalThemeMode: 'dark' | 'light'
+  setTerminalThemeMode: (mode: 'dark' | 'light') => void
 }
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {
@@ -237,6 +246,8 @@ export const useTerminalStore = create<TerminalState>()(
       rawMaterials: [],
       sales: [],
       offlineQueue: [],
+      terminalModeOverride: null,
+      terminalThemeMode: 'dark',
       selectedCategoryId: 'all',
       searchQuery: '',
       cart: [],
@@ -275,6 +286,8 @@ export const useTerminalStore = create<TerminalState>()(
       setSyncInterval: (interval) => set({ syncInterval: interval }),
       setActiveShortcuts: (shortcuts) => set({ activeShortcuts: shortcuts }),
 
+      setTerminalModeOverride: (mode) => set({ terminalModeOverride: mode, terminalThemeMode: mode || 'dark' }),
+      setTerminalThemeMode: (mode) => set({ terminalThemeMode: mode, terminalModeOverride: mode }),
       setCategory: (id) => set({ selectedCategoryId: id }),
       setSearchQuery: (query) => set({ searchQuery: query }),
   
@@ -332,46 +345,89 @@ export const useTerminalStore = create<TerminalState>()(
   })),
   
   addToCart: (product) => set((state) => {
-    const existing = state.cart.find(i => i.product.id === product.id)
+    const existing = state.cart.find(i => i.product.id === product.id && (!i.selectedAddOns || i.selectedAddOns.length === 0));
     if (existing) {
-      const newQuantity = existing.quantity + product.quantityStep
-      const finalQuantity = Math.min(newQuantity, product.stock)
+      const newQuantity = existing.quantity + product.quantityStep;
+      const finalQuantity = Math.min(newQuantity, product.stock);
       return {
         cart: state.cart.map(i => 
-          i.product.id === product.id ? { ...i, quantity: finalQuantity } : i
+          i === existing ? { ...i, quantity: finalQuantity } : i
         )
-      }
+      };
     } else {
-      return { cart: [...state.cart, { product, quantity: product.quantityStep }] }
+      const lineId = 'line_' + product.id + '_' + Date.now();
+      return { cart: [...state.cart, { product, quantity: product.quantityStep, lineId }] };
+    }
+  }),
+
+  addToCartWithAddons: (product, selectedAddOns, quantity = 1) => set((state) => {
+    const sortedAddonKey = (selectedAddOns || [])
+      .map(a => `${a.id}:${a.quantity}`)
+      .sort()
+      .join('|');
+
+    const existingIndex = state.cart.findIndex(i => {
+      if (i.product.id !== product.id) return false;
+      const iKey = (i.selectedAddOns || [])
+        .map(a => `${a.id}:${a.quantity}`)
+        .sort()
+        .join('|');
+      return iKey === sortedAddonKey;
+    });
+
+    if (existingIndex >= 0) {
+      const existing = state.cart[existingIndex];
+      const newQuantity = existing.quantity + quantity;
+      const finalQuantity = Math.min(newQuantity, product.stock);
+      const updatedCart = [...state.cart];
+      updatedCart[existingIndex] = { ...existing, quantity: finalQuantity };
+      return { cart: updatedCart };
+    } else {
+      const lineId = 'line_' + product.id + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      return {
+        cart: [
+          ...state.cart,
+          {
+            product,
+            quantity: Math.min(quantity, product.stock),
+            selectedAddOns,
+            lineId,
+          }
+        ]
+      };
     }
   }),
   
-  removeFromCart: (productId) => set((state) => ({
-    cart: state.cart.filter(i => i.product.id !== productId)
+  removeFromCart: (identifier) => set((state) => ({
+    cart: state.cart.filter(i => (i.lineId ? i.lineId !== identifier : i.product.id !== identifier))
   })),
   
-  updateQuantity: (productId, quantity) => set((state) => {
-    const item = state.cart.find(i => i.product.id === productId)
-    if (!item) return state
+  updateQuantity: (identifier, quantity) => set((state) => {
+    const item = state.cart.find(i => (i.lineId ? i.lineId === identifier : i.product.id === identifier));
+    if (!item) return state;
     
     // Clamp quantity between 0 and stock
-    let newQuantity = Math.max(0, quantity)
-    newQuantity = Math.min(newQuantity, item.product.stock)
+    let newQuantity = Math.max(0, quantity);
+    newQuantity = Math.min(newQuantity, item.product.stock);
     
     if (newQuantity === 0) {
-      return { cart: state.cart.filter(i => i.product.id !== productId) }
+      return { cart: state.cart.filter(i => (i.lineId ? i.lineId !== identifier : i.product.id !== identifier)) };
     }
     
     return {
       cart: state.cart.map(i => 
-        i.product.id === productId ? { ...i, quantity: newQuantity } : i
+        (i.lineId ? i.lineId === identifier : i.product.id === identifier)
+          ? { ...i, quantity: newQuantity }
+          : i
       )
-    }
+    };
   }),
 
-  updateItemNotes: (productId, notes) => set((state) => ({
+  updateItemNotes: (identifier, notes) => set((state) => ({
     cart: state.cart.map(i =>
-      i.product.id === productId ? { ...i, notes } : i
+      (i.lineId ? i.lineId === identifier : i.product.id === identifier)
+        ? { ...i, notes }
+        : i
     )
   })),
   

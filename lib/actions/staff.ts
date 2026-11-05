@@ -17,6 +17,11 @@ import type {
   AttendanceReportRow,
   PayrollRow,
   MarkCode,
+  StaffShift,
+  ShiftAlert,
+  ShiftName,
+  ShiftAttendanceStatus,
+  ShiftStatus,
 } from '@/types/staff';
 
 export type {
@@ -28,6 +33,11 @@ export type {
   AttendanceReportRow,
   PayrollRow,
   MarkCode,
+  StaffShift,
+  ShiftAlert,
+  ShiftName,
+  ShiftAttendanceStatus,
+  ShiftStatus,
 };
 
 /**
@@ -47,7 +57,7 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
         await pool.query("UPDATE staff SET role = 'Cashier' WHERE LOWER(TRIM(role)) = 'staff'");
 
         const [staffUsers] = await pool.query<RowDataPacket[]>(
-          `SELECT id, username, name, role, company_id FROM users WHERE company_id = ? AND role IN ('manager', 'cashier', 'chef', 'waiter')`,
+          `SELECT id, username, name, role, company_id FROM users WHERE company_id = ? AND role IN ('manager', 'cashier', 'chef', 'waiter', 'delivery_staff')`,
           [companyId]
         );
         for (const u of staffUsers) {
@@ -58,7 +68,7 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
           if (existing.length === 0) {
             const staffId = `st_${u.id}`;
             const displayName = u.name && u.name.trim() ? u.name : u.username;
-            const roleCap = u.role.charAt(0).toUpperCase() + u.role.slice(1).toLowerCase();
+            const roleCap = u.role === 'delivery_staff' ? 'Delivery Staff' : (u.role.charAt(0).toUpperCase() + u.role.slice(1).toLowerCase());
             await pool.query(
               `INSERT INTO staff (id, company_id, branch_id, user_id, name, username, role, phone, pay_type, base_amount, allowances, deductions, include_in_payroll, is_active, created_at)
                VALUES (?, ?, NULL, ?, ?, ?, ?, NULL, 'Monthly', 15000.00, '[]', '[]', 1, 1, NOW())`,
@@ -72,7 +82,7 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
 
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT id, company_id, branch_id, user_id, name, username, role, phone,
-                pay_type, base_amount, allowances, deductions, include_in_payroll, is_active, created_at
+                pay_type, base_amount, allowances, deductions, shifts, include_in_payroll, is_active, created_at
          FROM staff
          WHERE company_id = ?
          ORDER BY name ASC`,
@@ -82,6 +92,7 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
       const staff: StaffMember[] = rows.map((r) => {
         let allowances: StaffAllowance[] = [];
         let deductions: StaffDeduction[] = [];
+        let shifts: StaffShift[] = [];
         try {
           if (typeof r.allowances === 'string') allowances = JSON.parse(r.allowances);
           else if (Array.isArray(r.allowances)) allowances = r.allowances;
@@ -89,6 +100,11 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
         try {
           if (typeof r.deductions === 'string') deductions = JSON.parse(r.deductions);
           else if (Array.isArray(r.deductions)) deductions = r.deductions;
+        } catch { }
+        try {
+          if (typeof r.shifts === 'string') shifts = JSON.parse(r.shifts);
+          else if (Array.isArray(r.shifts)) shifts = r.shifts;
+          else if (r.shifts && typeof r.shifts === 'object') shifts = Object.values(r.shifts);
         } catch { }
 
         return {
@@ -104,6 +120,7 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
           baseAmount: Number(r.base_amount || 0),
           allowances,
           deductions,
+          shifts,
           includeInPayroll: Boolean(r.include_in_payroll),
           isActive: Boolean(r.is_active),
           createdAt: r.created_at ? new Date(r.created_at).toISOString() : undefined,
@@ -1200,5 +1217,802 @@ export async function getCompanyWaiters(targetCompanyId?: string): Promise<{
   } catch (err: any) {
     console.error('getCompanyWaiters error:', err);
     return { success: false, waiters: [], error: err.message || 'Failed to fetch waiters' };
+  }
+}
+
+
+/* =========================================================================
+   STAFF SHIFT MANAGEMENT (Embedded in Staff Collection)
+   ========================================================================= */
+
+function parseTimeToMinutes(timeStr: string): number {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+}
+
+function isTimeOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
+  let a1 = parseTimeToMinutes(startA);
+  let a2 = parseTimeToMinutes(endA);
+  let b1 = parseTimeToMinutes(startB);
+  let b2 = parseTimeToMinutes(endB);
+
+  // Handle overnight shifts extending to next morning
+  if (a2 <= a1) a2 += 24 * 60;
+  if (b2 <= b1) b2 += 24 * 60;
+
+  return Math.max(a1, b1) < Math.min(a2, b2);
+}
+
+/**
+ * Fetch all shifts for the company from the staff collection.
+ * Staff members (Cashier, Chef, Waiter, Manager) only see their own assigned shifts.
+ * Company Admin & Super Admin see all staff shifts.
+ */
+export async function getCompanyStaffShifts(filters?: {
+  date?: string;
+  staffId?: string;
+  month?: string; // YYYY-MM
+  year?: number;
+}): Promise<{
+  success: boolean;
+  shifts: StaffShift[];
+  isStaffOnly: boolean;
+  currentStaffId?: string;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    const cookieStore = await cookies();
+    const currentUserId = session?.userId || cookieStore.get('auth_user_id')?.value;
+    const currentUsername = session?.username || cookieStore.get('auth_username')?.value;
+    const currentRole = (session?.role || cookieStore.get('auth_role')?.value || '').toLowerCase();
+    const isSuperOrCompanyAdmin = currentRole === 'super_admin' || currentRole === 'company_admin' || currentRole === 'admin';
+
+    let allStaff: StaffMember[] = [];
+    const staffRes = await getStaffList();
+    if (!staffRes.success) {
+      return { success: false, shifts: [], isStaffOnly: !isSuperOrCompanyAdmin, error: staffRes.error };
+    }
+    allStaff = staffRes.staff;
+
+    // Find current staff member if this is a staff user
+    let currentStaffId: string | undefined;
+    if (!isSuperOrCompanyAdmin) {
+      const myStaff = allStaff.find(
+        (s) => (currentUserId && (s.userId === currentUserId || s.id === currentUserId)) ||
+               (currentUsername && (
+                 (s.username && s.username.toLowerCase() === currentUsername.toLowerCase()) ||
+                 (s.name && s.name.toLowerCase() === currentUsername.toLowerCase())
+               ))
+      );
+      if (myStaff) currentStaffId = myStaff.id;
+    }
+
+    // Extract all shifts from each staff member's shifts JSON array
+    let aggregatedShifts: StaffShift[] = [];
+    for (const member of allStaff) {
+      // Permission boundary: Staff members can only view their own assigned shifts
+      if (!isSuperOrCompanyAdmin && currentStaffId && member.id !== currentStaffId) {
+        continue;
+      }
+      if (filters?.staffId && filters.staffId !== 'all' && member.id !== filters.staffId) {
+        continue;
+      }
+
+      const memberShifts = member.shifts || [];
+      for (const shift of memberShifts) {
+        // Apply date / month filters
+        if (filters?.date && shift.shiftDate !== filters.date) continue;
+        if (filters?.month && !shift.shiftDate.startsWith(filters.month)) continue;
+        if (filters?.year && !shift.shiftDate.startsWith(String(filters.year))) continue;
+
+        const clockIn = shift.clockInTime || shift.checkInTime || null;
+        const clockOut = shift.clockOutTime || shift.checkOutTime || null;
+
+        let status = shift.shiftStatus || 'Upcoming';
+        if (clockOut) {
+          status = 'Completed';
+        } else if (clockIn) {
+          status = 'Active';
+        }
+
+        aggregatedShifts.push({
+          ...shift,
+          staffId: member.id,
+          staffName: member.name,
+          staffRole: member.role,
+          clockInTime: clockIn,
+          clockOutTime: clockOut,
+          checkInTime: clockIn,
+          checkOutTime: clockOut,
+          shiftStatus: status,
+        });
+      }
+    }
+
+    // Sort: newest date first, then earliest start time
+    aggregatedShifts.sort((a, b) => {
+      if (a.shiftDate !== b.shiftDate) {
+        return b.shiftDate.localeCompare(a.shiftDate);
+      }
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    return {
+      success: true,
+      shifts: aggregatedShifts,
+      isStaffOnly: !isSuperOrCompanyAdmin,
+      currentStaffId,
+    };
+  } catch (err: any) {
+    console.error('getCompanyStaffShifts error:', err);
+    return { success: false, shifts: [], isStaffOnly: false, error: err.message || 'Failed to fetch staff shifts.' };
+  }
+}
+
+/**
+ * Assign a new shift to a staff member inside the staff collection.
+ * Prevents overlapping shifts for the same staff member.
+ */
+export async function createStaffShift(params: {
+  staffId: string;
+  shiftName: ShiftName;
+  customShiftName?: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  breakDuration: number;
+  notes?: string;
+}): Promise<{ success: boolean; shift?: StaffShift; error?: string }> {
+  try {
+    const session = await getSession();
+    const currentRole = (session?.role || '').toLowerCase();
+    if (currentRole !== 'super_admin' && currentRole !== 'company_admin' && currentRole !== 'admin') {
+      return { success: false, error: 'Only Company Admin and Super Admin can assign shifts.' };
+    }
+
+    if (!params.staffId) return { success: false, error: 'Please select a staff member.' };
+    if (!params.shiftDate) return { success: false, error: 'Shift date is required.' };
+    if (!params.startTime || !params.endTime) return { success: false, error: 'Shift start and end times are required.' };
+
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+
+    // 1. Fetch staff member row to check existing shifts and prevent overlapping
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, name, role, shifts FROM staff WHERE id = ? AND company_id = ?',
+      [params.staffId, company.id]
+    );
+    if (rows.length === 0) {
+      return { success: false, error: 'Staff member not found in this company.' };
+    }
+    const staff = rows[0];
+    let existingShifts: StaffShift[] = [];
+    try {
+      if (typeof staff.shifts === 'string') existingShifts = JSON.parse(staff.shifts);
+      else if (Array.isArray(staff.shifts)) existingShifts = staff.shifts;
+    } catch {}
+
+    // Check for overlapping shifts on the same date for this staff member
+    for (const s of existingShifts) {
+      if (s.shiftDate === params.shiftDate) {
+        if (isTimeOverlap(params.startTime, params.endTime, s.startTime, s.endTime)) {
+          return {
+            success: false,
+            error: `Cannot assign shift: ${staff.name} already has a "${s.shiftName}" shift on ${params.shiftDate} from ${s.startTime} to ${s.endTime}.`,
+          };
+        }
+      }
+    }
+
+    // Calculate planned total working hours
+    let s1 = parseTimeToMinutes(params.startTime);
+    let s2 = parseTimeToMinutes(params.endTime);
+    if (s2 <= s1) s2 += 24 * 60;
+    const breakMins = Math.max(0, Number(params.breakDuration) || 0);
+    const plannedMins = Math.max(0, s2 - s1 - breakMins);
+    const totalWorkingHours = Math.round((plannedMins / 60) * 100) / 100;
+
+    // Determine initial shift status
+    const todayStr = new Date().toISOString().split('T')[0];
+    let initialStatus: ShiftStatus = 'Upcoming';
+    if (params.shiftDate < todayStr) {
+      initialStatus = 'Completed';
+    } else if (params.shiftDate === todayStr) {
+      const now = new Date();
+      const currentMins = now.getHours() * 60 + now.getMinutes();
+      if (currentMins >= s1 && currentMins <= s2) {
+        initialStatus = 'Active';
+      } else if (currentMins > s2) {
+        initialStatus = 'Completed';
+      }
+    }
+
+    const newShift: StaffShift = {
+      id: `shift_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      staffId: staff.id,
+      staffName: staff.name,
+      staffRole: staff.role,
+      shiftName: params.shiftName,
+      customShiftName: params.customShiftName?.trim() || undefined,
+      shiftDate: params.shiftDate,
+      startTime: params.startTime,
+      endTime: params.endTime,
+      breakDuration: breakMins,
+      checkInTime: null,
+      checkOutTime: null,
+      attendanceStatus: 'Present',
+      shiftStatus: initialStatus,
+      totalWorkingHours,
+      notes: params.notes?.trim() || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    existingShifts.push(newShift);
+
+    // Save directly into the staff table's shifts column
+    await pool.query(
+      'UPDATE staff SET shifts = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [JSON.stringify(existingShifts), staff.id, company.id]
+    );
+
+    await recordAuditLog({
+      companyId: company.id,
+      userId: session?.userId || 'admin',
+      action: 'CREATE_STAFF_SHIFT',
+      entityType: 'STAFF',
+      entityId: staff.id,
+      details: {
+        shiftId: newShift.id,
+        staffName: staff.name,
+        shiftName: params.shiftName,
+        shiftDate: params.shiftDate,
+        time: `${params.startTime}-${params.endTime}`,
+      },
+    });
+
+    return { success: true, shift: newShift };
+  } catch (err: any) {
+    console.error('createStaffShift error:', err);
+    return { success: false, error: err.message || 'Failed to create staff shift.' };
+  }
+}
+
+/**
+ * Edit an existing shift. Prevents overlapping with other shifts for this staff.
+ */
+export async function updateStaffShift(params: {
+  shiftId: string;
+  staffId: string;
+  shiftName: ShiftName;
+  customShiftName?: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  breakDuration: number;
+  attendanceStatus?: ShiftAttendanceStatus;
+  shiftStatus?: ShiftStatus;
+  notes?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSession();
+    const currentRole = (session?.role || '').toLowerCase();
+    if (currentRole !== 'super_admin' && currentRole !== 'company_admin' && currentRole !== 'admin') {
+      return { success: false, error: 'Only Company Admin and Super Admin can edit shifts.' };
+    }
+
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, name, role, shifts FROM staff WHERE id = ? AND company_id = ?',
+      [params.staffId, company.id]
+    );
+    if (rows.length === 0) return { success: false, error: 'Staff member not found.' };
+
+    const staff = rows[0];
+    let existingShifts: StaffShift[] = [];
+    try {
+      if (typeof staff.shifts === 'string') existingShifts = JSON.parse(staff.shifts);
+      else if (Array.isArray(staff.shifts)) existingShifts = staff.shifts;
+    } catch {}
+
+    const shiftIndex = existingShifts.findIndex((s) => s.id === params.shiftId);
+    if (shiftIndex === -1) return { success: false, error: 'Shift record not found.' };
+
+    // Check overlap with other shifts on this date (excluding current shift)
+    for (let i = 0; i < existingShifts.length; i++) {
+      if (i === shiftIndex) continue;
+      const other = existingShifts[i];
+      if (other.shiftDate === params.shiftDate) {
+        if (isTimeOverlap(params.startTime, params.endTime, other.startTime, other.endTime)) {
+          return {
+            success: false,
+            error: `Shift overlaps with another existing shift ("${other.shiftName}") on ${params.shiftDate} from ${other.startTime} to ${other.endTime}.`,
+          };
+        }
+      }
+    }
+
+    const current = existingShifts[shiftIndex];
+    let s1 = parseTimeToMinutes(params.startTime);
+    let s2 = parseTimeToMinutes(params.endTime);
+    if (s2 <= s1) s2 += 24 * 60;
+    const breakMins = Math.max(0, Number(params.breakDuration) || 0);
+
+    let totalWorkingHours = current.totalWorkingHours;
+    if (current.checkInTime && current.checkOutTime) {
+      const inMs = new Date(current.checkInTime).getTime();
+      const outMs = new Date(current.checkOutTime).getTime();
+      const diffMins = Math.max(0, Math.floor((outMs - inMs) / 60000));
+      totalWorkingHours = Math.round((Math.max(0, diffMins - breakMins) / 60) * 100) / 100;
+    } else {
+      totalWorkingHours = Math.round((Math.max(0, s2 - s1 - breakMins) / 60) * 100) / 100;
+    }
+
+    existingShifts[shiftIndex] = {
+      ...current,
+      shiftName: params.shiftName,
+      customShiftName: params.customShiftName?.trim() || undefined,
+      shiftDate: params.shiftDate,
+      startTime: params.startTime,
+      endTime: params.endTime,
+      breakDuration: breakMins,
+      attendanceStatus: params.attendanceStatus || current.attendanceStatus,
+      shiftStatus: params.shiftStatus || current.shiftStatus,
+      totalWorkingHours,
+      notes: params.notes !== undefined ? params.notes.trim() || null : current.notes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await pool.query(
+      'UPDATE staff SET shifts = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [JSON.stringify(existingShifts), staff.id, company.id]
+    );
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateStaffShift error:', err);
+    return { success: false, error: err.message || 'Failed to update shift.' };
+  }
+}
+
+/**
+ * Delete a shift from the staff collection.
+ */
+export async function deleteStaffShift(shiftId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSession();
+    const currentRole = (session?.role || '').toLowerCase();
+    if (currentRole !== 'super_admin' && currentRole !== 'company_admin' && currentRole !== 'admin') {
+      return { success: false, error: 'Only Company Admin and Super Admin can delete shifts.' };
+    }
+
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, shifts FROM staff WHERE company_id = ?',
+      [company.id]
+    );
+
+    for (const staff of rows) {
+      let existingShifts: StaffShift[] = [];
+      try {
+        if (typeof staff.shifts === 'string') existingShifts = JSON.parse(staff.shifts);
+        else if (Array.isArray(staff.shifts)) existingShifts = staff.shifts;
+      } catch {}
+
+      const idx = existingShifts.findIndex((s) => s.id === shiftId);
+      if (idx !== -1) {
+        existingShifts.splice(idx, 1);
+        await pool.query(
+          'UPDATE staff SET shifts = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+          [JSON.stringify(existingShifts), staff.id, company.id]
+        );
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: 'Shift not found.' };
+  } catch (err: any) {
+    console.error('deleteStaffShift error:', err);
+    return { success: false, error: err.message || 'Failed to delete shift.' };
+  }
+}
+
+/**
+ * Record check-in time for a shift. Automatically marks Late if after start time.
+ */
+export async function recordShiftCheckIn(
+  shiftId: string,
+  timestamp?: string
+): Promise<{ success: boolean; attendanceStatus?: ShiftAttendanceStatus; checkInTime?: string; clockInTime?: string; shiftId?: string; staffId?: string; error?: string }> {
+  try {
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+    const nowIso = timestamp || new Date().toISOString();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, shifts FROM staff WHERE company_id = ?',
+      [company.id]
+    );
+
+    for (const staff of rows) {
+      let existingShifts: StaffShift[] = [];
+      try {
+        if (typeof staff.shifts === 'string') existingShifts = JSON.parse(staff.shifts);
+        else if (Array.isArray(staff.shifts)) existingShifts = staff.shifts;
+      } catch {}
+
+      const idx = existingShifts.findIndex((s) => s.id === shiftId);
+      if (idx !== -1) {
+        const shift = existingShifts[idx];
+
+        // Evaluate if check-in is Late (> 10 mins past scheduled start time)
+        const checkInDate = new Date(nowIso);
+        const [sHour, sMin] = shift.startTime.split(':').map(Number);
+        const scheduledStart = new Date(shift.shiftDate);
+        scheduledStart.setHours(sHour || 0, sMin || 0, 0, 0);
+
+        const diffMins = Math.floor((checkInDate.getTime() - scheduledStart.getTime()) / 60000);
+        const attendanceStatus: ShiftAttendanceStatus = diffMins > 10 ? 'Late' : 'Present';
+
+        existingShifts[idx] = {
+          ...shift,
+          checkInTime: nowIso,
+          clockInTime: nowIso,
+          attendanceStatus,
+          shiftStatus: 'Active',
+          updatedAt: new Date().toISOString(),
+        };
+
+        await pool.query(
+          'UPDATE staff SET shifts = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+          [JSON.stringify(existingShifts), staff.id, company.id]
+        );
+
+        return {
+          success: true,
+          attendanceStatus,
+          checkInTime: nowIso,
+          clockInTime: nowIso,
+          shiftId: shift.id,
+          staffId: staff.id,
+        };
+      }
+    }
+
+    return { success: false, error: 'Shift not found.' };
+  } catch (err: any) {
+    console.error('recordShiftCheckIn error:', err);
+    return { success: false, error: err.message || 'Failed to record check-in.' };
+  }
+}
+
+/**
+ * Record check-out time for a shift. Automatically calculates total working hours.
+ */
+export async function recordShiftCheckOut(
+  shiftId: string,
+  timestamp?: string
+): Promise<{ success: boolean; totalWorkingHours?: number; checkOutTime?: string; clockOutTime?: string; shiftId?: string; staffId?: string; error?: string }> {
+  try {
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+    const nowIso = timestamp || new Date().toISOString();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, shifts FROM staff WHERE company_id = ?',
+      [company.id]
+    );
+
+    for (const staff of rows) {
+      let existingShifts: StaffShift[] = [];
+      try {
+        if (typeof staff.shifts === 'string') existingShifts = JSON.parse(staff.shifts);
+        else if (Array.isArray(staff.shifts)) existingShifts = staff.shifts;
+      } catch {}
+
+      const idx = existingShifts.findIndex((s) => s.id === shiftId);
+      if (idx !== -1) {
+        const shift = existingShifts[idx];
+        const checkInMs = shift.checkInTime ? new Date(shift.checkInTime).getTime() : Date.now();
+        const checkOutMs = new Date(nowIso).getTime();
+
+        const diffMinutes = Math.max(0, Math.floor((checkOutMs - checkInMs) / 60000));
+        const breakMins = shift.breakDuration || 0;
+        const netWorkingMins = Math.max(0, diffMinutes - breakMins);
+        const totalWorkingHours = Math.round((netWorkingMins / 60) * 100) / 100;
+
+        existingShifts[idx] = {
+          ...shift,
+          checkOutTime: nowIso,
+          clockOutTime: nowIso,
+          shiftStatus: 'Completed',
+          totalWorkingHours,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await pool.query(
+          'UPDATE staff SET shifts = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+          [JSON.stringify(existingShifts), staff.id, company.id]
+        );
+
+        return {
+          success: true,
+          totalWorkingHours,
+          checkOutTime: nowIso,
+          clockOutTime: nowIso,
+          shiftId: shift.id,
+          staffId: staff.id,
+        };
+      }
+    }
+
+    return { success: false, error: 'Shift not found.' };
+  } catch (err: any) {
+    console.error('recordShiftCheckOut error:', err);
+    return { success: false, error: err.message || 'Failed to record check-out.' };
+  }
+}
+
+/**
+ * Generate automatic shift alerts for staff & company admin.
+ * Evaluates upcoming, active, late, missed, and completed shifts against the current local time.
+ */
+// Aliases for explicit Clock-In & Clock-Out naming
+export const recordShiftClockIn = recordShiftCheckIn;
+export const recordShiftClockOut = recordShiftCheckOut;
+
+/**
+ * Generate shift alerts strictly for assigned staff members.
+ * Requirements:
+ * 1. Show alerts only to staff members who have assigned shifts.
+ * 2. Do not display shift notifications to Super Admin or Company Admin accounts.
+ */
+export async function getShiftAlerts(): Promise<{
+  success: boolean;
+  isStaffWithShifts: boolean;
+  hasAssignedShifts: boolean;
+  alerts: ShiftAlert[];
+  unreadCount: number;
+  urgentCount: number;
+  error?: string;
+}> {
+  try {
+    const session = await getSession();
+    const cookieStore = await cookies();
+    const currentUserId = session?.userId || cookieStore.get('auth_user_id')?.value;
+    const currentUsername = session?.username || cookieStore.get('auth_username')?.value;
+    const currentRole = (session?.role || cookieStore.get('auth_role')?.value || '').toLowerCase();
+    const isSuperOrCompanyAdmin = currentRole === 'super_admin' || currentRole === 'company_admin' || currentRole === 'admin';
+
+    // REQUIREMENT 2: Do NOT display shift notifications to Super Admin or Company Admin accounts
+    if (isSuperOrCompanyAdmin) {
+      return {
+        success: true,
+        isStaffWithShifts: false,
+        hasAssignedShifts: false,
+        alerts: [],
+        unreadCount: 0,
+        urgentCount: 0,
+      };
+    }
+
+    const pool = getMysqlPool();
+    const company = await getAuthorizedCompanyContext();
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      'SELECT id, name, role, user_id, username, shifts FROM staff WHERE company_id = ?',
+      [company.id]
+    );
+
+    // REQUIREMENT 1: Find the logged-in staff member's record
+    const myStaffMember = rows.find((m) => {
+      const matchUserId = currentUserId && (m.user_id === currentUserId || m.id === currentUserId);
+      const matchUsername = currentUsername && (
+        (m.username && m.username.toLowerCase() === currentUsername.toLowerCase()) ||
+        (m.name && m.name.toLowerCase() === currentUsername.toLowerCase())
+      );
+      return matchUserId || matchUsername;
+    });
+
+    if (!myStaffMember) {
+      return {
+        success: true,
+        isStaffWithShifts: false,
+        hasAssignedShifts: false,
+        alerts: [],
+        unreadCount: 0,
+        urgentCount: 0,
+      };
+    }
+
+    let myShifts: StaffShift[] = [];
+    try {
+      if (typeof myStaffMember.shifts === 'string') myShifts = JSON.parse(myStaffMember.shifts);
+      else if (Array.isArray(myStaffMember.shifts)) myShifts = myStaffMember.shifts;
+    } catch {}
+
+    const hasAssignedShifts = Array.isArray(myShifts) && myShifts.length > 0;
+
+    // Only assigned staff members should receive shift-related alerts
+    if (!hasAssignedShifts) {
+      return {
+        success: true,
+        isStaffWithShifts: false,
+        hasAssignedShifts: false,
+        alerts: [],
+        unreadCount: 0,
+        urgentCount: 0,
+      };
+    }
+
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD local
+
+    const alerts: ShiftAlert[] = [];
+    let urgentCount = 0;
+
+    for (const s of myShifts) {
+      const isToday = s.shiftDate === todayStr;
+      const startMins = parseTimeToMinutes(s.startTime);
+      let endMins = parseTimeToMinutes(s.endTime);
+      if (endMins <= startMins) endMins += 24 * 60;
+
+      const displayName = myStaffMember.name;
+      const shiftTitle = s.shiftName === 'Custom' && s.customShiftName ? s.customShiftName : s.shiftName;
+
+      // 1. Upcoming Shift in 15-60 mins
+      if (isToday && !s.checkInTime && currentMins < startMins) {
+        const diff = startMins - currentMins;
+        if (diff <= 60 && diff > 15) {
+          alerts.push({
+            id: `alert_upcoming_${s.id}`,
+            shiftId: s.id,
+            staffId: myStaffMember.id,
+            staffName: displayName,
+            staffRole: myStaffMember.role,
+            shiftName: shiftTitle,
+            shiftDate: s.shiftDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            checkInTime: s.checkInTime,
+            checkOutTime: s.checkOutTime,
+            clockInTime: s.clockInTime || s.checkInTime,
+            clockOutTime: s.clockOutTime || s.checkOutTime,
+            shiftStatus: s.shiftStatus,
+            type: 'UPCOMING_SOON',
+            severity: 'info',
+            title: `Upcoming Shift in ${diff} mins`,
+            message: `Your ${shiftTitle} shift starts at ${s.startTime}.`,
+            timestamp: now.toISOString(),
+          });
+        }
+      }
+
+      // 2. Starting Now / Soon (<= 15 mins)
+      if (isToday && !s.checkInTime && currentMins <= startMins && startMins - currentMins <= 15) {
+        const diff = Math.max(0, startMins - currentMins);
+        alerts.push({
+          id: `alert_starting_${s.id}`,
+          shiftId: s.id,
+          staffId: myStaffMember.id,
+          staffName: displayName,
+          staffRole: myStaffMember.role,
+          shiftName: shiftTitle,
+          shiftDate: s.shiftDate,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          checkInTime: s.checkInTime,
+          checkOutTime: s.checkOutTime,
+          clockInTime: s.clockInTime || s.checkInTime,
+          clockOutTime: s.clockOutTime || s.checkOutTime,
+          shiftStatus: s.shiftStatus,
+          type: 'ABOUT_TO_START',
+          severity: 'warning',
+          title: diff === 0 ? 'Shift Starting Now!' : `Shift Starts in ${diff} mins!`,
+          message: `Reminder: Your "${shiftTitle}" shift starts at ${s.startTime}. Please clock in!`,
+          timestamp: now.toISOString(),
+        });
+      }
+
+      // 3. Late Clock-In (> 10 mins past start, no clock-in recorded)
+      if (isToday && !s.checkInTime && currentMins > startMins + 10 && currentMins < endMins) {
+        const lateMins = currentMins - startMins;
+        urgentCount++;
+        alerts.push({
+          id: `alert_late_${s.id}`,
+          shiftId: s.id,
+          staffId: myStaffMember.id,
+          staffName: displayName,
+          staffRole: myStaffMember.role,
+          shiftName: shiftTitle,
+          shiftDate: s.shiftDate,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          checkInTime: s.checkInTime,
+          checkOutTime: s.checkOutTime,
+          clockInTime: s.clockInTime || s.checkInTime,
+          clockOutTime: s.clockOutTime || s.checkOutTime,
+          shiftStatus: s.shiftStatus,
+          type: 'LATE_CHECKIN',
+          severity: 'danger',
+          title: `Late Clock-in (${lateMins}m overdue)`,
+          message: `You are ${lateMins} minutes late for your ${shiftTitle} shift (${s.startTime}). Please clock in now!`,
+          timestamp: now.toISOString(),
+        });
+      }
+
+      // 4. Shift Active (Clocked In, Ready to Clock Out when finished)
+      if (isToday && (s.shiftStatus === 'Active' || s.checkInTime) && !s.checkOutTime) {
+        alerts.push({
+          id: `alert_active_${s.id}`,
+          shiftId: s.id,
+          staffId: myStaffMember.id,
+          staffName: displayName,
+          staffRole: myStaffMember.role,
+          shiftName: shiftTitle,
+          shiftDate: s.shiftDate,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          checkInTime: s.checkInTime,
+          checkOutTime: s.checkOutTime,
+          clockInTime: s.clockInTime || s.checkInTime,
+          clockOutTime: s.clockOutTime || s.checkOutTime,
+          totalWorkingHours: s.totalWorkingHours,
+          shiftStatus: 'Active',
+          type: 'ABOUT_TO_START',
+          severity: 'info',
+          title: `Active Shift: ${shiftTitle}`,
+          message: `You clocked in at ${new Date(s.checkInTime || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Remember to clock out when finished.`,
+          timestamp: now.toISOString(),
+        });
+      }
+
+      // 5. Shift Completed
+      if (s.checkOutTime || (s.shiftStatus === 'Completed' && s.checkInTime)) {
+        alerts.push({
+          id: `alert_completed_${s.id}`,
+          shiftId: s.id,
+          staffId: myStaffMember.id,
+          staffName: displayName,
+          staffRole: myStaffMember.role,
+          shiftName: shiftTitle,
+          shiftDate: s.shiftDate,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          checkInTime: s.checkInTime,
+          checkOutTime: s.checkOutTime,
+          clockInTime: s.clockInTime || s.checkInTime,
+          clockOutTime: s.clockOutTime || s.checkOutTime,
+          totalWorkingHours: s.totalWorkingHours,
+          shiftStatus: 'Completed',
+          type: 'COMPLETED',
+          severity: 'success',
+          title: 'Shift Completed',
+          message: `You completed your ${shiftTitle} shift (${s.totalWorkingHours} hours logged).`,
+          timestamp: s.checkOutTime || now.toISOString(),
+        });
+      }
+    }
+
+    return {
+      success: true,
+      isStaffWithShifts: true,
+      hasAssignedShifts: true,
+      alerts,
+      unreadCount: alerts.length,
+      urgentCount,
+    };
+  } catch (err: any) {
+    console.error('getShiftAlerts error:', err);
+    return { success: false, isStaffWithShifts: false, hasAssignedShifts: false, alerts: [], unreadCount: 0, urgentCount: 0, error: err.message };
   }
 }

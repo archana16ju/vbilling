@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
-import { isLocalMySqlMode } from '@/lib/mysql';
+import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { DeliveryStatus } from '@/types/delivery';
 import {
   mysqlGetDeliveries,
   mysqlGetDeliveryByBillId,
@@ -41,7 +42,29 @@ export async function GET(request: Request) {
 
       const status = url.searchParams.get('status') || undefined;
       const search = url.searchParams.get('search') || undefined;
-      const deliveries = await mysqlGetDeliveries({ status, search });
+
+      let deliveryPersonId: string | undefined = undefined;
+      let deliveryPersonName: string | undefined = undefined;
+
+      if (session.role === 'delivery_staff') {
+        deliveryPersonName = session.username;
+        const pool = getMysqlPool();
+        const [dpRows]: any = await pool.query(
+          `SELECT id, name FROM delivery_persons WHERE company_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(employee_id) = LOWER(?))`,
+          [session.companyId, session.username, session.username]
+        );
+        if (dpRows && dpRows.length > 0) {
+          deliveryPersonId = dpRows[0].id;
+          deliveryPersonName = dpRows[0].name;
+        }
+      }
+
+      const deliveries = await mysqlGetDeliveries({
+        status,
+        search,
+        deliveryPersonId,
+        deliveryPersonName,
+      });
       return NextResponse.json(deliveries);
     }
 
@@ -67,6 +90,16 @@ export async function PUT(request: Request) {
     }
 
     if (isLocalMySqlMode()) {
+      if (session.role === 'delivery_staff') {
+        if (action !== 'updateStatus') {
+          return NextResponse.json({ error: 'Access Denied: Delivery staff can only update delivery status.' }, { status: 403 });
+        }
+        const allowed = ['assigned', 'picked_up', 'out_for_delivery', 'delivered'];
+        if (!allowed.includes(data.newStatus)) {
+          return NextResponse.json({ error: 'Access Denied: Allowed statuses are Assigned, Picked Up, Out for Delivery, and Delivered.' }, { status: 403 });
+        }
+      }
+
       if (action === 'updateStatus') {
         const { newStatus, deliveryNotes } = data;
         if (!newStatus) {

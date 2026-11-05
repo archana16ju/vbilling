@@ -25,7 +25,20 @@ import {
   Moon,
   SunMoon,
   Building2,
+  UtensilsCrossed,
+  List,
+  Grid,
+  Search,
 } from 'lucide-react';
+
+const DEMO_CATEGORIES = [
+  { id: 'all', name: 'All Items', image: '' },
+  { id: 'cat-biryani', name: 'Biryani', image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-breads', name: 'Breads / Parotta', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-rice', name: 'Chinese Rice', image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-starters', name: 'Chinese Starters', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-egg', name: 'Egg', image: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=300&auto=format&fit=crop&q=80' },
+];
 import ProductGridCard from '@/components/terminal/ProductGridCard';
 import { Product } from '@/lib/mock-data';
 
@@ -131,11 +144,12 @@ const PREVIEW_PRODUCTS: Product[] = [
 
 export default function TerminalDesignPanel() {
   const design = useTerminalDesignStore();
-  const [activeSubTab, setActiveSubTab] = useState<'layout' | 'appearance' | 'product-card' | 'tap-banner'>('layout');
+  const [activeSubTab, setActiveSubTab] = useState<'layout' | 'appearance' | 'product-card' | 'category-design' | 'tap-banner'>('layout');
   const [previewTheme, setPreviewTheme] = useState<'dark' | 'light'>('dark');
   const [saveToast, setSaveToast] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewActiveId, setPreviewActiveId] = useState<string>('demo-avocado-active');
+  const [previewCategoryId, setPreviewCategoryId] = useState<string>('all');
   const [previewSearch, setPreviewSearch] = useState<string>('');
 
   // Super Admin & Company State
@@ -324,6 +338,7 @@ export default function TerminalDesignPanel() {
             {[
               { id: 'layout', label: 'Layout & Grid' },
               { id: 'product-card', label: 'Product Card' },
+              { id: 'category-design', label: 'Category Design' },
               { id: 'appearance', label: 'Theme & Colors' },
               { id: 'tap-banner', label: 'Tap Mode Banner' },
             ].map((tab) => {
@@ -332,11 +347,10 @@ export default function TerminalDesignPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveSubTab(tab.id as any)}
-                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer ${
-                    isActive
-                      ? 'btn-theme-primary text-white shadow-theme-glow preserve-white font-black'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                  }`}
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer ${isActive
+                    ? 'btn-theme-primary text-white shadow-theme-glow preserve-white font-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -359,21 +373,19 @@ export default function TerminalDesignPanel() {
                   {/* Option 1: Classic List (Default) */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'default' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'default'
-                        ? 'border-emerald-500 bg-emerald-950/30 shadow-md ring-2 ring-emerald-500/20'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'default'
+                      ? 'border-emerald-500 bg-emerald-950/30 shadow-md ring-2 ring-emerald-500/20'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                   >
                     {/* Header: Icon, Title, Badge & Radio */}
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'default'
-                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'default'
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                         >
                           <Table className="h-5 w-5" />
                         </div>
@@ -397,11 +409,10 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'default'
-                              ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'default'
+                            ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                         >
                           {design.displayStyle === 'default' && <Check className="h-3 w-3 stroke-[3]" />}
                         </div>
@@ -430,17 +441,16 @@ export default function TerminalDesignPanel() {
                   {/* Option 2: Visual Image Grid */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'image-grid' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'image-grid'
-                        ? 'border-theme bg-theme-badge/20 shadow-md ring-2 ring-theme/30'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'image-grid'
+                      ? 'border-theme bg-theme-badge/20 shadow-md ring-2 ring-theme/30'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                     style={
                       design.displayStyle === 'image-grid'
                         ? {
-                            borderColor: 'var(--theme-accent, #DB2777)',
-                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
-                          }
+                          borderColor: 'var(--theme-accent, #DB2777)',
+                          backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                        }
                         : undefined
                     }
                   >
@@ -448,17 +458,16 @@ export default function TerminalDesignPanel() {
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'image-grid'
-                              ? 'shadow-xs text-white'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'image-grid'
+                            ? 'shadow-xs text-white'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                           style={
                             design.displayStyle === 'image-grid'
                               ? {
-                                  backgroundColor: 'var(--theme-accent, #DB2777)',
-                                  borderColor: 'var(--theme-accent, #DB2777)',
-                                }
+                                backgroundColor: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                              }
                               : undefined
                           }
                         >
@@ -497,17 +506,16 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'image-grid'
-                              ? 'text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'image-grid'
+                            ? 'text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                           style={
                             design.displayStyle === 'image-grid'
                               ? {
-                                  backgroundColor: 'var(--theme-accent, #DB2777)',
-                                  borderColor: 'var(--theme-accent, #DB2777)',
-                                }
+                                backgroundColor: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                              }
                               : undefined
                           }
                         >
@@ -540,21 +548,19 @@ export default function TerminalDesignPanel() {
                   {/* Option 3: Search-Based Fast Billing */}
                   <div
                     onClick={() => design.updateDesign({ displayStyle: 'search-based' })}
-                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      design.displayStyle === 'search-based'
-                        ? 'border-indigo-500 bg-indigo-950/30 shadow-md ring-2 ring-indigo-500/20'
-                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                    }`}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${design.displayStyle === 'search-based'
+                      ? 'border-indigo-500 bg-indigo-950/30 shadow-md ring-2 ring-indigo-500/20'
+                      : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                      }`}
                   >
                     {/* Header: Icon, Title, Badge & Radio */}
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
-                            design.displayStyle === 'search-based'
-                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
-                          }`}
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${design.displayStyle === 'search-based'
+                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                            }`}
                         >
                           <ScanBarcode className="h-5 w-5" />
                         </div>
@@ -579,11 +585,10 @@ export default function TerminalDesignPanel() {
                           </span>
                         )}
                         <div
-                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            design.displayStyle === 'search-based'
-                              ? 'border-indigo-500 bg-indigo-600 text-white shadow-xs'
-                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
-                          }`}
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${design.displayStyle === 'search-based'
+                            ? 'border-indigo-500 bg-indigo-600 text-white shadow-xs'
+                            : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                            }`}
                         >
                           {design.displayStyle === 'search-based' && (
                             <Check className="h-3 w-3 stroke-[3]" />
@@ -613,9 +618,16 @@ export default function TerminalDesignPanel() {
                 </div>
               </div>
 
-              {/* Grid Column Selector (When in image grid) */}
+              {/* Grid Column Selector (Only applies for Visual Image Grid) */}
               <div className="pt-4 border-t border-zinc-800/80 space-y-4">
-                <div>
+                {!isImageGrid && (
+                  <div className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-xs text-zinc-400">
+                    <span className="text-base">🔒</span>
+                    <span>Grid settings below only apply to <strong className="text-zinc-200">Visual Image Grid</strong> layout. Select it above to enable these options.</span>
+                  </div>
+                )}
+
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Grid Columns
                   </label>
@@ -629,11 +641,10 @@ export default function TerminalDesignPanel() {
                         key={item.cols}
                         type="button"
                         onClick={() => design.updateDesign({ gridColumns: item.cols })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.gridColumns === item.cols
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.gridColumns === item.cols
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -642,7 +653,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Card Aspect Ratio */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Aspect Ratio
                   </label>
@@ -656,11 +667,10 @@ export default function TerminalDesignPanel() {
                         key={item.ratio}
                         type="button"
                         onClick={() => design.updateDesign({ cardAspectRatio: item.ratio })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardAspectRatio === item.ratio
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardAspectRatio === item.ratio
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -669,7 +679,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Card Corner Radius */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Corner Radius
                   </label>
@@ -683,11 +693,10 @@ export default function TerminalDesignPanel() {
                         key={item.radius}
                         type="button"
                         onClick={() => design.updateDesign({ cardRadius: item.radius })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardRadius === item.radius
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardRadius === item.radius
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -696,7 +705,7 @@ export default function TerminalDesignPanel() {
                 </div>
 
                 {/* Grid Spacing / Gap */}
-                <div>
+                <div className={!isImageGrid ? 'opacity-40 pointer-events-none select-none' : ''}>
                   <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
                     Card Spacing (Gap)
                   </label>
@@ -710,11 +719,10 @@ export default function TerminalDesignPanel() {
                         key={item.gap}
                         type="button"
                         onClick={() => design.updateDesign({ cardGap: item.gap })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.cardGap === item.gap
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.cardGap === item.gap
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {item.label}
                       </button>
@@ -748,11 +756,10 @@ export default function TerminalDesignPanel() {
                       key={pos.id}
                       type="button"
                       onClick={() => design.updateDesign({ namePlacement: pos.id })}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        design.namePlacement === pos.id
-                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
-                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
-                      }`}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${design.namePlacement === pos.id
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
+                        }`}
                     >
                       <div className="text-xs font-bold text-white">{pos.label}</div>
                       <div className="text-[11px] text-zinc-400 mt-0.5">{pos.desc}</div>
@@ -782,11 +789,10 @@ export default function TerminalDesignPanel() {
                         key={style.id}
                         type="button"
                         onClick={() => design.updateDesign({ priceStyle: style.id })}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                          design.priceStyle === style.id
-                            ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
-                            : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
-                        }`}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${design.priceStyle === style.id
+                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md text-white'
+                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/50 text-zinc-300'
+                          }`}
                       >
                         <div className="text-xs font-bold text-white">{style.label}</div>
                         <div className="text-[11px] text-zinc-400 mt-0.5">{style.desc}</div>
@@ -809,11 +815,10 @@ export default function TerminalDesignPanel() {
                         key={p.pos}
                         type="button"
                         onClick={() => design.updateDesign({ pricePlacement: p.pos })}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                          design.pricePlacement === p.pos
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${design.pricePlacement === p.pos
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
                       >
                         {p.label}
                       </button>
@@ -832,11 +837,10 @@ export default function TerminalDesignPanel() {
                         key={sym}
                         type="button"
                         onClick={() => design.updateDesign({ currencySymbol: sym })}
-                        className={`h-9 w-12 rounded-xl text-sm font-bold border transition-all cursor-pointer ${
-                          design.currencySymbol === sym
-                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
-                            : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800'
-                        }`}
+                        className={`h-9 w-12 rounded-xl text-sm font-bold border transition-all cursor-pointer ${design.currencySymbol === sym
+                          ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-800'
+                          }`}
                       >
                         {sym}
                       </button>
@@ -866,6 +870,336 @@ export default function TerminalDesignPanel() {
                       className="h-5 w-5 rounded border-zinc-700 bg-zinc-950 text-pink-600 focus:ring-pink-500 cursor-pointer"
                     />
                   </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Subtab: Category Design */}
+          {activeSubTab === 'category-design' && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl space-y-6 text-white backdrop-blur-sm">
+              <div>
+                <label className="block text-sm font-bold text-white mb-1">
+                  Category Display Style
+                </label>
+                <p className="text-xs text-zinc-400 mb-3">
+                  Choose between the Visual Card Tile layout with rich photo backgrounds, or the Compact Row List with circular thumbnails and category count badge.
+                </p>
+
+                <div className="flex flex-col gap-3.5">
+                  {/* Option 1: Visual Card Tiles (Reference Image 2) */}
+                  <div
+                    onClick={() => design.updateDesign({ categoryStyle: 'card-tile' })}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                      (design.categoryStyle || 'card-tile') === 'card-tile'
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                    }`}
+                    style={
+                      (design.categoryStyle || 'card-tile') === 'card-tile'
+                        ? {
+                            borderColor: 'var(--theme-accent, #DB2777)',
+                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? 'text-white shadow-xs'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                          }`}
+                          style={
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <Grid className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm sm:text-base text-white">
+                              Visual Card Tiles
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                              style={{
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                              }}
+                            >
+                              Image Tile Cards (Ref 1)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                          <span
+                            className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              color: 'var(--theme-accent, #DB2777)',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                        <div
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? 'text-white shadow-xs'
+                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                          }`}
+                          style={
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-zinc-400 sm:pl-[52px] leading-relaxed mb-3">
+                      Large photo cards with dark bottom gradient text overlay, plus dedicated theme-gradient &quot;All Items&quot; card.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🖼️ Full Photo Tiles
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🎨 Theme Gradient &quot;All Items&quot;
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        👆 Touchscreen Targets
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Compact Row List (Reference Image 3) */}
+                  <div
+                    onClick={() => design.updateDesign({ categoryStyle: 'compact-list' })}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                      design.categoryStyle === 'compact-list'
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                    }`}
+                    style={
+                      design.categoryStyle === 'compact-list'
+                        ? {
+                            borderColor: 'var(--theme-accent, #DB2777)',
+                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
+                            design.categoryStyle === 'compact-list'
+                              ? 'text-white shadow-xs'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                          }`}
+                          style={
+                            design.categoryStyle === 'compact-list'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <List className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm sm:text-base text-white">
+                              Compact Row List
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                              style={{
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                              }}
+                            >
+                              List &amp; Thumbnails (Ref 2)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {design.categoryStyle === 'compact-list' && (
+                          <span
+                            className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              color: 'var(--theme-accent, #DB2777)',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                        <div
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            design.categoryStyle === 'compact-list'
+                              ? 'text-white shadow-xs'
+                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                          }`}
+                          style={
+                            design.categoryStyle === 'compact-list'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {design.categoryStyle === 'compact-list' && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-zinc-400 sm:pl-[52px] leading-relaxed mb-3">
+                      Sleek vertical rows with circular dish thumbnails, header category count badge, and high-visibility active pill.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🏷️ Categories Header &amp; Count (11)
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🎯 Circular Dish Thumbnails
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        ⚡ Fast Quick-Scroll Browse
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-options for Card Tile */}
+              {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                    Card Height &amp; Density
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { height: 'h-20' as const, label: 'Compact (80px)' },
+                      { height: 'h-24' as const, label: 'Standard (96px, Ref)' },
+                      { height: 'h-28' as const, label: 'Spacious (112px)' },
+                    ].map((item) => (
+                      <button
+                        key={item.height}
+                        type="button"
+                        onClick={() => design.updateDesign({ categoryCardHeight: item.height })}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                          (design.categoryCardHeight || 'h-24') === item.height
+                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-options for Compact Row List */}
+              {design.categoryStyle === 'compact-list' && (
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                      Dish Thumbnail Shape
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { shape: 'rounded-full' as const, label: 'Circle (Reference)' },
+                        { shape: 'rounded-xl' as const, label: 'Curved Square' },
+                        { shape: 'rounded-lg' as const, label: 'Subtle Round' },
+                      ].map((item) => (
+                        <button
+                          key={item.shape}
+                          type="button"
+                          onClick={() => design.updateDesign({ categoryThumbnailShape: item.shape })}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                            (design.categoryThumbnailShape || 'rounded-full') === item.shape
+                              ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                              : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <div className="text-sm font-bold text-white">Show Categories Count Badge</div>
+                        <div className="text-xs text-zinc-400">Displays header pill with category total, e.g. &quot;CATEGORIES (11)&quot;</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={design.showCategoryCount !== false}
+                        onChange={(e) => design.updateDesign({ showCategoryCount: e.target.checked })}
+                        className="h-5 w-5 rounded border-zinc-700 bg-zinc-950 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Common Search Bar Options */}
+              <div className="pt-4 border-t border-zinc-800/80 space-y-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Search Bar Placeholder
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    'Search category...',
+                    'Filter categories...',
+                    'Find category or dish...',
+                  ].map((ph) => (
+                    <button
+                      key={ph}
+                      type="button"
+                      onClick={() => design.updateDesign({ categorySearchPlaceholder: ph })}
+                      className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
+                        (design.categorySearchPlaceholder || ((design.categoryStyle || 'card-tile') === 'compact-list' ? 'Filter categories...' : 'Search category...')) === ph
+                          ? 'border-theme bg-theme-badge/20 text-white ring-2 ring-theme/30'
+                          : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-white hover:bg-zinc-800/40'
+                      }`}
+                    >
+                      {ph}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -926,11 +1260,10 @@ export default function TerminalDesignPanel() {
                           design.updateDesign({ themeMode: m.id });
                           setPreviewTheme(m.id === 'system' ? (document.documentElement.classList.contains('light-mode') ? 'light' : 'dark') : m.id);
                         }}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/40 shadow-md'
-                            : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60 hover:border-zinc-700'
-                        }`}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                          ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/40 shadow-md'
+                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60 hover:border-zinc-700'
+                          }`}
                       >
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -938,11 +1271,10 @@ export default function TerminalDesignPanel() {
                               <Icon className={`h-4 w-4 ${m.iconColor}`} />
                               <span className="text-xs font-black text-white">{m.title}</span>
                             </div>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                              isSelected
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-zinc-800 text-zinc-400'
-                            }`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isSelected
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-400'
+                              }`}>
                               {m.badge}
                             </span>
                           </div>
@@ -973,11 +1305,10 @@ export default function TerminalDesignPanel() {
                       key={key}
                       type="button"
                       onClick={() => applyThemePreset(key)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
-                        design.themePreset === key
-                          ? 'border-theme ring-2 ring-theme/30 bg-theme-badge/20 shadow-md'
-                          : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60'
-                      }`}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${design.themePreset === key
+                        ? 'border-theme ring-2 ring-theme/30 bg-theme-badge/20 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800/60'
+                        }`}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span
@@ -1208,11 +1539,10 @@ export default function TerminalDesignPanel() {
                     type="button"
                     onClick={() => setPreviewTheme('dark')}
                     title="Preview in Dark Mode"
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                      previewTheme === 'dark'
-                        ? 'bg-zinc-800 text-white shadow-xs'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${previewTheme === 'dark'
+                      ? 'bg-zinc-800 text-white shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                      }`}
                   >
                     <Moon className="h-3 w-3 text-indigo-400" />
                     <span>Dark</span>
@@ -1221,11 +1551,10 @@ export default function TerminalDesignPanel() {
                     type="button"
                     onClick={() => setPreviewTheme('light')}
                     title="Preview in Light Mode"
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                      previewTheme === 'light'
-                        ? 'bg-white text-zinc-900 shadow-xs'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${previewTheme === 'light'
+                      ? 'bg-white text-zinc-900 shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                      }`}
                   >
                     <Sun className="h-3 w-3 text-amber-500" />
                     <span>Light</span>
@@ -1247,17 +1576,15 @@ export default function TerminalDesignPanel() {
 
             {/* Preview Body */}
             <div
-              className={`p-4 min-h-[500px] transition-colors duration-200 ${
-                isLightPreview ? 'bg-slate-100 text-zinc-900' : 'bg-zinc-950 text-white'
-              }`}
+              className={`p-4 min-h-[500px] transition-colors duration-200 ${isLightPreview ? 'bg-slate-100 text-zinc-900' : 'bg-zinc-950 text-white'
+                }`}
             >
               {/* Category & Search mock bar */}
               <div
-                className={`mb-3 p-3 rounded-xl border flex items-center justify-between transition-colors shadow-xs ${
-                  isLightPreview
-                    ? 'bg-white border-zinc-200 text-zinc-900'
-                    : 'bg-zinc-900/90 border-zinc-800 text-white'
-                }`}
+                className={`mb-3 p-3 rounded-xl border flex items-center justify-between transition-colors shadow-xs ${isLightPreview
+                  ? 'bg-white border-zinc-200 text-zinc-900'
+                  : 'bg-zinc-900/90 border-zinc-800 text-white'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className={`font-bold text-sm ${isLightPreview ? 'text-zinc-900' : 'text-white'}`}>
@@ -1285,9 +1612,8 @@ export default function TerminalDesignPanel() {
                   style={{
                     backgroundColor: design.bannerBgColor || (isLightPreview ? '#FDF2F8' : '#1F0715'),
                   }}
-                  className={`mb-3 flex items-center justify-between rounded-xl px-3 py-2 border shadow-xs ${
-                    isLightPreview ? 'border-pink-200/80' : 'border-zinc-800'
-                  }`}
+                  className={`mb-3 flex items-center justify-between rounded-xl px-3 py-2 border shadow-xs ${isLightPreview ? 'border-pink-200/80' : 'border-zinc-800'
+                    }`}
                 >
                   <div
                     className="flex items-center gap-2 text-xs font-semibold"
@@ -1323,14 +1649,215 @@ export default function TerminalDesignPanel() {
                 </div>
               )}
 
+              {/* Category Design Live Interactive Preview */}
+              {activeSubTab === 'category-design' && (
+                <div className="mb-4 rounded-xl border p-3.5 space-y-3 transition-colors bg-opacity-70 ${
+                  isLightPreview ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-zinc-800'
+                }">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase text-zinc-300">
+                        {(design.categoryStyle || 'card-tile') === 'compact-list' ? 'Compact Row List Preview' : 'Visual Card Tile Preview'}
+                      </span>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-bold border"
+                        style={{
+                          backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                          color: 'var(--theme-accent, #DB2777)',
+                          borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                        }}
+                      >
+                        Interactive
+                      </span>
+                    </div>
+                    <span className={`text-[11px] ${isLightPreview ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      Click to test selection
+                    </span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    {/* Live Category Sidebar Mock */}
+                    <div className={`w-44 shrink-0 rounded-xl border p-2 flex flex-col ${
+                      isLightPreview ? 'bg-slate-100 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'
+                    }`}>
+                      {/* Header for compact-list */}
+                      {design.categoryStyle === 'compact-list' && (
+                        <div className={`px-2 py-1.5 border-b mb-2 flex items-center justify-between ${
+                          isLightPreview ? 'border-zinc-200/80 bg-slate-50' : 'border-zinc-800/80 bg-zinc-950'
+                        }`}>
+                          <div className="flex items-center gap-1.5">
+                            <LayoutGrid className="h-3.5 w-3.5" style={{ color: 'var(--theme-accent, #DB2777)' }} />
+                            <span className="font-black text-[10px] uppercase tracking-wider" style={{ color: 'var(--theme-accent, #DB2777)' }}>
+                              Categories
+                            </span>
+                          </div>
+                          {design.showCategoryCount !== false && (
+                            <span
+                              className="rounded-full px-1.5 py-0.2 text-[9px] font-black border"
+                              style={{
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              }}
+                            >
+                              {DEMO_CATEGORIES.length}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Search bar */}
+                      <div className="mb-2">
+                        <div className="relative flex items-center">
+                          <Search className={`absolute left-2 h-3 w-3 ${isLightPreview ? 'text-zinc-400' : 'text-zinc-500'}`} />
+                          <input
+                            type="text"
+                            readOnly
+                            placeholder={design.categorySearchPlaceholder || ((design.categoryStyle || 'card-tile') === 'compact-list' ? 'Filter categories...' : 'Search category...')}
+                            className={`w-full rounded-lg border py-1 pl-6 pr-2 text-[10px] outline-none ${
+                              isLightPreview ? 'border-zinc-300 bg-white text-zinc-700' : 'border-zinc-800 bg-zinc-900 text-zinc-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Category Items */}
+                      {design.categoryStyle === 'compact-list' ? (
+                        <div className="space-y-1 max-h-[300px] overflow-y-auto no-scrollbar">
+                          {DEMO_CATEGORIES.map((cat) => {
+                            const isActive = previewCategoryId === cat.id;
+                            return (
+                              <div
+                                key={cat.id}
+                                onClick={() => setPreviewCategoryId(cat.id)}
+                                className={`flex items-center gap-2 p-1.5 rounded-xl transition cursor-pointer text-left ${
+                                  isActive
+                                    ? 'border-2 shadow-sm'
+                                    : isLightPreview ? 'hover:bg-zinc-200/70 text-zinc-800' : 'hover:bg-zinc-900 text-zinc-300'
+                                }`}
+                                style={
+                                  isActive
+                                    ? {
+                                        borderColor: 'var(--theme-accent, #DB2777)',
+                                        background: 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-end, #DB2777) 100%)',
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {cat.id === 'all' ? (
+                                  <div className={`h-6 w-6 rounded-full flex items-center justify-center shrink-0 border ${
+                                    isActive ? 'bg-black/40 border-white/20 text-amber-400' : isLightPreview ? 'bg-zinc-200 border-zinc-300 text-zinc-600' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                                  }`}>
+                                    <UtensilsCrossed className="h-3 w-3" />
+                                  </div>
+                                ) : (
+                                  <div className={`h-6 w-6 ${design.categoryThumbnailShape || 'rounded-full'} overflow-hidden border shrink-0 flex items-center justify-center ${
+                                    isActive ? 'border-white/30' : isLightPreview ? 'border-zinc-300 bg-zinc-200' : 'border-zinc-700 bg-zinc-800'
+                                  }`}>
+                                    {cat.image ? (
+                                      <img src={cat.image} alt={cat.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <span className="text-[9px] font-black">{cat.name.charAt(0)}</span>
+                                    )}
+                                  </div>
+                                )}
+                                <span className={`text-[11px] truncate flex-1 ${
+                                  isActive ? 'text-white font-black' : isLightPreview ? 'text-zinc-800 font-medium' : 'text-zinc-300 font-medium'
+                                }`}>
+                                  {cat.name}
+                                </span>
+                                {isActive && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-white shrink-0 mr-0.5" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto no-scrollbar">
+                          {DEMO_CATEGORIES.map((cat) => {
+                            const isActive = previewCategoryId === cat.id;
+                            const cardH = (design.categoryCardHeight || 'h-24') === 'h-20' ? 'h-14' : (design.categoryCardHeight || 'h-24') === 'h-28' ? 'h-20' : 'h-16';
+                            return (
+                              <div
+                                key={cat.id}
+                                onClick={() => setPreviewCategoryId(cat.id)}
+                                className={`group relative flex w-full flex-col justify-end rounded-xl border overflow-hidden transition cursor-pointer ${cardH} ${
+                                  isActive
+                                    ? 'border-theme ring-2 ring-[var(--theme-accent,#DB2777)] shadow-md'
+                                    : isLightPreview ? 'bg-white border-zinc-200 hover:border-zinc-300' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                                }`}
+                              >
+                                {cat.id === 'all' ? (
+                                  <div
+                                    className="absolute inset-0 flex items-center justify-center"
+                                    style={{
+                                      background: isActive
+                                        ? 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-mid, #701A3B) 50%, var(--theme-gradient-end, #DB2777) 100%)'
+                                        : isLightPreview ? 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)' : 'linear-gradient(135deg, #18181b 0%, #27272a 100%)',
+                                    }}
+                                  >
+                                    <UtensilsCrossed className={`h-5 w-5 ${isActive ? 'text-white' : isLightPreview ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                                  </div>
+                                ) : cat.image ? (
+                                  <img src={cat.image} alt={cat.name} className="absolute inset-0 h-full w-full object-cover" />
+                                ) : (
+                                  <div className={`absolute inset-0 flex items-center justify-center font-bold text-sm ${isLightPreview ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-800 text-zinc-300'}`}>
+                                    {cat.name.charAt(0)}
+                                  </div>
+                                )}
+                                {isActive && (
+                                  <span
+                                    className="absolute top-1 right-1 h-2 w-2 rounded-full border border-black shadow"
+                                    style={{ backgroundColor: 'var(--theme-accent, #DB2777)' }}
+                                  />
+                                )}
+                                <div className="relative z-10 w-full bg-gradient-to-t from-black/90 via-black/55 to-transparent pt-3 pb-1 px-1.5">
+                                  <span className="font-extrabold text-[9px] text-white uppercase truncate block drop-shadow">
+                                    {cat.name}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Preview explanation */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <div className={`p-4 rounded-xl border text-xs space-y-2 ${
+                        isLightPreview ? 'bg-slate-50 border-zinc-200 text-zinc-700' : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                      }`}>
+                        <div className="font-bold flex items-center gap-1.5" style={{ color: 'var(--theme-accent, #DB2777)' }}>
+                          <Sparkles className="h-4 w-4" />
+                          <span>Active Category Style</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          {(design.categoryStyle || 'card-tile') === 'compact-list'
+                            ? 'Compact Row List layout active. Featuring circular food thumbnails, category header counter badge, and theme gradient selected pills.'
+                            : 'Visual Card Tile layout active. Featuring large photo cards with bottom text overlays and full theme-gradient "All Items" tile.'
+                          }
+                        </p>
+                        <div className="pt-2 border-t border-zinc-800/40 flex items-center gap-2 text-[10px]">
+                          <span className="font-semibold text-zinc-300">Selected Category:</span>
+                          <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">
+                            {DEMO_CATEGORIES.find(c => c.id === previewCategoryId)?.name || 'All Items'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Product Grid, Classic List, or Search-Based Preview */}
               {design.displayStyle === 'search-based' ? (
                 <div
-                  className={`rounded-xl border p-4 space-y-3 transition-colors ${
-                    isLightPreview
-                      ? 'bg-white border-zinc-200'
-                      : 'bg-zinc-900 border-zinc-800'
-                  }`}
+                  className={`rounded-xl border p-4 space-y-3 transition-colors ${isLightPreview
+                    ? 'bg-white border-zinc-200'
+                    : 'bg-zinc-900 border-zinc-800'
+                    }`}
                 >
                   <div className="relative">
                     <input
@@ -1338,11 +1865,10 @@ export default function TerminalDesignPanel() {
                       placeholder="Try typing in preview (e.g. Avocado, Apple)..."
                       value={previewSearch}
                       onChange={(e) => setPreviewSearch(e.target.value)}
-                      className={`w-full rounded-xl border p-2 pl-8 text-xs font-medium outline-none focus:border-theme transition ${
-                        isLightPreview
-                          ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
-                          : 'border-zinc-800 bg-zinc-950 text-white'
-                      }`}
+                      className={`w-full rounded-xl border p-2 pl-8 text-xs font-medium outline-none focus:border-theme transition ${isLightPreview
+                        ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
+                        : 'border-zinc-800 bg-zinc-950 text-white'
+                        }`}
                     />
                     <span className="absolute left-2.5 top-2.5 text-xs text-zinc-400">🔍</span>
                     {previewSearch && (
@@ -1376,11 +1902,10 @@ export default function TerminalDesignPanel() {
                       <button
                         type="button"
                         onClick={() => setPreviewSearch('avocado')}
-                        className={`mt-3 inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-bold cursor-pointer transition ${
-                          isLightPreview
-                            ? 'border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
-                            : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
-                        }`}
+                        className={`mt-3 inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-[11px] font-bold cursor-pointer transition ${isLightPreview
+                          ? 'border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
+                          : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                          }`}
                       >
                         Simulate Scan: &quot;avocado&quot;
                       </button>
@@ -1394,11 +1919,10 @@ export default function TerminalDesignPanel() {
                       ).map((prod) => (
                         <div
                           key={prod.id}
-                          className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
-                            isLightPreview
-                              ? 'border-zinc-200 bg-zinc-50 hover:border-zinc-300'
-                              : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
-                          }`}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border transition ${isLightPreview
+                            ? 'border-zinc-200 bg-zinc-50 hover:border-zinc-300'
+                            : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
+                            }`}
                         >
                           <div className="flex items-center gap-2.5">
                             <img
@@ -1434,18 +1958,16 @@ export default function TerminalDesignPanel() {
                 </div>
               ) : !isImageGrid ? (
                 <div
-                  className={`rounded-xl border overflow-hidden transition-colors ${
-                    isLightPreview
-                      ? 'bg-white border-zinc-200'
-                      : 'bg-zinc-900 border-zinc-800'
-                  }`}
+                  className={`rounded-xl border overflow-hidden transition-colors ${isLightPreview
+                    ? 'bg-white border-zinc-200'
+                    : 'bg-zinc-900 border-zinc-800'
+                    }`}
                 >
                   <div
-                    className={`grid grid-cols-12 gap-2 border-b px-4 py-2 text-[10px] font-bold tracking-wider uppercase ${
-                      isLightPreview
-                        ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
-                        : 'border-zinc-800 bg-zinc-950 text-zinc-400'
-                    }`}
+                    className={`grid grid-cols-12 gap-2 border-b px-4 py-2 text-[10px] font-bold tracking-wider uppercase ${isLightPreview
+                      ? 'border-zinc-200 bg-zinc-50 text-zinc-600'
+                      : 'border-zinc-800 bg-zinc-950 text-zinc-400'
+                      }`}
                   >
                     <div className="col-span-7">PRODUCT</div>
                     <div className="col-span-2 text-right">PRICE</div>
@@ -1478,13 +2000,11 @@ export default function TerminalDesignPanel() {
                 </div>
               ) : (
                 <div
-                  className={`grid ${
-                    design.gridColumns === 3
+                  className={`grid ${design.gridColumns === 3
                       ? 'grid-cols-3'
                       : design.gridColumns === 5
-                      ? 'grid-cols-4'
-                      : 'grid-cols-4'
-                  } ${design.cardGap || 'gap-3'}`}
+                        ? 'grid-cols-5'
+                        : 'grid-cols-4'} ${design.cardGap || 'gap-3'}`}
                 >
                   {PREVIEW_PRODUCTS.map((prod) => (
                     <ProductGridCard

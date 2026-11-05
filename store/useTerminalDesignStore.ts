@@ -34,6 +34,13 @@ export interface TerminalDesignState {
   showCartBadge: boolean;
   quickDoubleTap: boolean;
 
+  // Category Design options
+  categoryStyle: 'card-tile' | 'compact-list';
+  categoryCardHeight: 'h-20' | 'h-24' | 'h-28';
+  categoryThumbnailShape: 'rounded-full' | 'rounded-xl' | 'rounded-lg';
+  showCategoryCount: boolean;
+  categorySearchPlaceholder: string;
+
   // Persistence metadata
   isLoaded: boolean;
   isFetching: boolean;
@@ -118,6 +125,13 @@ const initialDesignState: Omit<
   showCartBadge: true,
   quickDoubleTap: true,
 
+  // Category design defaults
+  categoryStyle: 'card-tile',
+  categoryCardHeight: 'h-24',
+  categoryThumbnailShape: 'rounded-full',
+  showCategoryCount: true,
+  categorySearchPlaceholder: 'Search category...',
+
   // Metadata
   isLoaded: false,
   isFetching: false,
@@ -131,13 +145,14 @@ function broadcastDesignChange(state: Partial<TerminalDesignState>) {
     try {
       window.dispatchEvent(new CustomEvent('terminal-design-changed', { detail: state }));
       localStorage.setItem('terminal_design_broadcast_ts', Date.now().toString());
-    } catch {}
+    } catch { }
   }
 }
 
-// In-flight request deduplication trackers
+// In-flight request tracking
 let inFlightFetchPromise: Promise<void> | null = null;
 let inFlightCompanyId: string | undefined = undefined;
+let fetchRequestId = 0;
 
 export const useTerminalDesignStore = create<TerminalDesignState>()(
   persist(
@@ -145,11 +160,8 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
       ...initialDesignState,
 
       updateDesign: (updates) => {
-        set((state) => {
-          const next = { ...state, ...updates };
-          broadcastDesignChange(next);
-          return next;
-        });
+        set((state) => ({ ...state, ...updates }));
+        broadcastDesignChange(updates);
       },
 
       resetDesign: () => {
@@ -160,6 +172,7 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
       },
 
       fetchCompanyTerminalDesign: async (companyId?: string, force = false) => {
+        const requestId = ++fetchRequestId;
         const state = get();
         const cookieCompanyId =
           typeof document !== 'undefined'
@@ -192,8 +205,13 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
               : '/api/companies/terminal-design';
 
             const res = await fetch(url, { cache: 'no-store' });
+
+            if (requestId !== fetchRequestId) return;
+
             if (res.ok) {
               const data = await res.json();
+
+              if (requestId !== fetchRequestId) return;
               if (data && data.success && data.design) {
                 set((s) => ({
                   ...s,
@@ -204,17 +222,34 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
                   activeCompanyId: data.companyId || targetCompanyId || s.activeCompanyId,
                 }));
               } else {
-                set({ isLoaded: true, isFetching: false });
+                set({
+                  ...initialDesignState,
+                  isLoaded: true,
+                  isFetching: false,
+                  activeCompanyId: targetCompanyId || '',
+                });
               }
             } else {
-              set({ isLoaded: true, isFetching: false });
+              set({
+                ...initialDesignState,
+                isLoaded: true,
+                isFetching: false,
+                activeCompanyId: targetCompanyId || '',
+              });
             }
           } catch (err) {
             console.warn('Failed to fetch company terminal design:', err);
-            set({ isLoaded: true, isFetching: false });
+            set({
+              ...initialDesignState,
+              isLoaded: true,
+              isFetching: false,
+              activeCompanyId: targetCompanyId || '',
+            });
           } finally {
-            inFlightFetchPromise = null;
-            inFlightCompanyId = undefined;
+            if (requestId === fetchRequestId) {
+              inFlightFetchPromise = null;
+              inFlightCompanyId = undefined;
+            }
           }
         })();
 
@@ -246,6 +281,11 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
             currencySymbol: state.currencySymbol,
             showCartBadge: state.showCartBadge,
             quickDoubleTap: state.quickDoubleTap,
+            categoryStyle: state.categoryStyle || 'card-tile',
+            categoryCardHeight: state.categoryCardHeight || 'h-24',
+            categoryThumbnailShape: state.categoryThumbnailShape || 'rounded-full',
+            showCategoryCount: state.showCategoryCount ?? true,
+            categorySearchPlaceholder: state.categorySearchPlaceholder || 'Search category...',
           };
 
           const res = await fetch('/api/companies/terminal-design', {

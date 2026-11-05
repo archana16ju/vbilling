@@ -101,6 +101,42 @@ export default function SuperAdminPage() {
     fetchCompanies();
   }, []);
 
+  const handleSwitchCompany = async (companyId: string) => {
+    try {
+      document.cookie = `auth_company_id=${companyId}; path=/; max-age=604800; SameSite=Lax`;
+      const res = await fetch('/api/companies/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to switch company');
+      setActiveCompanyId(companyId);
+      setSuccessMsg(`Switched active context to ${data.company?.name || companyId}`);
+      window.dispatchEvent(new CustomEvent('company-switched', { detail: { company: data.company } }));
+      window.dispatchEvent(new CustomEvent('company-theme-changed', { detail: { companyId } }));
+      try {
+        localStorage.removeItem('tables-storage');
+        const termData = localStorage.getItem('terminal-storage');
+        if (termData) {
+          const parsed = JSON.parse(termData);
+          if (parsed?.state) {
+            parsed.state.cart = [];
+            parsed.state.selectedCustomer = null;
+            parsed.state.orderNote = '';
+            parsed.state.activeCompanyId = companyId;
+            localStorage.setItem('terminal-storage', JSON.stringify(parsed));
+          }
+        }
+      } catch {}
+      setTimeout(() => {
+        window.location.reload();
+      }, 150);
+    } catch (err: any) {
+      setError(err.message || 'Failed to switch company');
+    }
+  };
+
   // 2. Fetch Companies
   const fetchCompanies = async () => {
     setIsLoadingCompanies(true);
@@ -658,6 +694,15 @@ export default function SuperAdminPage() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {!isActiveContext && comp.isActive && (
+                                <button
+                                  onClick={() => handleSwitchCompany(comp.id)}
+                                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold text-white btn-theme-primary transition cursor-pointer active:scale-95 mr-1"
+                                  title="Switch active context to this company"
+                                >
+                                  Switch Context
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleToggleActive(comp)}
                                 className={`rounded-lg p-2 transition cursor-pointer ${

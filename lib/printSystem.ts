@@ -41,6 +41,22 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       itemLine += `<div class="tax">₹${itemTax.toFixed(2)}</div>`;
       if (design.showItemTotal) itemLine += `<div class="total-col">₹${item.total || (item.quantity * item.product.price).toFixed(2)}</div>`;
       itemLine += `</div>`;
+
+      if (Array.isArray(item.selectedAddOns) && item.selectedAddOns.length > 0) {
+        for (const addon of item.selectedAddOns) {
+          const aQty = addon.quantity || 1;
+          const aPrice = Number(addon.price) || 0;
+          const aLineTotal = aPrice * aQty * qty;
+          itemLine += `<div class="row" style="font-size: 0.88em; color: #555; padding-left: 8px;">
+            <div class="name">+ ${addon.name}${aQty > 1 ? ` (x${aQty})` : ''}</div>
+            <div class="price">₹${aPrice.toFixed(2)}</div>
+            <div class="qty">${aQty * qty}</div>
+            <div class="tax">-</div>
+            <div class="total-col">₹${aLineTotal.toFixed(2)}</div>
+          </div>`;
+        }
+      }
+
       return itemLine;
     }).join('');
   }

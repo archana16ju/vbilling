@@ -192,6 +192,92 @@ body {
   box-shadow: 0 6px 22px -2px var(--theme-glow, rgba(219, 39, 119, 0.6)) !important;
 }
 
+/* =========================================================================
+   SIDEBAR NAVIGATION: LIGHT MODE STYLING & HOVER LABEL VISIBILITY FIX
+   ========================================================================= */
+html[data-theme="light"] .sidebar-nav-item:not(.active),
+html.light-mode .sidebar-nav-item:not(.active),
+body.light-mode .sidebar-nav-item:not(.active) {
+  color: #64748b !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+html[data-theme="light"] .sidebar-nav-item:not(.active) .sidebar-nav-icon,
+html.light-mode .sidebar-nav-item:not(.active) .sidebar-nav-icon,
+body.light-mode .sidebar-nav-item:not(.active) .sidebar-nav-icon {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .sidebar-nav-item:not(.active) .sidebar-nav-label,
+html.light-mode .sidebar-nav-item:not(.active) .sidebar-nav-label,
+body.light-mode .sidebar-nav-item:not(.active) .sidebar-nav-label {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .sidebar-nav-item:not(.active):hover,
+html.light-mode .sidebar-nav-item:not(.active):hover,
+body.light-mode .sidebar-nav-item:not(.active):hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme="light"] .sidebar-nav-item:not(.active):hover .sidebar-nav-icon,
+html.light-mode .sidebar-nav-item:not(.active):hover .sidebar-nav-icon,
+body.light-mode .sidebar-nav-item:not(.active):hover .sidebar-nav-icon {
+  color: var(--theme-accent, #DB2777) !important;
+  transform: translateY(-1px) scale(1.1);
+}
+
+html[data-theme="light"] .sidebar-nav-item:not(.active):hover .sidebar-nav-label,
+html.light-mode .sidebar-nav-item:not(.active):hover .sidebar-nav-label,
+body.light-mode .sidebar-nav-item:not(.active):hover .sidebar-nav-label {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+/* =========================================================================
+   SETTINGS MENU NAVIGATION LIST VIEW: MODERN LIGHT & DARK STYLING
+   ========================================================================= */
+.settings-nav-btn:not(.active) {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: #a1a1aa !important;
+}
+
+.settings-nav-btn:not(.active):hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+/* Light Mode Settings Menu Navigation */
+html[data-theme="light"] .settings-nav-menu,
+html.light-mode .settings-nav-menu,
+body.light-mode .settings-nav-menu {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.06) !important;
+}
+
+html[data-theme="light"] .settings-nav-btn:not(.active),
+html.light-mode .settings-nav-btn:not(.active),
+body.light-mode .settings-nav-btn:not(.active) {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: #475569 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] .settings-nav-btn:not(.active):hover,
+html.light-mode .settings-nav-btn:not(.active):hover,
+body.light-mode .settings-nav-btn:not(.active):hover {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
 
 /* =========================================================================
    LEGACY THEME FALLBACK ROUTING

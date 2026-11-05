@@ -81,6 +81,8 @@ export async function login(prevState: unknown, formData: FormData) {
       redirect('/kitchen');
     } else if (role === 'waiter') {
       redirect('/assigned-orders');
+    } else if (role === 'delivery_staff') {
+      redirect('/delivery');
     } else {
       redirect('/terminal');
     }

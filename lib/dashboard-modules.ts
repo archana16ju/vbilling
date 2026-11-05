@@ -61,6 +61,12 @@ export const BASE_DASHBOARD_COLLECTION_MODULES: DashboardModuleDefinition[] = [
     desc: 'Menu categorization and item groups',
   },
   {
+    key: 'add_ons',
+    label: 'Add-ons',
+    desc: 'Add-on items, modifier groups, and product add-on configuration',
+    aliases: ['addons', 'addon_groups'],
+  },
+  {
     key: 'customers',
     label: 'Customers',
     desc: 'Guest directory, customer profiles, and order history',
@@ -147,4 +153,5 @@ export const DEFAULT_DASHBOARD_PERMISSIONS: {
   sales: true,
   bills: true,
   delivery: true,
+  add_ons: true,
 };

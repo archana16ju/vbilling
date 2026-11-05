@@ -1,8 +1,10 @@
 'use client';
 
+import AddonSelectionModal from './AddonSelectionModal';
+
 import { useTerminalStore } from '@/store/useTerminalStore';
 import ProductCard from './ProductCard';
-import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package } from 'lucide-react';
+import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 import { useTerminalDesignStore } from '@/store/useTerminalDesignStore';
@@ -18,6 +20,7 @@ export default function ProductPanel() {
     searchQuery,
     setSearchQuery,
     addToCart,
+    addToCartWithAddons,
     setCategory,
   } = useTerminalStore();
 
@@ -50,14 +53,60 @@ export default function ProductPanel() {
     const matchesSearch =
       (p.name || '').toLowerCase().includes(safeSearchQuery) ||
       (p.sku || '').toLowerCase().includes(safeSearchQuery) ||
-      (p.barcode || '').includes(searchQuery || '');
+      (p.barcode || '').toLowerCase().includes(safeSearchQuery) ||
+      (p.barcodes || []).some((b) => (b.barcode || '').toLowerCase().includes(safeSearchQuery));
 
     return matchesCategory && matchesSearch;
   });
 
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [selectedProductForAddons, setSelectedProductForAddons] = useState<Product | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Scanner state & notification
+  const [scannerNotification, setScannerNotification] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scannerBufferRef = useRef<{ chars: string[]; lastTime: number }>({ chars: [], lastTime: 0 });
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+    setScannerNotification({ type, message });
+    notificationTimeoutRef.current = setTimeout(() => {
+      setScannerNotification(null);
+    }, 3500);
+  };
+
+  const handleBarcodeScan = (code: string): boolean => {
+    const cleanCode = (code || '').trim();
+    if (!cleanCode) return false;
+
+    // Search product across products list
+    const matched = safeProducts.find((p) => {
+      if (!p) return false;
+      if (p.barcode && p.barcode.trim().toLowerCase() === cleanCode.toLowerCase()) return true;
+      if (p.barcodes && p.barcodes.some((b) => b.barcode.trim().toLowerCase() === cleanCode.toLowerCase())) return true;
+      return false;
+    });
+
+    if (matched) {
+      setSearchQuery('');
+      if (matched.addonGroupIds && matched.addonGroupIds.length > 0) {
+        setSelectedProductForAddons(matched);
+      } else {
+        addToCart(matched);
+        showNotification('success', `Scanned: ${matched.name} (Qty +${matched.quantityStep || 1})`);
+      }
+      return true;
+    } else {
+      showNotification('error', `Unregistered Barcode: "${cleanCode}". No product matches this barcode.`);
+      return false;
+    }
+  };
 
   // Reset highlighted index when search results change
   useEffect(() => {
@@ -80,6 +129,29 @@ export default function ProductPanel() {
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
           target.isContentEditable);
+
+      const now = Date.now();
+      const timeDiff = now - scannerBufferRef.current.lastTime;
+      scannerBufferRef.current.lastTime = now;
+
+      // Detect USB/keyboard-wedge scanner rapid key sequences (< 150ms total sequence completion)
+      if (e.key === 'Enter') {
+        const bufferedCode = scannerBufferRef.current.chars.join('').trim();
+        scannerBufferRef.current.chars = [];
+        if (bufferedCode.length >= 3 && timeDiff < 150) {
+          // Rapid input from hardware scanner
+          e.preventDefault();
+          e.stopPropagation();
+          handleBarcodeScan(bufferedCode);
+          return;
+        }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (timeDiff > 90) {
+          scannerBufferRef.current.chars = [e.key];
+        } else {
+          scannerBufferRef.current.chars.push(e.key);
+        }
+      }
 
       // Jump to product search: '/' or registered shortcut (e.g. F1)
       if (shortcutsStore.isActionTriggered('product_search', e) && !isInput) {
@@ -161,6 +233,11 @@ export default function ProductPanel() {
   ]);
 
   const handleSelectProduct = (product: Product) => {
+    if (product.addonGroupIds && product.addonGroupIds.length > 0) {
+      setSelectedProductForAddons(product);
+      return;
+    }
+
     addToCart(product);
     // In search-based design, if cashier typed a specific barcode/SKU or item, can clear search for rapid next scan
     if (isSearchBased) {
@@ -195,34 +272,71 @@ export default function ProductPanel() {
     <div className="flex h-full flex-col bg-zinc-950 text-white">
       {/* Top Search & Filter Bar */}
       <div className="px-6 pt-5 pb-2">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-black text-white">
-              {isSearchBased
-                ? 'Search-Based Billing'
-                : selectedCategory?.name || 'All Products'}
-            </h2>
-            <span
-              className="rounded-full border px-2.5 py-0.5 text-xs font-bold"
-              style={{
-                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
-                color: 'var(--theme-badge-text, #F472B6)',
-                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
-              }}
-            >
-              {isSearchBased && !safeSearchQuery
-                ? 'Standby'
-                : `${filteredProducts.length} items`}
-            </span>
-          </div>
+        <div className="flex items-center justify-between mb-4 gap-3">
+  {/* LEFT SIDE: Heading and Item Count */}
+  <div className="flex items-center gap-5 min-w-0">
+    <h2 className="text-xl font-black text-white">
+      {isSearchBased
+        ? 'Search-Based Billing'
+        : selectedCategory?.name || 'All Products'}
+    </h2>
 
-          {isSearchBased && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-xl">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Fast Scan Terminal
-            </span>
-          )}
-        </div>
+    <span
+      className="rounded-full border px-2.5 py-0.5 text-xs font-bold"
+      style={{
+        backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+        color: 'var(--theme-badge-text, #F472B6)',
+        borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+      }}
+    >
+      {isSearchBased && !safeSearchQuery
+        ? 'Standby'
+        : `${filteredProducts.length} items`}
+    </span>
+  </div>
+
+  {/* RIGHT SIDE: Tap Mode Banner */}
+  {!isSearchBased && isImageGrid && design.showTapBanner && (
+    <span
+      className="hidden sm:inline-flex items-center gap-2 rounded-2xl border px-3 py-1 text-xs font-bold shrink-0 ml-auto"
+      style={{
+        backgroundColor: design.bannerBgColor || '#1F0715',
+        color: design.bannerTextColor || '#f4f4f5',
+        borderColor: design.activeBorderColor || 'var(--theme-active-border, #DB2777)',
+      }}
+    >
+      <span className="text-sm select-none">👆</span>
+
+      <span>
+        {design.tapBannerText || 'Tap to Add • Double-Tap +1 Qty'}
+      </span>
+
+      <span
+        className="inline-flex items-center gap-1 text-[10px] font-black tracking-wider font-mono px-2 py-0.5 rounded-full border"
+        style={{
+          backgroundColor: 'rgba(0,0,0,0.45)',
+          color: design.accentColor || 'var(--theme-accent, #DB2777)',
+          borderColor: design.activeBorderColor || 'var(--theme-active-border, #DB2777)',
+        }}
+      >
+        <span
+          className="h-1.5 w-1.5 rounded-full animate-pulse"
+          style={{
+            backgroundColor: design.accentColor || 'var(--theme-accent, #DB2777)',
+          }}
+        />
+        {design.tapBannerBadgeText || 'TAP MODE ACTIVE'}
+      </span>
+    </span>
+  )}
+
+  {isSearchBased && (
+    <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-xl ml-auto">
+      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      Fast Scan Terminal
+    </span>
+  )}
+</div>
 
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
@@ -242,13 +356,33 @@ export default function ProductPanel() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  if (filteredProducts.length > 0) {
-                    const targetProduct =
-                      filteredProducts[highlightedIndex] || filteredProducts[0];
-                    handleSelectProduct(targetProduct);
-                    if (filteredProducts.length === 1) {
-                      setSearchQuery('');
+                  const q = (searchQuery || '').trim();
+                  if (q) {
+                    // Check if query matches a barcode directly
+                    const scannedMatch = safeProducts.find((p) => {
+                      if (!p) return false;
+                      if (p.barcode && p.barcode.trim().toLowerCase() === q.toLowerCase()) return true;
+                      if (p.barcodes && p.barcodes.some((b) => b.barcode.trim().toLowerCase() === q.toLowerCase())) return true;
+                      return false;
+                    });
+
+                    if (scannedMatch) {
+                      handleBarcodeScan(q);
+                      return;
                     }
+
+                    if (filteredProducts.length > 0) {
+                      const targetProduct =
+                        filteredProducts[highlightedIndex] || filteredProducts[0];
+                      handleSelectProduct(targetProduct);
+                      if (filteredProducts.length === 1) {
+                        setSearchQuery('');
+                      }
+                      return;
+                    }
+
+                    // No product found and user entered an unrecognized code
+                    showNotification('error', `Unregistered Barcode: "${q}". No product matches this barcode.`);
                   }
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
@@ -279,49 +413,43 @@ export default function ProductPanel() {
 
           <button
             onClick={() => setCategory('all')}
-            className={`rounded-xl px-4 py-2.5 text-xs font-black transition cursor-pointer ${
-              selectedCategoryId === 'all'
+            className={`rounded-xl px-4 py-2.5 text-xs font-black transition cursor-pointer ${selectedCategoryId === 'all'
                 ? 'bg-theme-bar border border-theme text-white shadow-lg shadow-theme-glow'
                 : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
+              }`}
           >
             ALL
           </button>
         </div>
+
+        {/* Scanner Feedback Notification Banner */}
+        {scannerNotification && (
+          <div
+            className={`mt-2.5 flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-150 shadow-lg ${
+              scannerNotification.type === 'success'
+                ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-200'
+                : 'bg-rose-950/90 border border-rose-500/60 text-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {scannerNotification.type === 'success' ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              ) : (
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              )}
+              <span>{scannerNotification.message}</span>
+            </div>
+            <button
+              onClick={() => setScannerNotification(null)}
+              className="p-1 rounded-lg hover:bg-black/30 transition text-zinc-400 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Modern Touch Mode Banner (When enabled in image grid) */}
-      {!isSearchBased && isImageGrid && design.showTapBanner && (
-        <div
-          style={{
-            backgroundColor: design.bannerBgColor || '#1F0715',
-            color: design.bannerTextColor || '#f4f4f5',
-          }}
-          className="mx-6 mt-3 mb-1 flex items-center justify-between rounded-2xl px-4 py-2.5 border border-theme shadow-lg"
-        >
-          <div
-            className="flex items-center gap-2 text-xs font-bold"
-            style={{ color: design.bannerTextColor || '#f4f4f5' }}
-          >
-            <span className="text-sm select-none">👆</span>
-            <span>{design.tapBannerText || 'Tap to Add to Cart • Double-tap to +1 Qty'}</span>
-          </div>
-          <div
-            className="flex items-center gap-1.5 text-[10px] font-black tracking-wider font-mono px-2.5 py-1 rounded-full border"
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.45)',
-              color: design.accentColor || 'var(--theme-accent, #DB2777)',
-              borderColor: design.activeBorderColor || 'var(--theme-active-border, #DB2777)',
-            }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full animate-pulse"
-              style={{ backgroundColor: design.accentColor || 'var(--theme-accent, #DB2777)' }}
-            />
-            <span>{design.tapBannerBadgeText || 'TAP MODE ACTIVE'}</span>
-          </div>
-        </div>
-      )}
+      {/* Tap Mode Banner removed from here — now shown inline beside the heading */}
 
       {/* Main Center Display Section */}
       <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
@@ -388,11 +516,10 @@ export default function ProductPanel() {
                       key={product.id}
                       onClick={() => handleSelectProduct(product)}
                       onMouseEnter={() => setHighlightedIndex(idx)}
-                      className={`flex items-center justify-between rounded-2xl border p-4 transition-all cursor-pointer ${
-                        isHighlighted
+                      className={`flex items-center justify-between rounded-2xl border p-4 transition-all cursor-pointer ${isHighlighted
                           ? 'border-theme bg-theme-badge ring-2 ring-theme shadow-lg shadow-theme-glow'
                           : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-800/40'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-3.5">
                         {product.image ? (
@@ -491,19 +618,18 @@ export default function ProductPanel() {
             </div>
             <div className="flex flex-col">
               {filteredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} onSelectProduct={handleSelectProduct} />
               ))}
             </div>
           </div>
         ) : (
           /* DESIGN 3: VISUAL IMAGE GRID (PRESERVED) */
           <div
-            className={`p-6 grid ${getGridColsClass(design.gridColumns)} ${
-              design.cardGap || 'gap-4'
-            }`}
+            className={`p-6 grid ${getGridColsClass(design.gridColumns)} ${design.cardGap || 'gap-4'
+              }`}
           >
             {filteredProducts.map((product) => (
-              <ProductGridCard key={product.id} product={product} />
+              <ProductGridCard key={product.id} product={product} onSelectProduct={handleSelectProduct} />
             ))}
           </div>
         )}
@@ -517,6 +643,25 @@ export default function ProductPanel() {
           </div>
         )}
       </div>
+
+      {/* Product Add-on Selection Modal */}
+      <AddonSelectionModal
+        isOpen={Boolean(selectedProductForAddons)}
+        product={selectedProductForAddons}
+        onClose={() => setSelectedProductForAddons(null)}
+        onConfirm={(prod, selectedAddons, qty) => {
+          if (addToCartWithAddons) {
+            addToCartWithAddons(prod, selectedAddons, qty);
+          } else {
+            addToCart(prod);
+          }
+          setSelectedProductForAddons(null);
+          if (isSearchBased) {
+            setSearchQuery('');
+            searchInputRef.current?.focus();
+          }
+        }}
+      />
     </div>
   );
 }

@@ -34,6 +34,7 @@ import {
   recordPayrollExpense,
 } from '@/lib/actions/staff';
 import { clockInStaff, clockOutStaff } from '@/lib/actions/attendance';
+import ShiftManagementTab from '@/components/staff/ShiftManagementTab';
 import type {
   StaffMember,
   StaffAllowance,
@@ -45,7 +46,7 @@ import type {
   MarkCode,
 } from '@/types/staff';
 
-type ActiveTab = 'today' | 'month' | 'report' | 'salaries' | 'payroll';
+type ActiveTab = 'today' | 'shifts' | 'month' | 'report' | 'salaries' | 'payroll';
 
 export default function StaffPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
@@ -211,6 +212,7 @@ export default function StaffPage() {
 
   useEffect(() => {
     if (activeTab === 'today') loadTodayData();
+    else if (activeTab === 'shifts') loadSalariesData();
     else if (activeTab === 'month') loadMonthData();
     else if (activeTab === 'report') loadReportData();
     else if (activeTab === 'salaries') loadSalariesData();
@@ -326,13 +328,14 @@ export default function StaffPage() {
 
         {/* Tab Pills */}
         <div className="flex items-center gap-1.5 ml-auto bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800">
-          {(['today', 'month', 'report', 'salaries', 'payroll'] as ActiveTab[]).map((tab) => {
+          {(['today', 'shifts', 'month', 'report', 'salaries', 'payroll'] as ActiveTab[]).map((tab) => {
             const labels: Record<ActiveTab, string> = {
               today: 'Today',
               month: 'Month sheet',
               report: 'Report',
               salaries: 'Salaries',
               payroll: 'Payroll',
+              shifts: 'Shifts',
             };
             const isActive = activeTab === tab;
             return (
@@ -513,6 +516,15 @@ export default function StaffPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB: SHIFTS MANAGEMENT (Embedded in Staff Collection) */}
+      {activeTab === 'shifts' && (
+        <ShiftManagementTab
+          staffList={staffList}
+          showFeedback={showFeedback}
+          onRefreshStaff={loadSalariesData}
+        />
       )}
 
       {/* TAB 2: MONTH SHEET (Matching Image 4) */}

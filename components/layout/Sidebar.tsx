@@ -1,4 +1,5 @@
-'use client'
+'use client';
+import { fetchWithClientCache } from '@/lib/client-cache';
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -19,6 +20,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   ClipboardList,
+  Layers,
   LogOut
 } from "lucide-react"
 import { useState, useEffect } from "react"
@@ -36,7 +38,7 @@ export default function Sidebar() {
 
     const loadRoleAndPermissions = (currentRole: string | null) => {
       if (currentRole === 'company_admin') {
-        fetch('/api/companies/permissions')
+        fetchWithClientCache('/api/companies/permissions')
           .then((res) => res.ok ? res.json() : null)
           .then((data) => {
             if (data && !data.error) setPermissions(data);
@@ -76,6 +78,7 @@ export default function Sidebar() {
     { name: "Delivery", href: "/delivery", icon: Truck, moduleKey: "delivery" },
     { name: "Products", href: "/products", icon: FileText, moduleKey: "products" },
     { name: "Categories", href: "/categories", icon: Tags, moduleKey: "categories" },
+    { name: "Add-ons", href: "/add-ons", icon: Layers, moduleKey: "products" },
 
     {
       name: "Stock",
@@ -108,6 +111,11 @@ export default function Sidebar() {
     // Cashier is restricted to Terminal
     if (role === 'cashier') {
       return item.href === '/terminal';
+    }
+
+    // Delivery Staff is strictly restricted to Delivery
+    if (role === 'delivery_staff') {
+      return item.href === '/delivery';
     }
 
     // Manager manages store operations (cannot access super-admin, companies, or users)
@@ -211,7 +219,7 @@ export default function Sidebar() {
               : role || 'Loading...'
             }`}
         >
-          {role === 'super_admin' ? 'Super' : role === 'company_admin' ? 'Admin' : role || 'User'}
+          {role === 'super_admin' ? 'Super' : role === 'company_admin' ? 'Admin' : role === 'delivery_staff' ? 'Delivery' : role || 'User'}
         </div>
         <button
           onClick={handleLogout}

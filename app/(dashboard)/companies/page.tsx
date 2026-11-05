@@ -138,6 +138,9 @@ export default function CompaniesPage() {
 
   const handleSwitchCompany = async (companyId: string) => {
     try {
+      // Set client cookie directly to ensure immediate consistency
+      document.cookie = `auth_company_id=${companyId}; path=/; max-age=604800; SameSite=Lax`;
+
       const res = await fetch('/api/companies/active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,7 +150,11 @@ export default function CompaniesPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to switch company');
       setActiveCompanyId(companyId);
       setSuccessMsg(`Switched active company to ${data.company?.name || companyId}`);
-      setTimeout(() => setSuccessMsg(''), 3000);
+
+      // Dispatch custom events for real-time header and theme updates
+      window.dispatchEvent(new CustomEvent('company-switched', { detail: { company: data.company } }));
+      window.dispatchEvent(new CustomEvent('company-theme-changed', { detail: { companyId } }));
+
       try {
         localStorage.removeItem('tables-storage');
         const termData = localStorage.getItem('terminal-storage');
@@ -162,7 +169,10 @@ export default function CompaniesPage() {
           }
         }
       } catch {}
-      window.location.reload();
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 150);
     } catch (err: any) {
       setError(err.message);
     }

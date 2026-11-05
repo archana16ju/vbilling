@@ -14,6 +14,7 @@ import CartItem from './CartItem';
 import EnhancedCashModal from './EnhancedCashModal';
 import TableSelectionModal from './TableSelectionModal';
 import QuickCustomerModal from './QuickCustomerModal';
+import DeliveryConfirmationModal, { DeliveryConfirmationData } from './DeliveryConfirmationModal';
 import { useKitchenStore } from '@/store/useKitchenStore';
 import { useTableStore } from '@/store/useTableStore';
 import { useShortcutsStore } from '@/store/useShortcutsStore';
@@ -72,6 +73,7 @@ export default function CartPanel() {
 
   const {
     orderType,
+    deliveryInfo,
     setOrderType,
     tables,
     selectedTableId,
@@ -107,6 +109,10 @@ export default function CartPanel() {
   const [amountReceivedStr, setAmountReceivedStr] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
+  // WhatsApp / Delivery Confirmation overlay state
+  const [deliveryConfirmData, setDeliveryConfirmData] = useState<DeliveryConfirmationData | null>(null);
+  const printerDesignForWA = usePrinterDesignStore();
+
   const cartSafe = Array.isArray(cart) ? cart : [];
 
   // Auto-select first cart item or keep valid selection
@@ -135,6 +141,27 @@ export default function CartPanel() {
     printerDesign.roundOffAbove
   );
   const total = grandTotal;
+
+
+  // Open DeliveryConfirmationModal (WhatsApp send) after a paid bill is completed
+  const openDeliveryConfirmation = (data: {
+    billId: string;
+    total: number;
+    items: Array<{ name: string; quantity: number; price: number }>;
+    customerName?: string;
+    customerPhone?: string;
+    paymentMethod?: string;
+  }) => {
+    setDeliveryConfirmData({
+      billId: data.billId,
+      status: 'unassigned',
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      total: data.total,
+      paymentMethod: data.paymentMethod,
+      items: data.items,
+    });
+  };
 
   // Checkout execution
   const handlePaymentSubmit = async (
@@ -239,9 +266,15 @@ export default function CartPanel() {
       waiterId: (assignedWaiter?.id || selectedTable?.waiterId) || undefined,
       waiterName: (assignedWaiter?.name || selectedTable?.waiterName) || undefined,
       orderType: orderType || 'Dine In',
-      orderNote: orderNote || undefined,
-      customerName: selectedCustomer ? selectedCustomer.name : undefined,
-      customerPhone: selectedCustomer ? selectedCustomer.phone : undefined,
+      orderNote: orderNote || deliveryInfo?.deliveryNotes || undefined,
+      customerName: selectedCustomer ? selectedCustomer.name : (deliveryInfo?.customerName || undefined),
+      customerPhone: selectedCustomer ? selectedCustomer.phone : (deliveryInfo?.customerPhone || undefined),
+      deliveryAddress: deliveryInfo?.deliveryAddress || selectedCustomer?.address || undefined,
+      address: deliveryInfo?.deliveryAddress || selectedCustomer?.address || undefined,
+      deliveryPersonId: deliveryInfo?.deliveryPersonId || undefined,
+      deliveryNotes: deliveryInfo?.deliveryNotes || undefined,
+      orderSource: deliveryInfo?.platform || (orderType === 'Delivery' ? 'Terminal' : undefined),
+      onlineOrderId: deliveryInfo?.onlineOrderId || undefined,
       paymentStatus: opts.isBillOnly ? 'unpaid' : 'paid',
       servingStatus: opts.isSendToKitchen ? 'Pending' : (orderType === 'Dine In' ? 'Served' : 'Completed'),
     };
@@ -284,9 +317,25 @@ export default function CartPanel() {
               opts.isSendToKitchen
                 ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
                 : opts.isBillOnly
-                ? `Bill Only generated: #${billId}`
-                : `Sale completed: #${billId}`
+                  ? `Bill Only generated: #${billId}`
+                  : `Sale completed: #${billId}`
             );
+            // Show WhatsApp send modal for paid bills
+            if (!opts.isBillOnly && !opts.isSendToKitchen) {
+              const waItems = cartSafe.map((i) => ({
+                name: i.product.name,
+                quantity: i.quantity,
+                price: i.product.price,
+              }));
+              openDeliveryConfirmation({
+                billId,
+                total,
+                items: waItems,
+                customerName: fullSaleData.customerName,
+                customerPhone: fullSaleData.customerPhone,
+                paymentMethod: finalMethod,
+              });
+            }
             return;
           }
         } catch (localErr) {
@@ -333,9 +382,25 @@ export default function CartPanel() {
                 opts.isSendToKitchen
                   ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
                   : opts.isBillOnly
-                  ? `Bill Only generated: #${billId}`
-                  : `Sale completed: #${billId}`
+                    ? `Bill Only generated: #${billId}`
+                    : `Sale completed: #${billId}`
               );
+              // Show WhatsApp send modal for paid bills
+              if (!opts.isBillOnly && !opts.isSendToKitchen) {
+                const waItems = cartSafe.map((i) => ({
+                  name: i.product.name,
+                  quantity: i.quantity,
+                  price: i.product.price,
+                }));
+                openDeliveryConfirmation({
+                  billId,
+                  total,
+                  items: waItems,
+                  customerName: fullSaleData.customerName,
+                  customerPhone: fullSaleData.customerPhone,
+                  paymentMethod: finalMethod,
+                });
+              }
               return;
             }
           }
@@ -379,9 +444,25 @@ export default function CartPanel() {
           opts.isSendToKitchen
             ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
             : opts.isBillOnly
-            ? `Bill Only saved: #${billId}`
-            : `Sale completed: #${billId}`
+              ? `Bill Only saved: #${billId}`
+              : `Sale completed: #${billId}`
         );
+        // Show WhatsApp send modal for offline paid bills
+        if (!opts.isBillOnly && !opts.isSendToKitchen) {
+          const waItems = cartSafe.map((i) => ({
+            name: i.product.name,
+            quantity: i.quantity,
+            price: i.product.price,
+          }));
+          openDeliveryConfirmation({
+            billId,
+            total,
+            items: waItems,
+            customerName: fullSaleData.customerName,
+            customerPhone: fullSaleData.customerPhone,
+            paymentMethod: finalMethod,
+          });
+        }
       }
     } catch (e) {
       console.error('Failure during checkout:', e);
@@ -414,12 +495,22 @@ export default function CartPanel() {
     if (cartSafe.length === 0 || isProcessing) return;
 
     const billId = generateNextBillId();
-    const ticketItems = cartSafe.map((item) => ({
-      name: item.product.name,
-      quantity: item.quantity,
-      price: item.product.price,
-      notes: '',
-    }));
+    const ticketItems = cartSafe.map((item) => {
+      let notes = item.notes || '';
+      if (item.selectedAddOns && item.selectedAddOns.length > 0) {
+        const addonStr = item.selectedAddOns
+          .map((a) => `${a.name}${(a.quantity || 1) > 1 ? ` (x${a.quantity})` : ''}`)
+          .join(', ');
+        notes = notes ? `${notes} | Extras: ${addonStr}` : `Extras: ${addonStr}`;
+      }
+      return {
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+        notes,
+        selectedAddOns: item.selectedAddOns,
+      };
+    });
 
     const effectiveWaiterId = assignedWaiter?.id || selectedTable?.waiterId || null;
     const effectiveWaiterName = assignedWaiter?.name || selectedTable?.waiterName || null;
@@ -712,12 +803,12 @@ export default function CartPanel() {
       )}
 
       {/* Cart Top Header */}
-      <div className="border-b border-zinc-800 p-4 bg-zinc-900/50">
+      <div className="border-b border-zinc-800 px-3 py-2 bg-zinc-900/50">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-black text-white">Current Order</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="text-sm font-black text-white">Current Order</h2>
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-bold border"
+              className="rounded-full px-1.5 py-0.5 text-[9px] font-bold border"
               style={{
                 backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
                 borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
@@ -733,11 +824,11 @@ export default function CartPanel() {
               type="button"
               onClick={clearCart}
               disabled={cartSafe.length === 0}
-              className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-400 hover:text-rose-400 hover:border-rose-800 hover:bg-rose-950/30 transition disabled:opacity-40 cursor-pointer"
+             className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[9px] font-bold text-zinc-400 hover:text-rose-400 hover:border-rose-800 hover:bg-rose-950/30 transition disabled:opacity-40 cursor-pointer"
               title="Clear receipt"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Clear</span>
+              
             </button>
           </div>
         </div>
@@ -747,7 +838,7 @@ export default function CartPanel() {
       <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-2">
         {cartSafe.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center text-zinc-500">
-            <CreditCard className="mb-3 h-12 w-12 stroke-[1.2] opacity-30 text-zinc-400" />
+            <CreditCard className="mb-3 h-9 w-12 stroke-[1.2] opacity-30 text-zinc-400" />
             <p className="text-sm font-bold text-zinc-400">Cart is empty</p>
             <p className="text-xs text-zinc-600 mt-1 max-w-[200px]">
               Scan a barcode or search products to begin
@@ -768,16 +859,15 @@ export default function CartPanel() {
       </div>
 
       {/* Quick Action Buttons: + Note and + Customer (as shown in reference image) */}
-      <div className="border-t border-zinc-800/80 bg-zinc-950/70 p-3 pt-2.5 pb-2.5">
-        <div className="grid grid-cols-2 gap-2">
+      <div className="border-t border-zinc-800/80 bg-zinc-950/70 px-2 py-1">
+        <div className="grid grid-cols-2 gap-1">
           <button
             type="button"
             onClick={() => {
               setTempOrderNote(orderNote || '');
               setIsNoteModalOpen(true);
             }}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-2.5 px-3 text-xs font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"
-            title="Order Note"
+className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-1 px-2 text-[10px] font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"            title="Order Note"
           >
             <Plus className="h-3.5 w-3.5 text-zinc-400" />
             <span className="truncate max-w-[110px]">
@@ -788,8 +878,7 @@ export default function CartPanel() {
           <button
             type="button"
             onClick={() => setIsCustomerModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-2.5 px-3 text-xs font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"
-            title="Customer"
+className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:bg-zinc-800 hover:border-zinc-700 py-1 px-2 text-[10px] font-bold text-zinc-300 hover:text-white transition cursor-pointer shadow-sm active:scale-98"            title="Customer"
           >
             <Plus className="h-3.5 w-3.5 text-zinc-400" />
             <span className="truncate max-w-[110px]">
@@ -800,9 +889,9 @@ export default function CartPanel() {
       </div>
 
       {/* Calculation & Checkout Footer */}
-      <div className="border-t border-zinc-800 bg-zinc-900/80 p-4">
+      <div className="border-t border-zinc-800 bg-zinc-900/80 p-2">
         {/* Totals Breakdown */}
-        <div className="mb-3 space-y-1 text-xs">
+        <div className="mb-1 space-y-0 text-[11px]">
           <div className="flex justify-between text-zinc-400">
             <span>Subtotal</span>
             <span className="font-mono font-bold text-zinc-200">₹{subtotal.toFixed(2)}</span>
@@ -841,12 +930,13 @@ export default function CartPanel() {
             </div>
           )}
 
-          <div className="my-1.5 border-t border-zinc-800 border-dashed" />
+          <div className="my-1 border-t border-zinc-800 border-dashed" />
 
-          <div className="flex items-baseline justify-between text-lg font-black text-white">
+
+          <div className="flex items-baseline justify-between text-sm font-black text-white">
             <span>Grand Total</span>
             <span
-              className="text-xl font-mono font-black"
+             className="text-sm font-mono font-black"
               style={{ color: 'var(--theme-accent, #DB2777)' }}
             >
               ₹{total.toFixed(2)}
@@ -855,31 +945,31 @@ export default function CartPanel() {
         </div>
 
         {/* Payment Method Selector Tabs */}
-        <div className="mb-3 grid grid-cols-3 gap-1.5">
+        <div className="mb-2 grid grid-cols-3 gap-1.5">
           {/* Cash Tab */}
           <button
             type="button"
             onClick={() => setPaymentMethod('Cash')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl border p-2.5 transition-all cursor-pointer ${paymentMethod === 'Cash'
-                ? 'bg-theme-bar border-theme text-white shadow-lg shadow-theme-glow font-bold'
-                : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
+            className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 px-1.5 transition-all cursor-pointer ${paymentMethod === 'Cash'
+              ? 'bg-theme-bar border-theme text-white shadow-lg shadow-theme-glow font-bold'
+              : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
               }`}
           >
             <Banknote className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-bold uppercase tracking-wider">Cash</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Cash</span>
           </button>
 
           {/* Card Tab */}
           <button
             type="button"
             onClick={() => setPaymentMethod('Card')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl border p-2.5 transition-all cursor-pointer ${paymentMethod === 'Card'
-                ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 font-bold'
-                : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
+            className={`flex items-center justify-center gap-1.5 rounded-xl border py-1.5 px-1 transition-all cursor-pointer ${paymentMethod === 'Card'
+              ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30 font-bold'
+              : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
               }`}
           >
             <CreditCard className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-bold uppercase tracking-wider">Card</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Card</span>
           </button>
 
           {/* UPI Tab */}
@@ -887,19 +977,19 @@ export default function CartPanel() {
             type="button"
             onClick={() => setPaymentMethod('UPI')}
             className={`flex items-center justify-center gap-1.5 rounded-xl border p-2.5 transition-all cursor-pointer ${paymentMethod === 'UPI'
-                ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-600/30 font-bold'
-                : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
+              ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-600/30 font-bold'
+              : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-white'
               }`}
           >
             <Wallet className="h-3.5 w-3.5" />
-            <span className="text-[11px] font-bold uppercase tracking-wider">UPI</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider">UPI</span>
           </button>
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {/* Quick Hold & Bill Only Row */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1">
             {/* Hold Button */}
             <button
               type="button"
@@ -911,11 +1001,11 @@ export default function CartPanel() {
                 }
               }}
               disabled={cartSafe.length === 0 && (!heldCarts || heldCarts.length === 0)}
-              className="relative flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 py-2.5 px-3 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white transition disabled:opacity-40 cursor-pointer"
+              className="relative flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 py-1.5 px-2 text-[11px] font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white transition disabled:opacity-40 cursor-pointer"
               title="Hold Bill"
             >
               {heldCarts && heldCarts.length > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-black text-white">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[5px] font-black text-white">
                   {heldCarts.length}
                 </span>
               )}
@@ -931,7 +1021,7 @@ export default function CartPanel() {
               className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-800/60 bg-amber-950/40 py-2.5 px-3 text-xs font-bold text-amber-300 hover:bg-amber-900/60 transition disabled:opacity-40 cursor-pointer"
               title="Bill Only"
             >
-              <Receipt className="h-3.5 w-3.5 text-amber-400" />
+              <Receipt className="h-2 w-3.5 text-amber-400" />
               <span>Bill Only</span>
             </button>
           </div>
@@ -941,8 +1031,7 @@ export default function CartPanel() {
             type="button"
             onClick={handleCheckout}
             disabled={cartSafe.length === 0 || isProcessing}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-theme-bar hover:opacity-95 active:scale-98 py-3 px-4 text-sm font-black text-white transition disabled:opacity-40 shadow-theme-glow border border-theme cursor-pointer"
-            title="Bill and Settle"
+className="w-full flex items-center justify-center gap-1 rounded-xl bg-theme-bar hover:opacity-95 active:scale-98 py-1.5 px-2 text-xs font-black text-white transition disabled:opacity-40 shadow-theme-glow border border-theme cursor-pointer"            title="Bill and Settle"
           >
             <Check className="h-4 w-4" />
             <span>{isProcessing ? 'Processing...' : 'Bill and Settle'}</span>
@@ -953,10 +1042,9 @@ export default function CartPanel() {
             type="button"
             onClick={handleSendToKitchen}
             disabled={cartSafe.length === 0}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:scale-98 py-3 px-4 text-xs font-black text-white transition disabled:opacity-40 shadow-md shadow-amber-600/30 cursor-pointer"
-            title="Send to Kitchen"
+className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:scale-98 py-1.5 px-3 text-[11px] font-black text-white transition disabled:opacity-40 shadow-md shadow-amber-600/30 cursor-pointer"            title="Send to Kitchen"
           >
-            <ChefHat className="h-4 w-4 text-amber-200" />
+            <ChefHat className="h-4 w-3.5 text-amber-200" />
             <span>Send to Kitchen</span>
           </button>
         </div>
@@ -980,8 +1068,8 @@ export default function CartPanel() {
               <div className="mb-3 flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
                 <button
                   className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${tempIsPercentage
-                      ? 'bg-theme-bar border border-theme text-white shadow-lg shadow-theme-glow font-black'
-                      : 'text-zinc-400 hover:text-white'
+                    ? 'bg-theme-bar border border-theme text-white shadow-lg shadow-theme-glow font-black'
+                    : 'text-zinc-400 hover:text-white'
                     }`}
                   onClick={() => setTempIsPercentage(true)}
                 >
@@ -989,8 +1077,8 @@ export default function CartPanel() {
                 </button>
                 <button
                   className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${!tempIsPercentage
-                      ? 'bg-theme-bar border border-theme text-white shadow-lg shadow-theme-glow font-black'
-                      : 'text-zinc-400 hover:text-white'
+                    ? 'bg-theme-bar border border-theme text-white shadow-lg shadow-theme-glow font-black'
+                    : 'text-zinc-400 hover:text-white'
                     }`}
                   onClick={() => setTempIsPercentage(false)}
                 >
@@ -1013,7 +1101,7 @@ export default function CartPanel() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <button
                 onClick={() => {
                   setDiscount(0, true);
@@ -1074,7 +1162,7 @@ export default function CartPanel() {
                         })}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => {
                           recallCart(cart.id);
@@ -1149,7 +1237,7 @@ export default function CartPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-sm rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-white">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <FileText className="h-4 w-4 text-amber-400" />
                 <h3 className="text-sm font-black text-white">Order Note</h3>
               </div>
@@ -1175,7 +1263,7 @@ export default function CartPanel() {
               />
             </div>
 
-            <div className="mt-5 flex items-center justify-end gap-2 border-t border-zinc-800 pt-3">
+            <div className="mt-5 flex items-center justify-end gap-1 border-t border-zinc-800 pt-3">
               <button
                 type="button"
                 onClick={() => {
@@ -1206,7 +1294,7 @@ export default function CartPanel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
           <div className="w-[420px] rounded-3xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl text-white">
             <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-3">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-1">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                   <Check className="h-4 w-4" />
                 </div>
@@ -1224,7 +1312,7 @@ export default function CartPanel() {
               The sale was recorded successfully and the receipt is ready for printing.
             </p>
 
-            <div className="flex gap-2.5">
+            <div className="flex gap-1">
               <button
                 onClick={() => setCompletedBillHtml(null)}
                 className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
@@ -1250,6 +1338,14 @@ export default function CartPanel() {
           </div>
         </div>
       )}
+
+      {/* WhatsApp Bill Send — uses existing DeliveryConfirmationModal */}
+      <DeliveryConfirmationModal
+        isOpen={!!deliveryConfirmData}
+        onClose={() => setDeliveryConfirmData(null)}
+        data={deliveryConfirmData}
+        companyName={printerDesignForWA.companyName || 'Restaurant'}
+      />
     </div>
   );
 }
