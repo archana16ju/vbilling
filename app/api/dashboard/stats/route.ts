@@ -135,7 +135,8 @@ export async function GET(request: Request) {
         pool.query<RowDataPacket[]>(
           `SELECT s.id, s.bill_number, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
                   s.payment_method, s.payment_status, s.order_type, s.order_source, s.customer_name, 
-                  s.created_by, s.created_at, s.items
+                  s.created_by, s.created_at,
+                  CASE WHEN JSON_VALID(s.items) THEN JSON_LENGTH(s.items) ELSE 1 END as items_count
            FROM sales s
            WHERE s.company_id = ? 
              AND s.payment_status != 'cancelled'
@@ -547,23 +548,11 @@ export async function GET(request: Request) {
 
       // 8. Recent Bills Live Feed
       const recentBills = activeSales.slice(0, 15).map(s => {
-        let itemsCount = 0;
-        try {
-          if (typeof s.items === 'string') {
-            const parsed = JSON.parse(s.items);
-            itemsCount = Array.isArray(parsed) ? parsed.length : 1;
-          } else if (Array.isArray(s.items)) {
-            itemsCount = s.items.length;
-          }
-        } catch {
-          itemsCount = 1;
-        }
-
         return {
           id: s.id,
           billNumber: s.bill_number,
           customerName: s.customer_name || 'Walk-in Customer',
-          itemsCount,
+          itemsCount: Number(s.items_count) || 1,
           paymentMethod: s.payment_method || 'Cash',
           paymentStatus: s.payment_status || 'paid',
           total: Number(s.total) || 0,

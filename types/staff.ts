@@ -10,6 +10,57 @@ export interface StaffDeduction {
   amount: number;
 }
 
+export type ShiftName = 'Morning' | 'Evening' | 'Night' | 'Custom';
+export type ShiftAttendanceStatus = 'Present' | 'Late' | 'Absent' | 'On Leave';
+export type ShiftStatus = 'Upcoming' | 'Active' | 'Completed';
+
+export interface StaffShift {
+  id: string;
+  staffId: string;
+  staffName?: string;
+  staffRole?: string;
+  shiftName: ShiftName;
+  customShiftName?: string;
+  shiftDate: string; // YYYY-MM-DD
+  startTime: string; // HH:mm (24hr e.g. "09:00")
+  endTime: string;   // HH:mm (24hr e.g. "17:00")
+  breakDuration: number; // in minutes (e.g. 30, 45, 60)
+  checkInTime: string | null;  // ISO string or null
+  checkOutTime: string | null; // ISO string or null
+  clockInTime?: string | null;  // Clock-in ISO string or null
+  clockOutTime?: string | null; // Clock-out ISO string or null
+  attendanceStatus: ShiftAttendanceStatus;
+  shiftStatus: ShiftStatus;
+  totalWorkingHours: number; // working hours e.g. 7.5
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ShiftAlert {
+  id: string;
+  shiftId: string;
+  staffId: string;
+  staffName: string;
+  staffRole: string;
+  shiftName: string;
+  shiftDate: string;
+  startTime: string;
+  endTime: string;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  clockInTime?: string | null;
+  clockOutTime?: string | null;
+  totalWorkingHours?: number;
+  shiftStatus?: ShiftStatus;
+  type: 'UPCOMING_SOON' | 'ABOUT_TO_START' | 'LATE_CHECKIN' | 'COMPLETED' | 'ADMIN_NOT_CHECKED_IN' | 'ADMIN_MISSED_SHIFT';
+  severity: 'info' | 'warning' | 'danger' | 'success';
+  title: string;
+  message: string;
+  timestamp: string;
+  isRead?: boolean;
+}
+
 export interface StaffMember {
   id: string;
   companyId: string;
@@ -23,6 +74,7 @@ export interface StaffMember {
   baseAmount: number;
   allowances: StaffAllowance[];
   deductions: StaffDeduction[];
+  shifts?: StaffShift[];
   includeInPayroll: boolean;
   isActive: boolean;
   createdAt?: string;

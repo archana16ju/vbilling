@@ -1,7 +1,8 @@
 'use client';
-import { UserCircle, Building2, Shield } from "lucide-react"
+import { UserCircle, Building2, Shield, Truck } from "lucide-react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
 
 export default function Header() {
   const [role, setRole] = useState<string | null>(null)
@@ -29,25 +30,45 @@ export default function Header() {
           try {
             document.cookie = `auth_role=${normalized}; path=/; max-age=604800; SameSite=Lax`;
             if (me.username) document.cookie = `auth_username=${me.username}; path=/; max-age=604800; SameSite=Lax`;
-            if (me.companyId) document.cookie = `auth_company_id=${me.companyId}; path=/; max-age=604800; SameSite=Lax`;
+            const currentCompMatch = document.cookie.match(/(^| )auth_company_id=([^;]+)/);
+            const hasCompanyCookie = currentCompMatch && currentCompMatch[2];
+            if (me.companyId && (!hasCompanyCookie || normalized !== 'super_admin')) {
+              document.cookie = `auth_company_id=${me.companyId}; path=/; max-age=604800; SameSite=Lax`;
+            }
           } catch {}
-          if (me.companyName && me.companyId) {
-            setActiveCompany(prev => prev || { id: me.companyId, name: me.companyName, code: me.companyId.replace('COMP-', '') });
+          if (me.companyName && me.companyId && !activeCompany) {
+            setActiveCompany({ id: me.companyId, name: me.companyName, code: me.companyId.replace('COMP-', '') });
           }
         }
       })
       .catch(() => {});
 
     // Fetch active company
-    fetch('/api/companies/active')
-      .then(res => res.json())
-      .then(data => {
-        if (data.activeCompany) {
-          setActiveCompany(data.activeCompany);
-        }
-      })
-      .catch(() => {});
+    const refreshActiveCompany = () => {
+      fetch('/api/companies/active')
+        .then(res => res.json())
+        .then(data => {
+          if (data.activeCompany) {
+            setActiveCompany(data.activeCompany);
+          }
+        })
+        .catch(() => {});
+    };
 
+    refreshActiveCompany();
+
+    const handleCompanySwitched = (e: any) => {
+      if (e?.detail?.company) {
+        setActiveCompany(e.detail.company);
+      } else {
+        refreshActiveCompany();
+      }
+    };
+
+    window.addEventListener('company-switched', handleCompanySwitched);
+    return () => {
+      window.removeEventListener('company-switched', handleCompanySwitched);
+    };
   }, [])
 
   const isSuperAdmin = role === 'super_admin';
@@ -57,7 +78,7 @@ export default function Header() {
       <div className="flex h-full items-center justify-between">
         <div className="flex flex-col">
           <h2 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
-            <span>{isSuperAdmin ? 'Super Admin System' : role === 'waiter' ? 'Waiter Service Portal' : 'Company Dashboard'}</span>
+            <span>{isSuperAdmin ? 'Super Admin System' : role === 'waiter' ? 'Waiter Service Portal' : role === 'delivery_staff' ? 'Delivery Staff Portal' : 'Company Dashboard'}</span>
           </h2>
           <span className="text-xs font-medium text-zinc-400">{currentDate}</span>
         </div>
@@ -90,6 +111,11 @@ export default function Header() {
             )
           )}
 
+          {/* Shift Alerts Notification Bell - Strictly for assigned staff, not Super Admin or Company Admin */}
+          {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (
+            <ShiftAlertsBell />
+          )}
+
           <div className="flex items-center gap-3 text-zinc-400">
             <div className="text-right hidden sm:block">
               <div className="text-sm font-bold flex items-center justify-end gap-1.5">
@@ -105,6 +131,11 @@ export default function Header() {
                 ) : role === 'waiter' ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 px-2.5 py-0.5 text-xs font-black shadow-sm">
                     Waiter
+                  </span>
+                ) : role === 'delivery_staff' ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pink-950/60 border border-pink-500/40 text-pink-300 px-2.5 py-0.5 text-xs font-black shadow-sm">
+                    <Truck className="h-3.5 w-3.5 text-pink-400" />
+                    Delivery Staff
                   </span>
                 ) : (
                   <span className="capitalize font-bold text-zinc-200">{role || 'Loading...'}</span>

@@ -108,6 +108,21 @@ export async function createSession(data: {
 }
 
 /**
+ * Updates the active company within the cryptographically signed session.
+ */
+export async function updateSessionCompany(companyId: string, companyName?: string): Promise<void> {
+  const session = await getSession();
+  if (!session) return;
+  await createSession({
+    userId: session.userId,
+    username: session.username,
+    role: session.role,
+    companyId,
+    companyName: companyName || session.companyName,
+  });
+}
+
+/**
  * Retrieves and cryptographically validates the current session from the server cookie.
  */
 export async function getSession(): Promise<SessionData | null> {
@@ -148,6 +163,13 @@ export async function getSession(): Promise<SessionData | null> {
         }
       }
     } catch {}
+  }
+
+  if (isLocalMySqlMode() && payload.role === 'super_admin') {
+    const activeComp = cookieStore.get('auth_company_id')?.value;
+    if (activeComp) {
+      payload.companyId = activeComp;
+    }
   }
 
   return payload as SessionData;

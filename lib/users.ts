@@ -11,7 +11,8 @@ export type UserRole =
   | 'manager'
   | 'cashier'
   | 'chef'
-  | 'waiter';
+  | 'waiter'
+  | 'delivery_staff';
 
 export const ALL_USER_ROLES: UserRole[] = [
   'super_admin',
@@ -20,6 +21,7 @@ export const ALL_USER_ROLES: UserRole[] = [
   'cashier',
   'chef',
   'waiter',
+  'delivery_staff',
 ];
 
 export const COMPANY_ADMIN_CREATABLE_ROLES: UserRole[] = [
@@ -27,6 +29,7 @@ export const COMPANY_ADMIN_CREATABLE_ROLES: UserRole[] = [
   'cashier',
   'chef',
   'waiter',
+  'delivery_staff',
 ];
 
 export function formatRoleLabel(role: string): string {
@@ -44,6 +47,8 @@ export function formatRoleLabel(role: string): string {
       return 'Chef';
     case 'waiter':
       return 'Waiter';
+    case 'delivery_staff':
+      return 'Delivery Staff';
     default:
       return (role || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }

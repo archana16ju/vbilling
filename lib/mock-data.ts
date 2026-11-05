@@ -1,7 +1,9 @@
-import { RecipeItem, ProductUnit } from '@/types/product';
+import { RecipeItem, ProductUnit, ProductBarcode, BarcodeFormat, BarcodeType } from '@/types/product';
+export type { ProductBarcode, BarcodeFormat, BarcodeType };
 
 export type Product = {
   id: string
+  companyId?: string
   name: string
   sku: string
   barcode: string
@@ -14,6 +16,8 @@ export type Product = {
   tax?: number
   discount?: number
   rawMaterials?: RecipeItem[]
+  addonGroupIds?: string[]
+  barcodes?: ProductBarcode[]
 }
 
 export type Category = {

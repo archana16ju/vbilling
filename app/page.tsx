@@ -17,6 +17,9 @@ export default async function Home() {
     if (session.role === 'waiter') {
       redirect('/assigned-orders');
     }
+    if (session.role === 'delivery_staff') {
+      redirect('/delivery');
+    }
     if (session.role === 'cashier') {
       redirect('/terminal');
     }

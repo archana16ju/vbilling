@@ -73,6 +73,7 @@ export default function CartPanel() {
 
   const {
     orderType,
+    deliveryInfo,
     setOrderType,
     tables,
     selectedTableId,
@@ -265,9 +266,15 @@ export default function CartPanel() {
       waiterId: (assignedWaiter?.id || selectedTable?.waiterId) || undefined,
       waiterName: (assignedWaiter?.name || selectedTable?.waiterName) || undefined,
       orderType: orderType || 'Dine In',
-      orderNote: orderNote || undefined,
-      customerName: selectedCustomer ? selectedCustomer.name : undefined,
-      customerPhone: selectedCustomer ? selectedCustomer.phone : undefined,
+      orderNote: orderNote || deliveryInfo?.deliveryNotes || undefined,
+      customerName: selectedCustomer ? selectedCustomer.name : (deliveryInfo?.customerName || undefined),
+      customerPhone: selectedCustomer ? selectedCustomer.phone : (deliveryInfo?.customerPhone || undefined),
+      deliveryAddress: deliveryInfo?.deliveryAddress || selectedCustomer?.address || undefined,
+      address: deliveryInfo?.deliveryAddress || selectedCustomer?.address || undefined,
+      deliveryPersonId: deliveryInfo?.deliveryPersonId || undefined,
+      deliveryNotes: deliveryInfo?.deliveryNotes || undefined,
+      orderSource: deliveryInfo?.platform || (orderType === 'Delivery' ? 'Terminal' : undefined),
+      onlineOrderId: deliveryInfo?.onlineOrderId || undefined,
       paymentStatus: opts.isBillOnly ? 'unpaid' : 'paid',
       servingStatus: opts.isSendToKitchen ? 'Pending' : (orderType === 'Dine In' ? 'Served' : 'Completed'),
     };
@@ -488,12 +495,22 @@ export default function CartPanel() {
     if (cartSafe.length === 0 || isProcessing) return;
 
     const billId = generateNextBillId();
-    const ticketItems = cartSafe.map((item) => ({
-      name: item.product.name,
-      quantity: item.quantity,
-      price: item.product.price,
-      notes: '',
-    }));
+    const ticketItems = cartSafe.map((item) => {
+      let notes = item.notes || '';
+      if (item.selectedAddOns && item.selectedAddOns.length > 0) {
+        const addonStr = item.selectedAddOns
+          .map((a) => `${a.name}${(a.quantity || 1) > 1 ? ` (x${a.quantity})` : ''}`)
+          .join(', ');
+        notes = notes ? `${notes} | Extras: ${addonStr}` : `Extras: ${addonStr}`;
+      }
+      return {
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+        notes,
+        selectedAddOns: item.selectedAddOns,
+      };
+    });
 
     const effectiveWaiterId = assignedWaiter?.id || selectedTable?.waiterId || null;
     const effectiveWaiterName = assignedWaiter?.name || selectedTable?.waiterName || null;
@@ -811,7 +828,7 @@ export default function CartPanel() {
               title="Clear receipt"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Clear</span>
+              
             </button>
           </div>
         </div>

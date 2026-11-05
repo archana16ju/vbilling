@@ -25,7 +25,20 @@ import {
   Moon,
   SunMoon,
   Building2,
+  UtensilsCrossed,
+  List,
+  Grid,
+  Search,
 } from 'lucide-react';
+
+const DEMO_CATEGORIES = [
+  { id: 'all', name: 'All Items', image: '' },
+  { id: 'cat-biryani', name: 'Biryani', image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-breads', name: 'Breads / Parotta', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-rice', name: 'Chinese Rice', image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-starters', name: 'Chinese Starters', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&auto=format&fit=crop&q=80' },
+  { id: 'cat-egg', name: 'Egg', image: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=300&auto=format&fit=crop&q=80' },
+];
 import ProductGridCard from '@/components/terminal/ProductGridCard';
 import { Product } from '@/lib/mock-data';
 
@@ -131,11 +144,12 @@ const PREVIEW_PRODUCTS: Product[] = [
 
 export default function TerminalDesignPanel() {
   const design = useTerminalDesignStore();
-  const [activeSubTab, setActiveSubTab] = useState<'layout' | 'appearance' | 'product-card' | 'tap-banner'>('layout');
+  const [activeSubTab, setActiveSubTab] = useState<'layout' | 'appearance' | 'product-card' | 'category-design' | 'tap-banner'>('layout');
   const [previewTheme, setPreviewTheme] = useState<'dark' | 'light'>('dark');
   const [saveToast, setSaveToast] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewActiveId, setPreviewActiveId] = useState<string>('demo-avocado-active');
+  const [previewCategoryId, setPreviewCategoryId] = useState<string>('all');
   const [previewSearch, setPreviewSearch] = useState<string>('');
 
   // Super Admin & Company State
@@ -324,6 +338,7 @@ export default function TerminalDesignPanel() {
             {[
               { id: 'layout', label: 'Layout & Grid' },
               { id: 'product-card', label: 'Product Card' },
+              { id: 'category-design', label: 'Category Design' },
               { id: 'appearance', label: 'Theme & Colors' },
               { id: 'tap-banner', label: 'Tap Mode Banner' },
             ].map((tab) => {
@@ -860,6 +875,336 @@ export default function TerminalDesignPanel() {
             </div>
           )}
 
+          {/* Subtab: Category Design */}
+          {activeSubTab === 'category-design' && (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl space-y-6 text-white backdrop-blur-sm">
+              <div>
+                <label className="block text-sm font-bold text-white mb-1">
+                  Category Display Style
+                </label>
+                <p className="text-xs text-zinc-400 mb-3">
+                  Choose between the Visual Card Tile layout with rich photo backgrounds, or the Compact Row List with circular thumbnails and category count badge.
+                </p>
+
+                <div className="flex flex-col gap-3.5">
+                  {/* Option 1: Visual Card Tiles (Reference Image 2) */}
+                  <div
+                    onClick={() => design.updateDesign({ categoryStyle: 'card-tile' })}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                      (design.categoryStyle || 'card-tile') === 'card-tile'
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                    }`}
+                    style={
+                      (design.categoryStyle || 'card-tile') === 'card-tile'
+                        ? {
+                            borderColor: 'var(--theme-accent, #DB2777)',
+                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? 'text-white shadow-xs'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                          }`}
+                          style={
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <Grid className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm sm:text-base text-white">
+                              Visual Card Tiles
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                              style={{
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                              }}
+                            >
+                              Image Tile Cards (Ref 1)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                          <span
+                            className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              color: 'var(--theme-accent, #DB2777)',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                        <div
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? 'text-white shadow-xs'
+                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                          }`}
+                          style={
+                            (design.categoryStyle || 'card-tile') === 'card-tile'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-zinc-400 sm:pl-[52px] leading-relaxed mb-3">
+                      Large photo cards with dark bottom gradient text overlay, plus dedicated theme-gradient &quot;All Items&quot; card.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🖼️ Full Photo Tiles
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🎨 Theme Gradient &quot;All Items&quot;
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        👆 Touchscreen Targets
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Compact Row List (Reference Image 3) */}
+                  <div
+                    onClick={() => design.updateDesign({ categoryStyle: 'compact-list' })}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                      design.categoryStyle === 'compact-list'
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                    }`}
+                    style={
+                      design.categoryStyle === 'compact-list'
+                        ? {
+                            borderColor: 'var(--theme-accent, #DB2777)',
+                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
+                            design.categoryStyle === 'compact-list'
+                              ? 'text-white shadow-xs'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                          }`}
+                          style={
+                            design.categoryStyle === 'compact-list'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <List className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm sm:text-base text-white">
+                              Compact Row List
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                              style={{
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                              }}
+                            >
+                              List &amp; Thumbnails (Ref 2)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {design.categoryStyle === 'compact-list' && (
+                          <span
+                            className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              color: 'var(--theme-accent, #DB2777)',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                        <div
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            design.categoryStyle === 'compact-list'
+                              ? 'text-white shadow-xs'
+                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                          }`}
+                          style={
+                            design.categoryStyle === 'compact-list'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {design.categoryStyle === 'compact-list' && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-zinc-400 sm:pl-[52px] leading-relaxed mb-3">
+                      Sleek vertical rows with circular dish thumbnails, header category count badge, and high-visibility active pill.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🏷️ Categories Header &amp; Count (11)
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🎯 Circular Dish Thumbnails
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        ⚡ Fast Quick-Scroll Browse
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-options for Card Tile */}
+              {(design.categoryStyle || 'card-tile') === 'card-tile' && (
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                    Card Height &amp; Density
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { height: 'h-20' as const, label: 'Compact (80px)' },
+                      { height: 'h-24' as const, label: 'Standard (96px, Ref)' },
+                      { height: 'h-28' as const, label: 'Spacious (112px)' },
+                    ].map((item) => (
+                      <button
+                        key={item.height}
+                        type="button"
+                        onClick={() => design.updateDesign({ categoryCardHeight: item.height })}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                          (design.categoryCardHeight || 'h-24') === item.height
+                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-options for Compact Row List */}
+              {design.categoryStyle === 'compact-list' && (
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                      Dish Thumbnail Shape
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { shape: 'rounded-full' as const, label: 'Circle (Reference)' },
+                        { shape: 'rounded-xl' as const, label: 'Curved Square' },
+                        { shape: 'rounded-lg' as const, label: 'Subtle Round' },
+                      ].map((item) => (
+                        <button
+                          key={item.shape}
+                          type="button"
+                          onClick={() => design.updateDesign({ categoryThumbnailShape: item.shape })}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                            (design.categoryThumbnailShape || 'rounded-full') === item.shape
+                              ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                              : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <div className="text-sm font-bold text-white">Show Categories Count Badge</div>
+                        <div className="text-xs text-zinc-400">Displays header pill with category total, e.g. &quot;CATEGORIES (11)&quot;</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={design.showCategoryCount !== false}
+                        onChange={(e) => design.updateDesign({ showCategoryCount: e.target.checked })}
+                        className="h-5 w-5 rounded border-zinc-700 bg-zinc-950 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Common Search Bar Options */}
+              <div className="pt-4 border-t border-zinc-800/80 space-y-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Search Bar Placeholder
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    'Search category...',
+                    'Filter categories...',
+                    'Find category or dish...',
+                  ].map((ph) => (
+                    <button
+                      key={ph}
+                      type="button"
+                      onClick={() => design.updateDesign({ categorySearchPlaceholder: ph })}
+                      className={`p-2.5 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
+                        (design.categorySearchPlaceholder || ((design.categoryStyle || 'card-tile') === 'compact-list' ? 'Filter categories...' : 'Search category...')) === ph
+                          ? 'border-theme bg-theme-badge/20 text-white ring-2 ring-theme/30'
+                          : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-white hover:bg-zinc-800/40'
+                      }`}
+                    >
+                      {ph}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Subtab 3: Theme & Colors */}
           {activeSubTab === 'appearance' && (
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl space-y-6 text-white backdrop-blur-sm">
@@ -1300,6 +1645,208 @@ export default function TerminalDesignPanel() {
                       }}
                     />
                     <span>{design.tapBannerBadgeText || 'TAP MODE ACTIVE'}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Category Design Live Interactive Preview */}
+              {activeSubTab === 'category-design' && (
+                <div className="mb-4 rounded-xl border p-3.5 space-y-3 transition-colors bg-opacity-70 ${
+                  isLightPreview ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-zinc-800'
+                }">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase text-zinc-300">
+                        {(design.categoryStyle || 'card-tile') === 'compact-list' ? 'Compact Row List Preview' : 'Visual Card Tile Preview'}
+                      </span>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-bold border"
+                        style={{
+                          backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                          color: 'var(--theme-accent, #DB2777)',
+                          borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                        }}
+                      >
+                        Interactive
+                      </span>
+                    </div>
+                    <span className={`text-[11px] ${isLightPreview ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      Click to test selection
+                    </span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    {/* Live Category Sidebar Mock */}
+                    <div className={`w-44 shrink-0 rounded-xl border p-2 flex flex-col ${
+                      isLightPreview ? 'bg-slate-100 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'
+                    }`}>
+                      {/* Header for compact-list */}
+                      {design.categoryStyle === 'compact-list' && (
+                        <div className={`px-2 py-1.5 border-b mb-2 flex items-center justify-between ${
+                          isLightPreview ? 'border-zinc-200/80 bg-slate-50' : 'border-zinc-800/80 bg-zinc-950'
+                        }`}>
+                          <div className="flex items-center gap-1.5">
+                            <LayoutGrid className="h-3.5 w-3.5" style={{ color: 'var(--theme-accent, #DB2777)' }} />
+                            <span className="font-black text-[10px] uppercase tracking-wider" style={{ color: 'var(--theme-accent, #DB2777)' }}>
+                              Categories
+                            </span>
+                          </div>
+                          {design.showCategoryCount !== false && (
+                            <span
+                              className="rounded-full px-1.5 py-0.2 text-[9px] font-black border"
+                              style={{
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-accent, #DB2777)',
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              }}
+                            >
+                              {DEMO_CATEGORIES.length}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Search bar */}
+                      <div className="mb-2">
+                        <div className="relative flex items-center">
+                          <Search className={`absolute left-2 h-3 w-3 ${isLightPreview ? 'text-zinc-400' : 'text-zinc-500'}`} />
+                          <input
+                            type="text"
+                            readOnly
+                            placeholder={design.categorySearchPlaceholder || ((design.categoryStyle || 'card-tile') === 'compact-list' ? 'Filter categories...' : 'Search category...')}
+                            className={`w-full rounded-lg border py-1 pl-6 pr-2 text-[10px] outline-none ${
+                              isLightPreview ? 'border-zinc-300 bg-white text-zinc-700' : 'border-zinc-800 bg-zinc-900 text-zinc-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Category Items */}
+                      {design.categoryStyle === 'compact-list' ? (
+                        <div className="space-y-1 max-h-[300px] overflow-y-auto no-scrollbar">
+                          {DEMO_CATEGORIES.map((cat) => {
+                            const isActive = previewCategoryId === cat.id;
+                            return (
+                              <div
+                                key={cat.id}
+                                onClick={() => setPreviewCategoryId(cat.id)}
+                                className={`flex items-center gap-2 p-1.5 rounded-xl transition cursor-pointer text-left ${
+                                  isActive
+                                    ? 'border-2 shadow-sm'
+                                    : isLightPreview ? 'hover:bg-zinc-200/70 text-zinc-800' : 'hover:bg-zinc-900 text-zinc-300'
+                                }`}
+                                style={
+                                  isActive
+                                    ? {
+                                        borderColor: 'var(--theme-accent, #DB2777)',
+                                        background: 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-end, #DB2777) 100%)',
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {cat.id === 'all' ? (
+                                  <div className={`h-6 w-6 rounded-full flex items-center justify-center shrink-0 border ${
+                                    isActive ? 'bg-black/40 border-white/20 text-amber-400' : isLightPreview ? 'bg-zinc-200 border-zinc-300 text-zinc-600' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                                  }`}>
+                                    <UtensilsCrossed className="h-3 w-3" />
+                                  </div>
+                                ) : (
+                                  <div className={`h-6 w-6 ${design.categoryThumbnailShape || 'rounded-full'} overflow-hidden border shrink-0 flex items-center justify-center ${
+                                    isActive ? 'border-white/30' : isLightPreview ? 'border-zinc-300 bg-zinc-200' : 'border-zinc-700 bg-zinc-800'
+                                  }`}>
+                                    {cat.image ? (
+                                      <img src={cat.image} alt={cat.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <span className="text-[9px] font-black">{cat.name.charAt(0)}</span>
+                                    )}
+                                  </div>
+                                )}
+                                <span className={`text-[11px] truncate flex-1 ${
+                                  isActive ? 'text-white font-black' : isLightPreview ? 'text-zinc-800 font-medium' : 'text-zinc-300 font-medium'
+                                }`}>
+                                  {cat.name}
+                                </span>
+                                {isActive && (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-white shrink-0 mr-0.5" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto no-scrollbar">
+                          {DEMO_CATEGORIES.map((cat) => {
+                            const isActive = previewCategoryId === cat.id;
+                            const cardH = (design.categoryCardHeight || 'h-24') === 'h-20' ? 'h-14' : (design.categoryCardHeight || 'h-24') === 'h-28' ? 'h-20' : 'h-16';
+                            return (
+                              <div
+                                key={cat.id}
+                                onClick={() => setPreviewCategoryId(cat.id)}
+                                className={`group relative flex w-full flex-col justify-end rounded-xl border overflow-hidden transition cursor-pointer ${cardH} ${
+                                  isActive
+                                    ? 'border-theme ring-2 ring-[var(--theme-accent,#DB2777)] shadow-md'
+                                    : isLightPreview ? 'bg-white border-zinc-200 hover:border-zinc-300' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                                }`}
+                              >
+                                {cat.id === 'all' ? (
+                                  <div
+                                    className="absolute inset-0 flex items-center justify-center"
+                                    style={{
+                                      background: isActive
+                                        ? 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-mid, #701A3B) 50%, var(--theme-gradient-end, #DB2777) 100%)'
+                                        : isLightPreview ? 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)' : 'linear-gradient(135deg, #18181b 0%, #27272a 100%)',
+                                    }}
+                                  >
+                                    <UtensilsCrossed className={`h-5 w-5 ${isActive ? 'text-white' : isLightPreview ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                                  </div>
+                                ) : cat.image ? (
+                                  <img src={cat.image} alt={cat.name} className="absolute inset-0 h-full w-full object-cover" />
+                                ) : (
+                                  <div className={`absolute inset-0 flex items-center justify-center font-bold text-sm ${isLightPreview ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-800 text-zinc-300'}`}>
+                                    {cat.name.charAt(0)}
+                                  </div>
+                                )}
+                                {isActive && (
+                                  <span
+                                    className="absolute top-1 right-1 h-2 w-2 rounded-full border border-black shadow"
+                                    style={{ backgroundColor: 'var(--theme-accent, #DB2777)' }}
+                                  />
+                                )}
+                                <div className="relative z-10 w-full bg-gradient-to-t from-black/90 via-black/55 to-transparent pt-3 pb-1 px-1.5">
+                                  <span className="font-extrabold text-[9px] text-white uppercase truncate block drop-shadow">
+                                    {cat.name}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Preview explanation */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <div className={`p-4 rounded-xl border text-xs space-y-2 ${
+                        isLightPreview ? 'bg-slate-50 border-zinc-200 text-zinc-700' : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                      }`}>
+                        <div className="font-bold flex items-center gap-1.5" style={{ color: 'var(--theme-accent, #DB2777)' }}>
+                          <Sparkles className="h-4 w-4" />
+                          <span>Active Category Style</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          {(design.categoryStyle || 'card-tile') === 'compact-list'
+                            ? 'Compact Row List layout active. Featuring circular food thumbnails, category header counter badge, and theme gradient selected pills.'
+                            : 'Visual Card Tile layout active. Featuring large photo cards with bottom text overlays and full theme-gradient "All Items" tile.'
+                          }
+                        </p>
+                        <div className="pt-2 border-t border-zinc-800/40 flex items-center gap-2 text-[10px]">
+                          <span className="font-semibold text-zinc-300">Selected Category:</span>
+                          <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">
+                            {DEMO_CATEGORIES.find(c => c.id === previewCategoryId)?.name || 'All Items'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

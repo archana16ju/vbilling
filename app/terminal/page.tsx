@@ -5,6 +5,8 @@ import CategoryPanel from '@/components/terminal/CategoryPanel';
 import ProductPanel from '@/components/terminal/ProductPanel';
 import CartPanel from '@/components/terminal/CartPanel';
 import { useTerminalDesignStore, THEME_PRESETS } from '@/store/useTerminalDesignStore';
+import { useTerminalStore } from '@/store/useTerminalStore';
+import { applyThemeToDom as applyCompanyThemeToDom, DEFAULT_BLACK_CHERRY_THEME } from '@/lib/theme-config';
 
 /* Resolve the effective dark/light mode, honouring 'system' via matchMedia */
 function resolveEffectiveMode(themeMode: 'dark' | 'light' | 'system'): 'dark' | 'light' {
@@ -22,37 +24,76 @@ function applyThemeToDom(effectiveMode: 'dark' | 'light') {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.setAttribute('data-theme', effectiveMode);
+  root.style.setProperty('--theme-mode', effectiveMode);
   if (effectiveMode === 'light') {
     root.classList.add('light-mode');
     root.classList.remove('dark-mode', 'dark');
-    document.body.setAttribute('data-theme', 'light');
-    document.body.classList.add('light-mode');
-    document.body.classList.remove('dark-mode', 'dark');
+    if (document.body) {
+      document.body.setAttribute('data-theme', 'light');
+      document.body.classList.add('light-mode');
+      document.body.classList.remove('dark-mode', 'dark');
+    }
   } else {
     root.classList.add('dark-mode', 'dark');
     root.classList.remove('light-mode');
-    document.body.setAttribute('data-theme', 'dark');
-    document.body.classList.add('dark-mode', 'dark');
-    document.body.classList.remove('light-mode');
+    if (document.body) {
+      document.body.setAttribute('data-theme', 'dark');
+      document.body.classList.add('dark-mode', 'dark');
+      document.body.classList.remove('light-mode');
+    }
   }
 }
 
 export default function TerminalPage() {
   const [mounted, setMounted] = useState(false);
   const design = useTerminalDesignStore();
+  const terminalModeOverride = useTerminalStore((s) => s.terminalModeOverride);
+  const terminalThemeMode = useTerminalStore((s) => (s as any).terminalThemeMode);
 
-  // Initial fetch
+  // Initial fetch and restore persisted terminal mode
   useEffect(() => {
     setMounted(true);
+    try {
+      const stored = localStorage.getItem('terminal_theme_mode');
+      if (stored === 'light' || stored === 'dark') {
+        const store = useTerminalStore.getState();
+        if (store.setTerminalThemeMode) store.setTerminalThemeMode(stored);
+        if (store.setTerminalModeOverride) store.setTerminalModeOverride(stored);
+        applyThemeToDom(stored);
+      }
+    } catch {}
     design.fetchCompanyTerminalDesign(undefined, true);
   }, []);
 
+  // Restore dashboard company theme when leaving terminal interface
+  useEffect(() => {
+    return () => {
+      try {
+        const activeCid = document.cookie.match(/(^| )auth_company_id=([^;]+)/)?.[2] || '';
+        const cached = localStorage.getItem(activeCid ? `company_theme_${activeCid}` : 'company_theme_default');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.gradientStart) {
+            applyCompanyThemeToDom(parsed, true);
+            return;
+          }
+        }
+        applyCompanyThemeToDom(DEFAULT_BLACK_CHERRY_THEME, true);
+      } catch {}
+    };
+  }, []);
+
+  // ── Derive effective mode (Terminal has its own independent dark/light mode, default dark) ──
+  const effectiveMode = mounted
+    ? (terminalThemeMode || terminalModeOverride || 'dark')
+    : 'dark';
+  const isLight = effectiveMode === 'light';
+
   // ── Sync theme + accent colors to DOM ──────────────────────────────────────
   useEffect(() => {
-    if (!mounted) return;
-
-    const effectiveMode = resolveEffectiveMode(design.themeMode);
     applyThemeToDom(effectiveMode);
+
+    if (!mounted) return;
 
     // Apply CSS custom properties for accent / border / glow + gradients
     const root = document.documentElement;
@@ -66,8 +107,6 @@ export default function TerminalPage() {
       // Resolve gradient vars from named preset or derive from accent color
       const preset = design.themePreset ? THEME_PRESETS[design.themePreset] : null;
       if (preset) {
-        // Use preset's canonical gradient from Black Cherry default mapping
-        // Each preset uses its own start/mid/end derived from known brand values
         const gradientMap: Record<string, [string, string, string]> = {
           'black-cherry':   ['#1F0715', '#701A3B', '#DB2777'],
           'ocean-blue':     ['#031726', '#0C4A6E', '#0284C7'],
@@ -80,15 +119,14 @@ export default function TerminalPage() {
         root.style.setProperty('--theme-gradient-mid', gm);
         root.style.setProperty('--theme-gradient-end', ge);
       } else {
-        // Custom / unknown preset: use accent for all three
         root.style.setProperty('--theme-gradient-start', design.accentColor);
         root.style.setProperty('--theme-gradient-mid', design.accentColor);
         root.style.setProperty('--theme-gradient-end', design.accentColor);
       }
     }
 
-    // ── Live-follow OS preference changes when in 'system' mode ─────────────
-    if (design.themeMode !== 'system' || typeof window === 'undefined') return;
+    // ── Live-follow OS preference changes when in 'system' mode and without cashier override ─────────────
+    if (terminalModeOverride || design.themeMode !== 'system' || typeof window === 'undefined') return;
 
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     const handleChange = (e: MediaQueryListEvent) => {
@@ -96,11 +134,7 @@ export default function TerminalPage() {
     };
     mq.addEventListener('change', handleChange);
     return () => mq.removeEventListener('change', handleChange);
-  }, [mounted, design.themeMode, design.accentColor, design.activeBorderColor]);
-
-  // ── Derive isLight for JSX (client-only after mount) ──────────────────────
-  const effectiveMode = mounted ? resolveEffectiveMode(design.themeMode) : 'dark';
-  const isLight = effectiveMode === 'light';
+  }, [mounted, effectiveMode, design.themeMode, design.accentColor, design.activeBorderColor, terminalModeOverride]);
 
   return (
     <main
@@ -112,7 +146,8 @@ export default function TerminalPage() {
       <TerminalHeader />
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="hidden w-64 shrink-0 lg:block">
+        {/* Enlarged Category Section with rich image cards and overlay labels */}
+        <div className="hidden w-40 shrink-0 lg:block">
           <CategoryPanel />
         </div>
 

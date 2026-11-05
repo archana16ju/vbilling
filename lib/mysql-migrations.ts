@@ -1290,6 +1290,271 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 27,
+    name: '027_create_addons_and_addon_groups',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      // 1. Addon items table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS addon_items (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          image VARCHAR(512) NULL,
+          price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+          category VARCHAR(100) NULL,
+          tax DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+          track_stock TINYINT(1) NOT NULL DEFAULT 0,
+          stock DECIMAL(10,3) NOT NULL DEFAULT 0.000,
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_addon_items_company (company_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 2. Addon groups table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS addon_groups (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          min_selection INT NOT NULL DEFAULT 0,
+          max_selection INT NOT NULL DEFAULT 1,
+          is_required TINYINT(1) NOT NULL DEFAULT 0,
+          selection_type VARCHAR(20) NOT NULL DEFAULT 'multiple',
+          is_active TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_addon_groups_company (company_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 3. Addon group items junction table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS addon_group_items (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          group_id VARCHAR(64) NOT NULL,
+          addon_id VARCHAR(64) NOT NULL,
+          sort_order INT NOT NULL DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_group_addon (group_id, addon_id),
+          INDEX idx_agi_group (group_id),
+          INDEX idx_agi_addon (addon_id),
+          INDEX idx_agi_company (company_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 4. Add addon_group_ids JSON to products
+      if (!(await columnExists('products', 'addon_group_ids'))) {
+        await conn.query(`
+          ALTER TABLE products
+          ADD COLUMN addon_group_ids JSON NULL AFTER raw_materials_json;
+        `);
+      }
+
+      // 5. Seed default example items and groups if addon_items is empty
+      const [existingItems]: any = await conn.query('SELECT COUNT(*) as count FROM addon_items');
+      if (existingItems[0]?.count === 0) {
+        const [companies]: any = await conn.query('SELECT id FROM companies');
+        for (const comp of companies) {
+          const cId = comp.id;
+          const sampleAddons = [
+            { id: 'add_' + cId + '_sambar', name: 'Sambar', price: 20.00, category: 'Accompaniment', tax: 5.0, track_stock: 0, stock: 0 },
+            { id: 'add_' + cId + '_idli_podi', name: 'Idli Podi', price: 10.00, category: 'Accompaniment', tax: 5.0, track_stock: 0, stock: 0 },
+            { id: 'add_' + cId + '_coconut_chutney', name: 'Coconut Chutney', price: 10.00, category: 'Chutneys', tax: 5.0, track_stock: 0, stock: 0 },
+            { id: 'add_' + cId + '_tomato_chutney', name: 'Tomato Chutney', price: 10.00, category: 'Chutneys', tax: 5.0, track_stock: 0, stock: 0 },
+            { id: 'add_' + cId + '_extra_cheese', name: 'Extra Cheese', price: 30.00, category: 'Extras', tax: 5.0, track_stock: 1, stock: 100 },
+            { id: 'add_' + cId + '_extra_mayo', name: 'Extra Mayo', price: 15.00, category: 'Extras', tax: 5.0, track_stock: 1, stock: 100 },
+          ];
+
+          for (const a of sampleAddons) {
+            await conn.query(
+              `INSERT IGNORE INTO addon_items (id, company_id, name, price, category, tax, track_stock, stock, is_active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+              [a.id, cId, a.name, a.price, a.category, a.tax, a.track_stock, a.stock]
+            );
+          }
+
+          const sampleGroups = [
+            {
+              id: 'grp_' + cId + '_idli',
+              name: 'Idli Extras',
+              min_selection: 0,
+              max_selection: 4,
+              is_required: 0,
+              selection_type: 'multiple',
+              items: ['add_' + cId + '_sambar', 'add_' + cId + '_idli_podi', 'add_' + cId + '_coconut_chutney', 'add_' + cId + '_tomato_chutney']
+            },
+            {
+              id: 'grp_' + cId + '_dosa',
+              name: 'Dosa Extras',
+              min_selection: 0,
+              max_selection: 3,
+              is_required: 0,
+              selection_type: 'multiple',
+              items: ['add_' + cId + '_sambar', 'add_' + cId + '_idli_podi', 'add_' + cId + '_coconut_chutney']
+            },
+            {
+              id: 'grp_' + cId + '_burger',
+              name: 'Burger Extras',
+              min_selection: 0,
+              max_selection: 2,
+              is_required: 0,
+              selection_type: 'multiple',
+              items: ['add_' + cId + '_extra_cheese', 'add_' + cId + '_extra_mayo']
+            }
+          ];
+
+          for (const g of sampleGroups) {
+            await conn.query(
+              `INSERT IGNORE INTO addon_groups (id, company_id, name, min_selection, max_selection, is_required, selection_type, is_active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+              [g.id, cId, g.name, g.min_selection, g.max_selection, g.is_required, g.selection_type]
+            );
+
+            for (let i = 0; i < g.items.length; i++) {
+              const aId = g.items[i];
+              await conn.query(
+                `INSERT IGNORE INTO addon_group_items (id, company_id, group_id, addon_id, sort_order)
+                 VALUES (?, ?, ?, ?, ?)`,
+                ['agi_' + g.id + '_' + aId, cId, g.id, aId, i]
+              );
+            }
+          }
+        }
+      }
+    },
+  },
+  {
+    version: 28,
+    name: '028_create_product_barcodes_and_sequences',
+    up: async (conn) => {
+      // 1. Create product_barcodes table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS product_barcodes (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          product_id VARCHAR(64) NOT NULL,
+          barcode VARCHAR(128) NOT NULL,
+          barcode_type ENUM('internal', 'manufacturer') NOT NULL DEFAULT 'internal',
+          barcode_format VARCHAR(32) NOT NULL DEFAULT 'CODE128',
+          is_primary TINYINT(1) NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_company_barcode (company_id, barcode),
+          INDEX idx_product_barcodes_company_product (company_id, product_id),
+          INDEX idx_product_barcodes_barcode (barcode)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 2. Create barcode_sequences table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS barcode_sequences (
+          company_id VARCHAR(64) PRIMARY KEY,
+          last_internal_number BIGINT NOT NULL DEFAULT 100000,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 3. Backfill existing products into product_barcodes
+      const [existingProducts]: any = await conn.query(`
+        SELECT id, company_id, barcode FROM products 
+        WHERE barcode IS NOT NULL AND barcode != ''
+      `);
+
+      for (const p of existingProducts) {
+        try {
+          const bCode = String(p.barcode).trim();
+          const isNumeric = /^\d{6,}$/.test(bCode);
+          const type = isNumeric ? 'internal' : 'manufacturer';
+          const format = bCode.length === 13 && /^\d{13}$/.test(bCode)
+            ? 'EAN13'
+            : bCode.length === 12 && /^\d{12}$/.test(bCode)
+            ? 'UPCA'
+            : 'CODE128';
+
+          await conn.query(`
+            INSERT IGNORE INTO product_barcodes 
+            (id, company_id, product_id, barcode, barcode_type, barcode_format, is_primary)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+          `, [
+            'bc_' + p.id + '_' + Date.now().toString(36),
+            p.company_id || 'COMP-0001',
+            p.id,
+            bCode,
+            type,
+            format
+          ]);
+        } catch {}
+      }
+
+      // 4. Initialize barcode sequence for each company to start at 100000 (so first generated is 100001)
+      const [companies]: any = await conn.query(`SELECT id FROM companies`);
+      for (const c of companies) {
+        await conn.query(`
+          INSERT INTO barcode_sequences (company_id, last_internal_number)
+          VALUES (?, 100000)
+          ON DUPLICATE KEY UPDATE last_internal_number = GREATEST(last_internal_number, 100000)
+        `, [c.id]);
+      }
+    },
+  },
+  {
+    version: 29,
+    name: '029_add_performance_composite_indexes',
+    up: async (conn) => {
+      const ensureIndex = async (table: string, indexName: string, columnsSql: string) => {
+        const [idxs]: any = await conn.query(`SHOW INDEX FROM ${table}`);
+        const exists = idxs.some((i: any) => i.Key_name === indexName);
+        if (!exists) {
+          await conn.query(`ALTER TABLE ${table} ADD INDEX ${indexName} (${columnsSql})`);
+        }
+      };
+
+      try {
+        const [salesIdxs]: any = await conn.query('SHOW INDEX FROM sales');
+        if (salesIdxs.some((i: any) => i.Key_name === 'idx_sales_company_status_created')) {
+          await conn.query('ALTER TABLE sales DROP INDEX idx_sales_company_status_created');
+        }
+      } catch {}
+
+      await ensureIndex('sales', 'idx_sales_company_created', 'company_id, created_at DESC');
+      await ensureIndex('sales', 'idx_sales_company_user_created', 'company_id, created_by, created_at DESC');
+      await ensureIndex('sales', 'idx_sales_company_status', 'company_id, payment_status');
+      await ensureIndex('products', 'idx_products_company_stock', 'company_id, stock');
+      await ensureIndex('products', 'idx_products_company_name', 'company_id, name');
+      await ensureIndex('customers', 'idx_customers_company_phone', 'company_id, phone');
+      await ensureIndex('customers', 'idx_customers_company_name', 'company_id, name');
+    },
+  },
+  {
+    version: 30,
+    name: '030_add_shifts_column_to_staff',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+      if (!(await columnExists('staff', 'shifts'))) {
+        await conn.query('ALTER TABLE staff ADD COLUMN shifts JSON NULL AFTER deductions');
+      }
+    },
+  },
 ];
 
 /**

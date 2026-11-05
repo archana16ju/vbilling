@@ -34,6 +34,13 @@ export interface TerminalDesignState {
   showCartBadge: boolean;
   quickDoubleTap: boolean;
 
+  // Category Design options
+  categoryStyle: 'card-tile' | 'compact-list';
+  categoryCardHeight: 'h-20' | 'h-24' | 'h-28';
+  categoryThumbnailShape: 'rounded-full' | 'rounded-xl' | 'rounded-lg';
+  showCategoryCount: boolean;
+  categorySearchPlaceholder: string;
+
   // Persistence metadata
   isLoaded: boolean;
   isFetching: boolean;
@@ -117,6 +124,13 @@ const initialDesignState: Omit<
   currencySymbol: '₹',
   showCartBadge: true,
   quickDoubleTap: true,
+
+  // Category design defaults
+  categoryStyle: 'card-tile',
+  categoryCardHeight: 'h-24',
+  categoryThumbnailShape: 'rounded-full',
+  showCategoryCount: true,
+  categorySearchPlaceholder: 'Search category...',
 
   // Metadata
   isLoaded: false,
@@ -267,6 +281,11 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
             currencySymbol: state.currencySymbol,
             showCartBadge: state.showCartBadge,
             quickDoubleTap: state.quickDoubleTap,
+            categoryStyle: state.categoryStyle || 'card-tile',
+            categoryCardHeight: state.categoryCardHeight || 'h-24',
+            categoryThumbnailShape: state.categoryThumbnailShape || 'rounded-full',
+            showCategoryCount: state.showCategoryCount ?? true,
+            categorySearchPlaceholder: state.categorySearchPlaceholder || 'Search category...',
           };
 
           const res = await fetch('/api/companies/terminal-design', {

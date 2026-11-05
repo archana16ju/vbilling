@@ -402,6 +402,33 @@ async function executeMySqlReport(
           existing.netRevenue += itemNet;
           existing.ordersCount += 1;
           itemsMap.set(id, existing);
+
+          if (Array.isArray(item.selectedAddOns)) {
+            for (const addon of item.selectedAddOns) {
+              const aId = 'addon_' + (addon.id || addon.name);
+              const aName = `${addon.name} (Add-on)`;
+              const aQty = (Number(addon.quantity) || 1) * qty;
+              const aGross = (Number(addon.price) || 0) * aQty;
+              totalQty += aQty;
+              totalItemRev += aGross;
+
+              const existingAddon = itemsMap.get(aId) || {
+                id: aId,
+                name: aName,
+                category: 'Add-ons',
+                quantity: 0,
+                grossRevenue: 0,
+                discount: 0,
+                netRevenue: 0,
+                ordersCount: 0,
+              };
+              existingAddon.quantity += aQty;
+              existingAddon.grossRevenue += aGross;
+              existingAddon.netRevenue += aGross;
+              existingAddon.ordersCount += 1;
+              itemsMap.set(aId, existingAddon);
+            }
+          }
         }
       }
 

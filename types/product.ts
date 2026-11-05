@@ -19,6 +19,20 @@ export type ProductUnit =
   | "cup"
   | string;
 
+export type BarcodeFormat = 'CODE128' | 'EAN13' | 'UPCA';
+export type BarcodeType = 'internal' | 'manufacturer' | 'INTERNAL' | 'MANUFACTURER';
+
+export interface ProductBarcode {
+  id?: string;
+  companyId?: string;
+  productId?: string;
+  barcode: string;
+  barcodeType: BarcodeType;
+  barcodeFormat: BarcodeFormat;
+  isPrimary?: boolean;
+  createdAt?: number;
+}
+
 export interface RecipeItem {
   rawMaterialId: string
   quantity: number
@@ -27,6 +41,7 @@ export interface RecipeItem {
 
 export interface Product {
   id: string
+  companyId?: string
   name: string
   sku: string
   barcode?: string
@@ -43,6 +58,8 @@ export interface Product {
   recipeYield?: number
   recipeUnit?: ProductUnit
   rawMaterials?: RecipeItem[]
+  addonGroupIds?: string[]
+  barcodes?: ProductBarcode[]
 }
 
 export interface RawMaterial {

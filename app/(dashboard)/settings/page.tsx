@@ -74,7 +74,7 @@ export default function SettingsPage() {
     : BASE_TABS;
 
   const { printerType, setPrinterType, enableCashChange, setEnableCashChange, syncInterval, setSyncInterval, enableDiscount, setEnableDiscount, bluetoothPrinter, setBluetoothPrinter, wifiPrinter, setWifiPrinter } = useTerminalStore()
-  const [activeTab, setActiveTab] = useState(role === 'super_admin' ? 'company-permissions' : 'printer')
+  const [activeTab, setActiveTab] = useState('theme')
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -172,14 +172,14 @@ export default function SettingsPage() {
       <div className="flex flex-col md:flex-row gap-6">
         {/* Left Sidebar Navigation */}
         <div className="w-full md:w-64 shrink-0">
-          <nav className="space-y-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3 shadow-xl backdrop-blur-sm">
+          <nav className="space-y-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3 shadow-xl backdrop-blur-sm settings-nav-menu">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${activeTab === tab.id
-                  ? 'bg-theme-bar border border-theme text-white preserve-white shadow-md shadow-theme-glow font-black'
-                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white border border-transparent'
+                className={`settings-nav-btn w-full flex items-center px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer ${activeTab === tab.id
+                  ? 'active bg-theme-bar border border-theme text-white preserve-white shadow-md shadow-theme-glow font-black'
+                  : 'text-zinc-400 hover:text-white border border-transparent'
                   }`}
               >
                 {tab.label}

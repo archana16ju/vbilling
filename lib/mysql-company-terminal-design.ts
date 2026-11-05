@@ -22,6 +22,13 @@ export interface PersistedTerminalDesign {
   currencySymbol?: string;
   showCartBadge?: boolean;
   quickDoubleTap?: boolean;
+
+  // Category Design options
+  categoryStyle?: 'card-tile' | 'compact-list';
+  categoryCardHeight?: 'h-20' | 'h-24' | 'h-28';
+  categoryThumbnailShape?: 'rounded-full' | 'rounded-xl' | 'rounded-lg';
+  showCategoryCount?: boolean;
+  categorySearchPlaceholder?: string;
 }
 
 export const DEFAULT_PERSISTED_TERMINAL_DESIGN: PersistedTerminalDesign = {
@@ -45,6 +52,13 @@ export const DEFAULT_PERSISTED_TERMINAL_DESIGN: PersistedTerminalDesign = {
   currencySymbol: '₹',
   showCartBadge: true,
   quickDoubleTap: true,
+
+  // Category Design defaults
+  categoryStyle: 'card-tile',
+  categoryCardHeight: 'h-24',
+  categoryThumbnailShape: 'rounded-full',
+  showCategoryCount: true,
+  categorySearchPlaceholder: 'Search category...',
 };
 
 /**

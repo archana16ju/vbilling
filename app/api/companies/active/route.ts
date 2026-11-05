@@ -31,7 +31,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error || 'Failed to switch company' }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, company: result.company });
+    const response = NextResponse.json({ success: true, company: result.company });
+    if (result.company?.id) {
+      response.cookies.set('auth_company_id', result.company.id, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        secure: false,
+        httpOnly: false,
+      });
+    }
+    return response;
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 });
   }

@@ -512,7 +512,7 @@ export default function CompanyThemePanel({
         )}
       </div>
 
-      {/* Theme Appearance Mode: Dark / Light Mode */}
+      {/* 2. Appearance Mode Toggle (Dark Mode vs Light Mode) */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-5 shadow-2xl backdrop-blur-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">

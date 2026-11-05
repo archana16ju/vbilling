@@ -82,6 +82,8 @@ export async function POST(request: Request) {
             ? '/kitchen'
             : role === 'waiter'
             ? '/assigned-orders'
+            : role === 'delivery_staff'
+            ? '/delivery'
             : '/terminal',
       });
 

@@ -1,3 +1,4 @@
+import { AddonItem, AddonGroup, SelectedAddon } from '@/types/addons';
 import { getMysqlPool, withMySqlTransaction } from './mysql';
 import { ensureLocalMySqlInitialized } from './mysql-init';
 import { getAuthorizedCompanyContext } from './mysql-company';
@@ -43,6 +44,22 @@ function mapRowToProduct(row: any): Product {
     recipeYield: row.recipe_yield != null ? Number(row.recipe_yield) : undefined,
     recipeUnit: row.recipe_unit || undefined,
     rawMaterials,
+    addonGroupIds: (() => {
+      if (!row.addon_group_ids) return undefined;
+      try {
+        return typeof row.addon_group_ids === 'string' ? JSON.parse(row.addon_group_ids) : row.addon_group_ids;
+      } catch {
+        return undefined;
+      }
+    })(),
+    barcodes: (() => {
+      if (!row.barcodes_json) return undefined;
+      try {
+        return typeof row.barcodes_json === 'string' ? JSON.parse(row.barcodes_json) : row.barcodes_json;
+      } catch {
+        return undefined;
+      }
+    })(),
   };
   return prod as Product;
 }
@@ -210,6 +227,8 @@ function mapRowToSale(row: any) {
     onlineOrderId: row.online_order_id || undefined,
     orderNote: row.order_note || undefined,
     createdBy: row.created_by || 'Cashier',
+    creatorRole: row.creator_role || (row.created_by === 'superadmin' || row.created_by === 'admin' ? 'super_admin' : undefined),
+    creatorName: row.creator_name || undefined,
     companyName: row.company_name || undefined,
     delivery,
     timestamp,
@@ -226,11 +245,22 @@ export async function mysqlGetProducts(): Promise<Product[]> {
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, name, sku, barcode, price, stock, unit, quantity_step, category_id, company_id,
-              image, tax, discount, recipe_yield, recipe_unit, raw_materials_json 
-       FROM products 
-       WHERE company_id = ? 
-       ORDER BY name ASC`,
+      `SELECT p.id, p.name, p.sku, p.barcode, p.price, p.stock, p.unit, p.quantity_step, p.category_id, p.company_id,
+              p.image, p.tax, p.discount, p.recipe_yield, p.recipe_unit, p.raw_materials_json, p.addon_group_ids,
+              (SELECT JSON_ARRAYAGG(
+                 JSON_OBJECT(
+                   'id', b.id,
+                   'companyId', b.company_id,
+                   'productId', b.product_id,
+                   'barcode', b.barcode,
+                   'barcodeType', b.barcode_type,
+                   'barcodeFormat', b.barcode_format,
+                   'isPrimary', b.is_primary = 1
+                 )
+               ) FROM product_barcodes b WHERE b.company_id = p.company_id AND b.product_id = p.id) AS barcodes_json
+       FROM products p
+       WHERE p.company_id = ? 
+       ORDER BY p.name ASC`,
       [company.id]
     );
 
@@ -253,17 +283,26 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
   const pool = getMysqlPool();
   const newProduct: Product = { ...product, id: 'p' + Date.now() };
 
+  // Resolve primary barcode
+  const barcodes = (product as any).barcodes as any[] | undefined;
+  let primaryBarcode = newProduct.barcode;
+  if (Array.isArray(barcodes) && barcodes.length > 0) {
+    const primary = barcodes.find((b: any) => b.isPrimary) || barcodes[0];
+    primaryBarcode = primary.barcode;
+    newProduct.barcode = primaryBarcode;
+  }
+
   await pool.query<ResultSetHeader>(
     `INSERT INTO products (
       id, company_id, name, sku, barcode, price, stock, unit, quantity_step, category_id, 
-      image, tax, discount, recipe_yield, recipe_unit, raw_materials_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      image, tax, discount, recipe_yield, recipe_unit, raw_materials_json, addon_group_ids
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newProduct.id,
       company.id,
       newProduct.name,
       newProduct.sku || null,
-      newProduct.barcode || null,
+      primaryBarcode || null,
       newProduct.price || 0,
       newProduct.stock || 0,
       newProduct.unit || 'plate',
@@ -275,8 +314,46 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
       (newProduct as any).recipeYield ?? null,
       (newProduct as any).recipeUnit || null,
       newProduct.rawMaterials ? JSON.stringify(newProduct.rawMaterials) : null,
+      (newProduct as any).addonGroupIds ? JSON.stringify((newProduct as any).addonGroupIds) : null,
     ]
   );
+
+  // Insert into product_barcodes table
+  if (Array.isArray(barcodes) && barcodes.length > 0) {
+    for (const b of barcodes) {
+      if (!b.barcode) continue;
+      await pool.query(
+        `INSERT INTO product_barcodes 
+         (id, company_id, product_id, barcode, barcode_type, barcode_format, is_primary)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE barcode_type = VALUES(barcode_type), barcode_format = VALUES(barcode_format), is_primary = VALUES(is_primary)`,
+        [
+          b.id || 'bc_' + newProduct.id + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          company.id,
+          newProduct.id,
+          String(b.barcode).trim(),
+          b.barcodeType || 'internal',
+          b.barcodeFormat || 'CODE128',
+          b.isPrimary ? 1 : 0
+        ]
+      );
+    }
+  } else if (primaryBarcode) {
+    await pool.query(
+      `INSERT INTO product_barcodes 
+       (id, company_id, product_id, barcode, barcode_type, barcode_format, is_primary)
+       VALUES (?, ?, ?, ?, ?, ?, 1)
+       ON DUPLICATE KEY UPDATE is_primary = 1`,
+      [
+        'bc_' + newProduct.id + '_' + Date.now().toString(36),
+        company.id,
+        newProduct.id,
+        String(primaryBarcode).trim(),
+        /^\d{6,}$/.test(String(primaryBarcode).trim()) ? 'internal' : 'manufacturer',
+        'CODE128'
+      ]
+    );
+  }
 
   return newProduct;
 }
@@ -289,6 +366,44 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
   const setClauses: string[] = [];
   const params: any[] = [];
   const u = updates as any;
+
+  // Handle barcodes updates
+  const barcodes = u.barcodes as any[] | undefined;
+  if (barcodes !== undefined) {
+    // Delete existing barcodes for this product
+    await pool.query(
+      `DELETE FROM product_barcodes WHERE product_id = ? AND company_id = ?`,
+      [id, company.id]
+    );
+
+    let primaryBarcode = '';
+    if (Array.isArray(barcodes) && barcodes.length > 0) {
+      for (const b of barcodes) {
+        if (!b.barcode) continue;
+        const isPrimary = b.isPrimary || (!primaryBarcode && barcodes.length === 1);
+        if (isPrimary && !primaryBarcode) {
+          primaryBarcode = String(b.barcode).trim();
+        }
+        await pool.query(
+          `INSERT INTO product_barcodes 
+           (id, company_id, product_id, barcode, barcode_type, barcode_format, is_primary)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            b.id || 'bc_' + id + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            company.id,
+            id,
+            String(b.barcode).trim(),
+            b.barcodeType || 'internal',
+            b.barcodeFormat || 'CODE128',
+            isPrimary ? 1 : 0
+          ]
+        );
+      }
+    }
+    if (primaryBarcode) {
+      u.barcode = primaryBarcode;
+    }
+  }
 
   if (u.name !== undefined) { setClauses.push('name = ?'); params.push(u.name); }
   if (u.sku !== undefined) { setClauses.push('sku = ?'); params.push(u.sku); }
@@ -306,6 +421,10 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
   if (u.rawMaterials !== undefined) {
     setClauses.push('raw_materials_json = ?');
     params.push(u.rawMaterials ? JSON.stringify(u.rawMaterials) : null);
+  }
+  if (u.addonGroupIds !== undefined) {
+    setClauses.push('addon_group_ids = ?');
+    params.push(u.addonGroupIds ? JSON.stringify(u.addonGroupIds) : null);
   }
 
   if (setClauses.length === 0) return true;
@@ -326,6 +445,13 @@ export async function mysqlDeleteProduct(id: string): Promise<boolean> {
   const company = await getAuthorizedCompanyContext();
   await assertCompanyModuleEnabled(company.id, 'products');
   const pool = getMysqlPool();
+
+  // Delete product barcodes records first
+  await pool.query(
+    'DELETE FROM product_barcodes WHERE product_id = ? AND company_id = ?',
+    [id, company.id]
+  );
+
   const [result] = await pool.query<ResultSetHeader>(
     'DELETE FROM products WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -965,10 +1091,24 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
       const taxRate = dbP ? Number(dbP.tax) : Number(prod?.tax || item.tax || 0);
       const qty = Number(item.quantity || 1);
 
-      const itemSubtotal = price * qty;
+      // Addons calculation
+      let addonsUnitPrice = 0;
+      let addonsTax = 0;
+      const selectedAddOns = Array.isArray(item.selectedAddOns) ? item.selectedAddOns : [];
+      for (const a of selectedAddOns) {
+        const aPrice = Number(a.price) || 0;
+        const aQty = Number(a.quantity) || 1;
+        const aTotal = aPrice * aQty;
+        addonsUnitPrice += aTotal;
+        const aTaxRate = a.tax !== undefined && a.tax !== null ? Number(a.tax) : taxRate;
+        addonsTax += (aTotal * qty) * (aTaxRate / 100);
+      }
+
+      const itemSubtotal = (price + addonsUnitPrice) * qty;
       const itemDiscount = itemSubtotal * (discountRate / 100);
       const afterDiscount = itemSubtotal - itemDiscount;
-      const itemTax = afterDiscount * (taxRate / 100);
+      const baseTax = ((price * qty) - ((price * qty) * (discountRate / 100))) * (taxRate / 100);
+      const itemTax = baseTax + addonsTax;
 
       calculatedSubtotal += itemSubtotal;
       calculatedTax += itemTax;
@@ -977,6 +1117,7 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
       return {
         ...item,
         quantity: qty,
+        selectedAddOns,
         product: { ...(typeof prod === 'object' ? prod : {}), id: prodId || `p-${Date.now()}`, price, tax: taxRate, discount: discountRate },
       };
     });
@@ -1148,6 +1289,17 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
             [item.quantity || 1, prodId, company.id]
           );
         }
+
+        // Deduct add-on stock only when stock tracking is enabled
+        if (Array.isArray(item.selectedAddOns)) {
+          for (const addon of item.selectedAddOns) {
+            const addonQty = (Number(addon.quantity) || 1) * (Number(item.quantity) || 1);
+            await conn.query(
+              'UPDATE addon_items SET stock = stock - ? WHERE id = ? AND company_id = ? AND track_stock = 1',
+              [addonQty, addon.id, company.id]
+            );
+          }
+        }
       }
 
       // 3. Raw materials recipe deduction if any
@@ -1254,8 +1406,28 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
           const rawName = (finalSale.customerName || '').trim();
           const customerName = (rawName === 'Customer' || rawName === 'Online Customer') ? '' : rawName;
           const customerPhone = (finalSale.customerPhone || '').trim();
-          const rawAddress = (finalSale.deliveryAddress || finalSale.address || '').trim();
-          const deliveryAddress = (rawAddress === 'Online Order Delivery Address' || rawAddress === 'No address specified') ? '' : rawAddress;
+          let rawAddress = (finalSale.deliveryAddress || finalSale.address || '').trim();
+          if (rawAddress === 'Online Order Delivery Address' || rawAddress === 'No address specified') {
+            rawAddress = '';
+          }
+          if (!rawAddress && customerPhone) {
+            try {
+              const [custRows]: any = await conn.query(
+                `SELECT address FROM customers WHERE company_id = ? AND (
+                  phone = ?
+                  OR REPLACE(phone, ' ', '') = REPLACE(?, ' ', '')
+                  OR RIGHT(REPLACE(phone, ' ', ''), 10) = RIGHT(REPLACE(?, ' ', ''), 10)
+                ) AND address IS NOT NULL AND address != '' LIMIT 1`,
+                [company.id, customerPhone, customerPhone, customerPhone]
+              );
+              if (custRows && custRows.length > 0 && custRows[0].address) {
+                rawAddress = custRows[0].address.trim();
+              }
+            } catch (custErr) {
+              console.warn('Customer address lookup notice:', custErr);
+            }
+          }
+          const deliveryAddress = rawAddress;
           const deliveryNotes = finalSale.deliveryNotes || finalSale.orderNote || null;
           const orderSource = finalSale.orderSource || 'Terminal';
           const onlineOrderId = finalSale.onlineOrderId || null;
@@ -1435,6 +1607,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
                 s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
+                u.role AS creator_role, u.name AS creator_name,
                 c.name AS company_name,
                 d.id AS delivery_id, d.delivery_status, d.assignment_status, d.delivery_address, d.delivery_notes,
                 d.order_source AS delivery_order_source, d.online_order_id AS delivery_online_order_id, d.tracking_token,
@@ -1458,12 +1631,14 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
                 s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
+                u.role AS creator_role, u.name AS creator_name,
                 c.name AS company_name,
                 d.id AS delivery_id, d.delivery_status, d.assignment_status, d.delivery_address, d.delivery_notes,
                 d.order_source AS delivery_order_source, d.online_order_id AS delivery_online_order_id, d.tracking_token,
                 dp.name AS delivery_person_name, dp.phone AS delivery_person_phone
          FROM sales s
          LEFT JOIN companies c ON s.company_id = c.id
+         LEFT JOIN users u ON (s.created_by = u.username OR s.created_by = u.id)
          LEFT JOIN deliveries d ON d.company_id = s.company_id AND d.bill_id = s.bill_number
          LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
          WHERE s.company_id = ? 
@@ -1479,12 +1654,14 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
     let query = `
       SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
              s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
+             u.role AS creator_role, u.name AS creator_name,
              c.name AS company_name,
              d.id AS delivery_id, d.delivery_status, d.assignment_status, d.delivery_address, d.delivery_notes,
              d.order_source AS delivery_order_source, d.online_order_id AS delivery_online_order_id, d.tracking_token,
              dp.name AS delivery_person_name, dp.phone AS delivery_person_phone
       FROM sales s
       LEFT JOIN companies c ON s.company_id = c.id
+      LEFT JOIN users u ON (s.created_by = u.username OR s.created_by = u.id)
       LEFT JOIN deliveries d ON d.company_id = s.company_id AND d.bill_id = s.bill_number
       LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
     `;
@@ -1958,6 +2135,8 @@ export async function mysqlDeleteDeliveryPerson(id: string): Promise<boolean> {
 export async function mysqlGetDeliveries(filter?: {
   status?: string;
   search?: string;
+  deliveryPersonId?: string;
+  deliveryPersonName?: string;
 }): Promise<Delivery[]> {
   await ensureLocalMySqlInitialized();
   const company = await getAuthorizedCompanyContext();
@@ -1965,7 +2144,8 @@ export async function mysqlGetDeliveries(filter?: {
 
   let query = `
     SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
-           d.customer_name, d.customer_phone, d.delivery_address,
+           d.customer_name, d.customer_phone,
+           COALESCE(NULLIF(d.delivery_address, ''), NULLIF(c.address, ''), '') AS delivery_address,
            d.delivery_person_id, d.delivery_status, d.assignment_status, d.order_time,
            d.assigned_at, d.picked_up_at, d.delivered_at, d.delivery_notes, d.status_history,
            d.latitude, d.longitude, d.location_updated_at, d.created_at, d.updated_at,
@@ -1974,9 +2154,25 @@ export async function mysqlGetDeliveries(filter?: {
     FROM deliveries d
     LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
     LEFT JOIN sales s ON s.company_id = d.company_id AND s.bill_number = d.bill_id
+    LEFT JOIN customers c ON c.company_id = d.company_id AND (
+      d.customer_phone = c.phone
+      OR REPLACE(d.customer_phone, ' ', '') = REPLACE(c.phone, ' ', '')
+      OR RIGHT(REPLACE(d.customer_phone, ' ', ''), 10) = RIGHT(REPLACE(c.phone, ' ', ''), 10)
+    )
     WHERE d.company_id = ?
   `;
   const params: any[] = [company.id];
+
+  if (filter?.deliveryPersonId && filter?.deliveryPersonName) {
+    query += ` AND (d.delivery_person_id = ? OR LOWER(dp.name) = LOWER(?) OR LOWER(dp.employee_id) = LOWER(?))`;
+    params.push(filter.deliveryPersonId, filter.deliveryPersonName, filter.deliveryPersonName);
+  } else if (filter?.deliveryPersonId) {
+    query += ` AND d.delivery_person_id = ?`;
+    params.push(filter.deliveryPersonId);
+  } else if (filter?.deliveryPersonName) {
+    query += ` AND (LOWER(dp.name) = LOWER(?) OR LOWER(dp.employee_id) = LOWER(?))`;
+    params.push(filter.deliveryPersonName, filter.deliveryPersonName);
+  }
 
   if (filter?.status && filter.status !== 'all') {
     if (filter.status === 'unassigned') {
@@ -2013,7 +2209,8 @@ export async function mysqlGetDeliveryByBillId(billId: string): Promise<Delivery
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
-            d.customer_name, d.customer_phone, d.delivery_address,
+            d.customer_name, d.customer_phone,
+            COALESCE(NULLIF(d.delivery_address, ''), NULLIF(c.address, ''), '') AS delivery_address,
             d.delivery_person_id, d.delivery_status, d.assignment_status, d.order_time,
             d.assigned_at, d.picked_up_at, d.delivered_at, d.delivery_notes, d.status_history,
             d.latitude, d.longitude, d.location_updated_at, d.created_at, d.updated_at,
@@ -2022,6 +2219,11 @@ export async function mysqlGetDeliveryByBillId(billId: string): Promise<Delivery
      FROM deliveries d
      LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
      LEFT JOIN sales s ON s.company_id = d.company_id AND s.bill_number = d.bill_id
+     LEFT JOIN customers c ON c.company_id = d.company_id AND (
+       d.customer_phone = c.phone
+       OR REPLACE(d.customer_phone, ' ', '') = REPLACE(c.phone, ' ', '')
+       OR RIGHT(REPLACE(d.customer_phone, ' ', ''), 10) = RIGHT(REPLACE(c.phone, ' ', ''), 10)
+     )
      WHERE d.company_id = ? AND d.bill_id = ?
      LIMIT 1`,
     [company.id, billId]
@@ -3041,3 +3243,318 @@ export async function mysqlSaveWhatsAppSettings(
 
 
 
+
+// ============================================================================
+// ADD-ONS AND ADD-ON GROUPS (Local MySQL Billing Only)
+// ============================================================================
+
+export async function mysqlGetAddonItems(companyId?: string): Promise<AddonItem[]> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, company_id, name, image, price, category, tax, track_stock, stock, is_active, created_at, updated_at
+     FROM addon_items
+     WHERE company_id = ?
+     ORDER BY name ASC`,
+    [cId]
+  );
+  return rows.map((r: any) => ({
+    id: r.id,
+    companyId: r.company_id,
+    name: r.name,
+    image: r.image || undefined,
+    price: Number(r.price) || 0,
+    category: r.category || undefined,
+    tax: Number(r.tax) || 0,
+    trackStock: Boolean(r.track_stock),
+    stock: Number(r.stock) || 0,
+    isActive: Boolean(r.is_active),
+    createdAt: r.created_at ? new Date(r.created_at).getTime() : undefined,
+    updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : undefined,
+  }));
+}
+
+export async function mysqlCreateAddonItem(data: Omit<AddonItem, 'id'>, companyId?: string): Promise<AddonItem> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  const id = 'add_' + cId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  await pool.query<ResultSetHeader>(
+    `INSERT INTO addon_items (id, company_id, name, image, price, category, tax, track_stock, stock, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      cId,
+      data.name,
+      data.image || null,
+      data.price || 0,
+      data.category || null,
+      data.tax || 0,
+      data.trackStock ? 1 : 0,
+      data.stock || 0,
+      data.isActive !== false ? 1 : 0,
+    ]
+  );
+  return {
+    ...data,
+    id,
+    companyId: cId,
+    trackStock: Boolean(data.trackStock),
+    isActive: data.isActive !== false,
+  };
+}
+
+export async function mysqlUpdateAddonItem(id: string, updates: Partial<AddonItem>, companyId?: string): Promise<boolean> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  const setClauses: string[] = [];
+  const params: any[] = [];
+
+  if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
+  if (updates.image !== undefined) { setClauses.push('image = ?'); params.push(updates.image || null); }
+  if (updates.price !== undefined) { setClauses.push('price = ?'); params.push(updates.price); }
+  if (updates.category !== undefined) { setClauses.push('category = ?'); params.push(updates.category || null); }
+  if (updates.tax !== undefined) { setClauses.push('tax = ?'); params.push(updates.tax); }
+  if (updates.trackStock !== undefined) { setClauses.push('track_stock = ?'); params.push(updates.trackStock ? 1 : 0); }
+  if (updates.stock !== undefined) { setClauses.push('stock = ?'); params.push(updates.stock); }
+  if (updates.isActive !== undefined) { setClauses.push('is_active = ?'); params.push(updates.isActive ? 1 : 0); }
+
+  if (setClauses.length === 0) return true;
+  params.push(id, cId);
+  const [res] = await pool.query<ResultSetHeader>(
+    `UPDATE addon_items SET ${setClauses.join(', ')} WHERE id = ? AND company_id = ?`,
+    params
+  );
+  return res.affectedRows > 0;
+}
+
+export async function mysqlDeleteAddonItem(id: string, companyId?: string): Promise<boolean> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  await pool.query('DELETE FROM addon_group_items WHERE addon_id = ? AND company_id = ?', [id, cId]);
+  const [res] = await pool.query<ResultSetHeader>(
+    'DELETE FROM addon_items WHERE id = ? AND company_id = ?',
+    [id, cId]
+  );
+  return res.affectedRows > 0;
+}
+
+export async function mysqlGetAddonGroups(companyId?: string): Promise<AddonGroup[]> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+
+  const [groupRows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, company_id, name, min_selection, max_selection, is_required, selection_type, is_active, created_at, updated_at
+     FROM addon_groups
+     WHERE company_id = ?
+     ORDER BY name ASC`,
+    [cId]
+  );
+
+  const [junctionRows] = await pool.query<RowDataPacket[]>(
+    `SELECT agi.group_id, agi.addon_id, agi.sort_order,
+            ai.name as addon_name, ai.image as addon_image, ai.price as addon_price,
+            ai.category as addon_category, ai.tax as addon_tax, ai.track_stock, ai.stock as addon_stock, ai.is_active as addon_active
+     FROM addon_group_items agi
+     JOIN addon_items ai ON ai.id = agi.addon_id
+     WHERE agi.company_id = ?
+     ORDER BY agi.sort_order ASC`,
+    [cId]
+  );
+
+  const groupItemsMap = new Map<string, { itemIds: string[]; items: AddonItem[] }>();
+  for (const j of junctionRows) {
+    if (!groupItemsMap.has(j.group_id)) {
+      groupItemsMap.set(j.group_id, { itemIds: [], items: [] });
+    }
+    const g = groupItemsMap.get(j.group_id)!;
+    g.itemIds.push(j.addon_id);
+    g.items.push({
+      id: j.addon_id,
+      companyId: cId,
+      name: j.addon_name,
+      image: j.addon_image || undefined,
+      price: Number(j.addon_price) || 0,
+      category: j.addon_category || undefined,
+      tax: Number(j.addon_tax) || 0,
+      trackStock: Boolean(j.track_stock),
+      stock: Number(j.addon_stock) || 0,
+      isActive: Boolean(j.addon_active),
+    });
+  }
+
+  return groupRows.map((r: any) => {
+    const itemData = groupItemsMap.get(r.id) || { itemIds: [], items: [] };
+    return {
+      id: r.id,
+      companyId: r.company_id,
+      name: r.name,
+      minSelection: Number(r.min_selection) || 0,
+      maxSelection: Number(r.max_selection) || 1,
+      isRequired: Boolean(r.is_required),
+      selectionType: (r.selection_type || 'multiple') as 'single' | 'multiple',
+      isActive: Boolean(r.is_active),
+      itemIds: itemData.itemIds,
+      items: itemData.items,
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : undefined,
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : undefined,
+    };
+  });
+}
+
+export async function mysqlCreateAddonGroup(data: Omit<AddonGroup, 'id'>, companyId?: string): Promise<AddonGroup> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  const id = 'grp_' + cId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+  await pool.query<ResultSetHeader>(
+    `INSERT INTO addon_groups (id, company_id, name, min_selection, max_selection, is_required, selection_type, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      cId,
+      data.name,
+      data.minSelection || 0,
+      data.maxSelection || 1,
+      data.isRequired ? 1 : 0,
+      data.selectionType || 'multiple',
+      data.isActive !== false ? 1 : 0,
+    ]
+  );
+
+  if (Array.isArray(data.itemIds) && data.itemIds.length > 0) {
+    for (let i = 0; i < data.itemIds.length; i++) {
+      const aId = data.itemIds[i];
+      await pool.query(
+        `INSERT IGNORE INTO addon_group_items (id, company_id, group_id, addon_id, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['agi_' + id + '_' + aId, cId, id, aId, i]
+      );
+    }
+  }
+
+  return {
+    ...data,
+    id,
+    companyId: cId,
+    minSelection: data.minSelection || 0,
+    maxSelection: data.maxSelection || 1,
+    isRequired: Boolean(data.isRequired),
+    selectionType: data.selectionType || 'multiple',
+    isActive: data.isActive !== false,
+  };
+}
+
+export async function mysqlUpdateAddonGroup(id: string, updates: Partial<AddonGroup>, companyId?: string): Promise<boolean> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  const setClauses: string[] = [];
+  const params: any[] = [];
+
+  if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
+  if (updates.minSelection !== undefined) { setClauses.push('min_selection = ?'); params.push(updates.minSelection); }
+  if (updates.maxSelection !== undefined) { setClauses.push('max_selection = ?'); params.push(updates.maxSelection); }
+  if (updates.isRequired !== undefined) { setClauses.push('is_required = ?'); params.push(updates.isRequired ? 1 : 0); }
+  if (updates.selectionType !== undefined) { setClauses.push('selection_type = ?'); params.push(updates.selectionType); }
+  if (updates.isActive !== undefined) { setClauses.push('is_active = ?'); params.push(updates.isActive ? 1 : 0); }
+
+  if (setClauses.length > 0) {
+    params.push(id, cId);
+    await pool.query<ResultSetHeader>(
+      `UPDATE addon_groups SET ${setClauses.join(', ')} WHERE id = ? AND company_id = ?`,
+      params
+    );
+  }
+
+  if (updates.itemIds !== undefined) {
+    await pool.query('DELETE FROM addon_group_items WHERE group_id = ? AND company_id = ?', [id, cId]);
+    for (let i = 0; i < updates.itemIds.length; i++) {
+      const aId = updates.itemIds[i];
+      await pool.query(
+        `INSERT IGNORE INTO addon_group_items (id, company_id, group_id, addon_id, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        ['agi_' + id + '_' + aId, cId, id, aId, i]
+      );
+    }
+  }
+
+  return true;
+}
+
+export async function mysqlDeleteAddonGroup(id: string, companyId?: string): Promise<boolean> {
+  await ensureLocalMySqlInitialized();
+  const cId = companyId || (await getAuthorizedCompanyContext()).id;
+  const pool = getMysqlPool();
+  await pool.query('DELETE FROM addon_group_items WHERE group_id = ? AND company_id = ?', [id, cId]);
+  const [res] = await pool.query<ResultSetHeader>(
+    'DELETE FROM addon_groups WHERE id = ? AND company_id = ?',
+    [id, cId]
+  );
+  return res.affectedRows > 0;
+}
+
+// --- BARCODE MANAGEMENT ---
+
+export async function mysqlGetNextInternalBarcode(companyId?: string): Promise<string> {
+  await ensureLocalMySqlInitialized();
+  const company = companyId ? { id: companyId } : await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  // Atomically increment and get the next internal sequence number (starting from 100001)
+  await pool.query(
+    `INSERT INTO barcode_sequences (company_id, last_internal_number)
+     VALUES (?, 100001)
+     ON DUPLICATE KEY UPDATE last_internal_number = last_internal_number + 1`,
+    [company.id]
+  );
+
+  const [rows]: any = await pool.query(
+    `SELECT last_internal_number FROM barcode_sequences WHERE company_id = ?`,
+    [company.id]
+  );
+
+  const nextNum = rows[0]?.last_internal_number || 100001;
+  return String(nextNum);
+}
+
+export async function mysqlCheckBarcodeUnique(
+  barcode: string,
+  companyId?: string,
+  excludeProductId?: string
+): Promise<{ isUnique: boolean; conflictProduct?: { id: string; name: string } }> {
+  await ensureLocalMySqlInitialized();
+  const company = companyId ? { id: companyId } : await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+  const cleanBarcode = (barcode || '').trim();
+  if (!cleanBarcode) return { isUnique: true };
+
+  let query = `
+    SELECT b.product_id, p.name AS product_name 
+    FROM product_barcodes b
+    JOIN products p ON b.product_id = p.id AND b.company_id = p.company_id
+    WHERE b.company_id = ? AND b.barcode = ?
+  `;
+  const params: any[] = [company.id, cleanBarcode];
+
+  if (excludeProductId) {
+    query += ` AND b.product_id != ?`;
+    params.push(excludeProductId);
+  }
+  query += ` LIMIT 1`;
+
+  const [rows]: any = await pool.query(query, params);
+  if (rows && rows.length > 0) {
+    return {
+      isUnique: false,
+      conflictProduct: { id: rows[0].product_id, name: rows[0].product_name },
+    };
+  }
+
+  return { isUnique: true };
+}

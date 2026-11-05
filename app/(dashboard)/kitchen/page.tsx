@@ -392,6 +392,15 @@ export default function KitchenPage() {
                             >
                               {item.name}
                             </span>
+                            {(item as any).selectedAddOns && (item as any).selectedAddOns.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {(item as any).selectedAddOns.map((a: any, aIdx: number) => (
+                                  <span key={aIdx} className="inline-flex items-center gap-1 rounded bg-purple-950/80 border border-purple-800/60 px-1.5 py-0.5 text-[10px] text-purple-300 font-bold">
+                                    + {a.name} {(a.quantity || 1) > 1 ? `x${a.quantity}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             {item.notes && (
                               <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-amber-300 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-md w-fit">
                                 <span className="uppercase text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.5 rounded font-black tracking-wider">

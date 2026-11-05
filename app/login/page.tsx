@@ -49,7 +49,7 @@ export default function LoginPage() {
             }
           }
         } catch {}
-        const dest = data.redirectUrl || (data.role === 'cashier' ? '/terminal' : data.role === 'super_admin' ? '/super-admin' : '/dashboard')
+        const dest = data.redirectUrl || (data.role === 'cashier' ? '/terminal' : data.role === 'delivery_staff' ? '/delivery' : data.role === 'super_admin' ? '/super-admin' : '/dashboard')
         window.location.href = dest
       } else {
         setError(data.error || 'Invalid credentials.')

@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     if (!ALL_USER_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: `Invalid role '${data.role}'. Supported roles: Super Admin, Company Admin, Manager, Cashier, Chef, Waiter.` },
+        { error: `Invalid role '${data.role}'. Supported roles: Super Admin, Company Admin, Manager, Cashier, Chef, Waiter, Delivery Staff.` },
         { status: 400 }
       );
     }
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
 
       if (!COMPANY_ADMIN_CREATABLE_ROLES.includes(role)) {
         return NextResponse.json(
-          { error: `Access Denied: Company Admins can only create Manager, Cashier, Chef, and Waiter accounts.` },
+          { error: `Access Denied: Company Admins can only create Manager, Cashier, Chef, Waiter, and Delivery Staff accounts.` },
           { status: 403 }
         );
       }
@@ -199,6 +199,18 @@ export async function POST(request: Request) {
             ON DUPLICATE KEY UPDATE role = VALUES(role), name = VALUES(name)`,
             [staffId, targetCompanyId, userId, cleanUsername, cleanUsername, staffRole]
           );
+
+          if (role === 'delivery_staff') {
+            const dpId = `dp_${targetCompanyId}_${cleanUsername.replace(/\s+/g, '_')}`;
+            await pool.query(
+              `INSERT INTO delivery_persons (
+                id, company_id, name, employee_id, phone, is_active, availability_status,
+                assigned_delivery_count, max_active_deliveries, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, '0000000000', 1, 'available', 0, 3, NOW(), NOW())
+              ON DUPLICATE KEY UPDATE name = VALUES(name), is_active = 1`,
+              [dpId, targetCompanyId, cleanUsername, cleanUsername]
+            );
+          }
         } catch (staffSyncErr) {
           console.error('Auto-sync staff error on user creation:', staffSyncErr);
         }
@@ -320,7 +332,7 @@ export async function PUT(request: Request) {
 
         if (!COMPANY_ADMIN_CREATABLE_ROLES.includes(newRole)) {
           return NextResponse.json(
-            { error: 'Access Denied: Permitted roles are Manager, Cashier, Chef, and Waiter.' },
+            { error: 'Access Denied: Permitted roles are Manager, Cashier, Chef, Waiter, and Delivery Staff.' },
             { status: 403 }
           );
         }
@@ -342,7 +354,7 @@ export async function PUT(request: Request) {
       newRole = rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole);
       if (!ALL_USER_ROLES.includes(newRole)) {
         return NextResponse.json(
-          { error: `Invalid role '${data.role}'. Supported roles: Super Admin, Company Admin, Manager, Cashier, Chef, Waiter.` },
+          { error: `Invalid role '${data.role}'. Supported roles: Super Admin, Company Admin, Manager, Cashier, Chef, Waiter, Delivery Staff.` },
           { status: 400 }
         );
       }

@@ -21,6 +21,7 @@ import DataLoader from "@/components/layout/DataLoader";
 import OfflineSyncManager from "@/components/terminal/OfflineSyncManager";
 import CompanyThemeLoader from "@/components/layout/CompanyThemeLoader";
 import GlobalShortcutsHandler from "@/components/layout/GlobalShortcutsHandler";
+import QueryProvider from "@/components/providers/QueryProvider";
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -30,11 +31,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme="dark"
     >
       <body className="min-h-full flex flex-col">
-        <CompanyThemeLoader />
-        <DataLoader />
-        <OfflineSyncManager />
-        <GlobalShortcutsHandler />
-        {children}
+        <QueryProvider>
+          <CompanyThemeLoader />
+          <DataLoader />
+          <OfflineSyncManager />
+          <GlobalShortcutsHandler />
+          {children}
+        </QueryProvider>
       </body>
     </html>
   );

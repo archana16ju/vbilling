@@ -16,12 +16,15 @@ import {
   ShoppingBag,
   LayoutGrid,
   Users,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { getUserShortcuts } from '@/app/login/actions'
 import { useTableStore } from '@/store/useTableStore'
 import DeliveryDetailsModal from '@/components/terminal/DeliveryDetailsModal'
 import WaiterAssignmentModal from '@/components/terminal/WaiterAssignmentModal'
+import ShiftAlertsBell from '@/components/notifications/ShiftAlertsBell'
 import { useTerminalStore, DEFAULT_SHORTCUTS } from '@/store/useTerminalStore'
 
 /* ─────────────────────────────────────────
@@ -110,6 +113,10 @@ export default function TerminalHeader() {
     activeShortcuts,
     isBackendOnline,
     setIsBackendOnline,
+    terminalModeOverride,
+    setTerminalModeOverride,
+    terminalThemeMode,
+    setTerminalThemeMode,
   } = useTerminalStore()
 
   const {
@@ -511,7 +518,73 @@ export default function TerminalHeader() {
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />
 
-       {/* ── Online / Offline Wi-Fi icon ── */}
+       {/* ── Terminal Independent Theme Mode (Dark & Light Mode Icons) ── */}
+        <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/90 p-1 shadow-sm">
+          <Tip label="Light Mode">
+            <button
+              type="button"
+              onClick={() => {
+                try { localStorage.setItem('terminal_theme_mode', 'light'); } catch {}
+                if (setTerminalThemeMode) setTerminalThemeMode('light');
+                if (setTerminalModeOverride) setTerminalModeOverride('light');
+                const root = document.documentElement;
+                root.setAttribute('data-theme', 'light');
+                root.classList.add('light-mode');
+                root.classList.remove('dark-mode', 'dark');
+                root.style.setProperty('--theme-mode', 'light');
+                if (document.body) {
+                  document.body.setAttribute('data-theme', 'light');
+                  document.body.classList.add('light-mode');
+                  document.body.classList.remove('dark-mode', 'dark');
+                }
+              }}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                (terminalThemeMode === 'light' || terminalModeOverride === 'light')
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
+              }`}
+              title="Switch Terminal to Light Mode"
+              aria-label="Terminal Light Mode"
+            >
+              <Sun className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+
+          <Tip label="Dark Mode">
+            <button
+              type="button"
+              onClick={() => {
+                try { localStorage.setItem('terminal_theme_mode', 'dark'); } catch {}
+                if (setTerminalThemeMode) setTerminalThemeMode('dark');
+                if (setTerminalModeOverride) setTerminalModeOverride('dark');
+                const root = document.documentElement;
+                root.setAttribute('data-theme', 'dark');
+                root.classList.add('dark-mode', 'dark');
+                root.classList.remove('light-mode');
+                root.style.setProperty('--theme-mode', 'dark');
+                if (document.body) {
+                  document.body.setAttribute('data-theme', 'dark');
+                  document.body.classList.add('dark-mode', 'dark');
+                  document.body.classList.remove('light-mode');
+                }
+              }}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                (terminalThemeMode === 'dark' || (!terminalThemeMode && terminalModeOverride !== 'light'))
+                  ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
+              }`}
+              title="Switch Terminal to Dark Mode"
+              aria-label="Terminal Dark Mode"
+            >
+              <Moon className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        </div>
+
+        {/* Separator */}
+        <div className="h-6 w-px bg-zinc-800" />
+
+        {/* ── Online / Offline Wi-Fi icon ── */}
 <Tip
   label={
     isOnline && isBackendOnline
@@ -534,6 +607,16 @@ export default function TerminalHeader() {
 
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />
+
+        {/* ── Shift Alerts Bell (Strictly for assigned staff, not Super Admin or Company Admin) ── */}
+        {role !== 'super_admin' && role !== 'company_admin' && role !== 'admin' && (
+          <>
+            <div className="flex items-center">
+              <ShiftAlertsBell />
+            </div>
+            <div className="h-6 w-px bg-zinc-800" />
+          </>
+        )}
 
         {/* ── Profile / user ── */}
         <div className="flex items-center gap-2 pl-1">

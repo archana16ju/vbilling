@@ -1,7 +1,7 @@
 'use client'
 import { CartItemData, calculateItemSubtotal, calculateItemDiscount } from "@/lib/calculations"
 import { useTerminalStore } from "@/store/useTerminalStore"
-import { Trash2, Minus, Plus } from "lucide-react"
+import { Trash2, Minus, Plus, Layers } from "lucide-react"
 import { useState, useEffect } from "react"
 
 interface CartItemProps {
@@ -14,6 +14,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
   if (!item || !item.product) return null;
   const product = item.product;
   const quantity = item.quantity ?? 1;
+  const itemIdentifier = item.lineId || product.id;
 
   const updateQuantity = useTerminalStore((state) => state.updateQuantity)
   const removeFromCart = useTerminalStore((state) => state.removeFromCart)
@@ -38,7 +39,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
   const handleInputBlur = () => {
     const val = parseFloat(inputValue)
     if (!isNaN(val) && val >= 0) {
-      updateQuantity(product.id, val)
+      updateQuantity(itemIdentifier, val)
     } else {
       setInputValue(quantity.toString())
     }
@@ -51,6 +52,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
   }
 
   const lineSubtotal = calculateItemSubtotal(item)
+  const discountAmount = calculateItemDiscount(item)
 
   return (
     <div
@@ -74,6 +76,24 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
               <h4 className="text-xs font-bold text-white">{product.name}</h4>
             </div>
 
+            {/* Selected Add-ons Display */}
+            {item.selectedAddOns && item.selectedAddOns.length > 0 && (
+              <div className="mt-1 space-y-0.5 border-l-2 border-theme/60 pl-2">
+                {item.selectedAddOns.map((addon, aIdx) => (
+                  <div key={aIdx} className="flex items-center gap-1.5 text-[11px] text-zinc-300">
+                    <span className="text-theme-accent font-black">+</span>
+                    <span className="font-medium text-zinc-200">{addon.name}</span>
+                    {(addon.quantity || 1) > 1 && (
+                      <span className="text-[10px] text-zinc-400 font-mono">×{addon.quantity}</span>
+                    )}
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      (₹{((addon.price || 0) * (addon.quantity || 1)).toFixed(2)})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Item note display & inline editor */}
             {isEditingNote ? (
               <div className="mt-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -83,14 +103,14 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
                   onChange={(e) => setNoteText(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      updateItemNotes?.(product.id, noteText);
+                      updateItemNotes?.(itemIdentifier, noteText);
                       setIsEditingNote(false);
                     } else if (e.key === 'Escape') {
                       setIsEditingNote(false);
                     }
                   }}
                   onBlur={() => {
-                    updateItemNotes?.(product.id, noteText);
+                    updateItemNotes?.(itemIdentifier, noteText);
                     setIsEditingNote(false);
                   }}
                   placeholder="Special instructions..."
@@ -118,7 +138,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
           <button 
             onClick={(e) => {
               e.stopPropagation();
-              removeFromCart(product.id);
+              removeFromCart(itemIdentifier);
             }}
             className="text-zinc-500 hover:text-rose-400 transition cursor-pointer p-1"
             title="Remove item"
@@ -138,7 +158,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
               <span className="text-[10px] text-zinc-500 line-through">₹{lineSubtotal.toFixed(2)}</span>
             )}
             <span className="font-black text-xs" style={{ color: 'var(--theme-accent, #DB2777)' }}>
-              ₹{(lineSubtotal - calculateItemDiscount(item)).toFixed(2)}
+              ₹{(lineSubtotal - discountAmount).toFixed(2)}
             </span>
           </div>
         </div>
@@ -152,7 +172,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
             >
               <button 
                 className="flex h-7 w-7 items-center justify-center bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white active:bg-zinc-600 cursor-pointer"
-                onClick={() => updateQuantity(product.id, Math.max(0, quantity - (product.quantityStep || 1)))}
+                onClick={() => updateQuantity(itemIdentifier, Math.max(0, quantity - (product.quantityStep || 1)))}
                 title="Decrease quantity"
               >
                 <Minus className="h-3 w-3" />
@@ -167,7 +187,7 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
               />
               <button 
                 className="flex h-7 w-7 items-center justify-center bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white active:bg-zinc-600 cursor-pointer"
-                onClick={() => updateQuantity(product.id, quantity + (product.quantityStep || 1))}
+                onClick={() => updateQuantity(itemIdentifier, quantity + (product.quantityStep || 1))}
                 title="Increase quantity"
               >
                 <Plus className="h-3 w-3" />

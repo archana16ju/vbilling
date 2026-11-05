@@ -1,8 +1,10 @@
 'use client';
 
+import AddonSelectionModal from './AddonSelectionModal';
+
 import { useTerminalStore } from '@/store/useTerminalStore';
 import ProductCard from './ProductCard';
-import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package } from 'lucide-react';
+import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 import { useTerminalDesignStore } from '@/store/useTerminalDesignStore';
@@ -18,6 +20,7 @@ export default function ProductPanel() {
     searchQuery,
     setSearchQuery,
     addToCart,
+    addToCartWithAddons,
     setCategory,
   } = useTerminalStore();
 
@@ -50,14 +53,60 @@ export default function ProductPanel() {
     const matchesSearch =
       (p.name || '').toLowerCase().includes(safeSearchQuery) ||
       (p.sku || '').toLowerCase().includes(safeSearchQuery) ||
-      (p.barcode || '').includes(searchQuery || '');
+      (p.barcode || '').toLowerCase().includes(safeSearchQuery) ||
+      (p.barcodes || []).some((b) => (b.barcode || '').toLowerCase().includes(safeSearchQuery));
 
     return matchesCategory && matchesSearch;
   });
 
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [selectedProductForAddons, setSelectedProductForAddons] = useState<Product | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Scanner state & notification
+  const [scannerNotification, setScannerNotification] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scannerBufferRef = useRef<{ chars: string[]; lastTime: number }>({ chars: [], lastTime: 0 });
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+    setScannerNotification({ type, message });
+    notificationTimeoutRef.current = setTimeout(() => {
+      setScannerNotification(null);
+    }, 3500);
+  };
+
+  const handleBarcodeScan = (code: string): boolean => {
+    const cleanCode = (code || '').trim();
+    if (!cleanCode) return false;
+
+    // Search product across products list
+    const matched = safeProducts.find((p) => {
+      if (!p) return false;
+      if (p.barcode && p.barcode.trim().toLowerCase() === cleanCode.toLowerCase()) return true;
+      if (p.barcodes && p.barcodes.some((b) => b.barcode.trim().toLowerCase() === cleanCode.toLowerCase())) return true;
+      return false;
+    });
+
+    if (matched) {
+      setSearchQuery('');
+      if (matched.addonGroupIds && matched.addonGroupIds.length > 0) {
+        setSelectedProductForAddons(matched);
+      } else {
+        addToCart(matched);
+        showNotification('success', `Scanned: ${matched.name} (Qty +${matched.quantityStep || 1})`);
+      }
+      return true;
+    } else {
+      showNotification('error', `Unregistered Barcode: "${cleanCode}". No product matches this barcode.`);
+      return false;
+    }
+  };
 
   // Reset highlighted index when search results change
   useEffect(() => {
@@ -80,6 +129,29 @@ export default function ProductPanel() {
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
           target.isContentEditable);
+
+      const now = Date.now();
+      const timeDiff = now - scannerBufferRef.current.lastTime;
+      scannerBufferRef.current.lastTime = now;
+
+      // Detect USB/keyboard-wedge scanner rapid key sequences (< 150ms total sequence completion)
+      if (e.key === 'Enter') {
+        const bufferedCode = scannerBufferRef.current.chars.join('').trim();
+        scannerBufferRef.current.chars = [];
+        if (bufferedCode.length >= 3 && timeDiff < 150) {
+          // Rapid input from hardware scanner
+          e.preventDefault();
+          e.stopPropagation();
+          handleBarcodeScan(bufferedCode);
+          return;
+        }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (timeDiff > 90) {
+          scannerBufferRef.current.chars = [e.key];
+        } else {
+          scannerBufferRef.current.chars.push(e.key);
+        }
+      }
 
       // Jump to product search: '/' or registered shortcut (e.g. F1)
       if (shortcutsStore.isActionTriggered('product_search', e) && !isInput) {
@@ -161,6 +233,11 @@ export default function ProductPanel() {
   ]);
 
   const handleSelectProduct = (product: Product) => {
+    if (product.addonGroupIds && product.addonGroupIds.length > 0) {
+      setSelectedProductForAddons(product);
+      return;
+    }
+
     addToCart(product);
     // In search-based design, if cashier typed a specific barcode/SKU or item, can clear search for rapid next scan
     if (isSearchBased) {
@@ -279,13 +356,33 @@ export default function ProductPanel() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  if (filteredProducts.length > 0) {
-                    const targetProduct =
-                      filteredProducts[highlightedIndex] || filteredProducts[0];
-                    handleSelectProduct(targetProduct);
-                    if (filteredProducts.length === 1) {
-                      setSearchQuery('');
+                  const q = (searchQuery || '').trim();
+                  if (q) {
+                    // Check if query matches a barcode directly
+                    const scannedMatch = safeProducts.find((p) => {
+                      if (!p) return false;
+                      if (p.barcode && p.barcode.trim().toLowerCase() === q.toLowerCase()) return true;
+                      if (p.barcodes && p.barcodes.some((b) => b.barcode.trim().toLowerCase() === q.toLowerCase())) return true;
+                      return false;
+                    });
+
+                    if (scannedMatch) {
+                      handleBarcodeScan(q);
+                      return;
                     }
+
+                    if (filteredProducts.length > 0) {
+                      const targetProduct =
+                        filteredProducts[highlightedIndex] || filteredProducts[0];
+                      handleSelectProduct(targetProduct);
+                      if (filteredProducts.length === 1) {
+                        setSearchQuery('');
+                      }
+                      return;
+                    }
+
+                    // No product found and user entered an unrecognized code
+                    showNotification('error', `Unregistered Barcode: "${q}". No product matches this barcode.`);
                   }
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
@@ -324,6 +421,32 @@ export default function ProductPanel() {
             ALL
           </button>
         </div>
+
+        {/* Scanner Feedback Notification Banner */}
+        {scannerNotification && (
+          <div
+            className={`mt-2.5 flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-150 shadow-lg ${
+              scannerNotification.type === 'success'
+                ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-200'
+                : 'bg-rose-950/90 border border-rose-500/60 text-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {scannerNotification.type === 'success' ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              ) : (
+                <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+              )}
+              <span>{scannerNotification.message}</span>
+            </div>
+            <button
+              onClick={() => setScannerNotification(null)}
+              className="p-1 rounded-lg hover:bg-black/30 transition text-zinc-400 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tap Mode Banner removed from here — now shown inline beside the heading */}
@@ -495,7 +618,7 @@ export default function ProductPanel() {
             </div>
             <div className="flex flex-col">
               {filteredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} onSelectProduct={handleSelectProduct} />
               ))}
             </div>
           </div>
@@ -506,7 +629,7 @@ export default function ProductPanel() {
               }`}
           >
             {filteredProducts.map((product) => (
-              <ProductGridCard key={product.id} product={product} />
+              <ProductGridCard key={product.id} product={product} onSelectProduct={handleSelectProduct} />
             ))}
           </div>
         )}
@@ -520,6 +643,25 @@ export default function ProductPanel() {
           </div>
         )}
       </div>
+
+      {/* Product Add-on Selection Modal */}
+      <AddonSelectionModal
+        isOpen={Boolean(selectedProductForAddons)}
+        product={selectedProductForAddons}
+        onClose={() => setSelectedProductForAddons(null)}
+        onConfirm={(prod, selectedAddons, qty) => {
+          if (addToCartWithAddons) {
+            addToCartWithAddons(prod, selectedAddons, qty);
+          } else {
+            addToCart(prod);
+          }
+          setSelectedProductForAddons(null);
+          if (isSearchBased) {
+            setSearchQuery('');
+            searchInputRef.current?.focus();
+          }
+        }}
+      />
     </div>
   );
 }

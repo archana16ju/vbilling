@@ -2,8 +2,14 @@
 import { Product } from "@/lib/mock-data"
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { useTerminalDesignStore } from "@/store/useTerminalDesignStore"
+import { Layers } from "lucide-react"
 
-export default function ProductCard({ product }: { product: Product }) {
+interface ProductCardProps {
+  product: Product;
+  onSelectProduct?: (product: Product) => void;
+}
+
+export default function ProductCard({ product, onSelectProduct }: ProductCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart)
   const design = useTerminalDesignStore()
   
@@ -11,6 +17,15 @@ export default function ProductCard({ product }: { product: Product }) {
   const productName = product.name || 'Unknown Product';
   const currency = design.currencySymbol || '₹';
   const accentColor = design.accentColor || 'var(--theme-accent, #DB2777)';
+  const hasAddons = Boolean(product.addonGroupIds && product.addonGroupIds.length > 0);
+
+  const handleAdd = () => {
+    if (onSelectProduct) {
+      onSelectProduct(product);
+    } else {
+      addToCart(product);
+    }
+  };
 
   return (
     <div className="grid grid-cols-12 items-center gap-4 border-b border-zinc-800/60 bg-zinc-950 px-6 py-4 transition-colors hover:bg-zinc-900/60">
@@ -30,7 +45,15 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
         )}
         <div className="flex flex-col">
-          <span className="font-bold text-white text-sm">{productName}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-white text-sm">{productName}</span>
+            {hasAddons && (
+              <span className="inline-flex items-center gap-1 rounded bg-purple-950/80 border border-purple-800/60 px-1.5 py-0.2 text-[10px] font-bold text-purple-300">
+                <Layers className="h-2.5 w-2.5" />
+                Add-ons
+              </span>
+            )}
+          </div>
           <span className="text-xs text-zinc-500 font-mono mt-0.5">SKU: {product.sku || 'N/A'}</span>
         </div>
       </div>
@@ -44,10 +67,10 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="col-span-3 flex justify-end">
         <button 
           className="flex items-center gap-2 rounded-xl bg-theme-bar border border-theme shadow-theme-glow hover:opacity-95 px-4 py-2 text-xs font-bold text-white transition-all cursor-pointer active:scale-95"
-          onClick={() => addToCart(product)}
+          onClick={handleAdd}
         >
           <ShoppingCartIcon className="h-3.5 w-3.5" />
-          <span>Add</span> <span className="hidden opacity-75 xl:inline-block">[↵]</span>
+          <span>{hasAddons ? 'Customize' : 'Add'}</span> <span className="hidden opacity-75 xl:inline-block">[↵]</span>
         </button>
       </div>
     </div>
