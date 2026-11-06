@@ -105,7 +105,19 @@ export function applyThemeToDom(theme?: Partial<CompanyTheme> | null, forceApply
 
   // If on terminal and not forced, DO NOT overwrite terminal's own independent dark/light mode with dashboard mode!
   if (!isTerminal) {
-    const mode = t.mode === 'light' ? 'light' : 'dark';
+    let userMode: string | null = null;
+    try {
+      const match = document.cookie.match(/(^| )auth_username=([^;]+)/);
+      const username = match ? match[2] : null;
+      if (username) {
+        userMode = localStorage.getItem(`dashboard_theme_mode_${username}`);
+      }
+      if (!userMode) {
+        userMode = localStorage.getItem('dashboard_theme_mode');
+      }
+    } catch {}
+
+    const mode = (userMode === 'light' || userMode === 'dark') ? userMode : (t.mode === 'light' ? 'light' : 'dark');
     root.setAttribute('data-theme', mode);
     if (mode === 'light') {
       root.classList.add('light-mode');

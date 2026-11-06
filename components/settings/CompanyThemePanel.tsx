@@ -143,28 +143,6 @@ export default function CompanyThemePanel({
     fetchTheme('company_override', cid);
   };
 
-  const handleModeChange = (mode: 'dark' | 'light') => {
-    const updated: CompanyTheme = {
-      ...activeTheme,
-      mode,
-    };
-    setActiveTheme(updated);
-    applyThemeToDom(updated);
-
-    // Instant local cache update for reactive multi-tab and navigation consistency
-    try {
-      const isSystem = role === 'super_admin' && adminTargetMode === 'super_admin_system';
-      const targetCid = selectedCompanyId || companyId;
-      if (isSystem) {
-        localStorage.setItem('super_admin_theme_default', JSON.stringify(updated));
-        localStorage.setItem('company_theme_default', JSON.stringify(updated));
-      } else if (targetCid) {
-        localStorage.setItem(`company_theme_${targetCid}`, JSON.stringify(updated));
-      }
-    } catch {}
-    window.dispatchEvent(new Event('company-theme-changed'));
-  };
-
   const handleSelectPreset = (presetKey: string) => {
     const preset = PREDEFINED_THEMES[presetKey];
     if (preset) {
@@ -510,63 +488,6 @@ export default function CompanyThemePanel({
             <span>{errorMsg}</span>
           </div>
         )}
-      </div>
-
-      {/* 2. Appearance Mode Toggle (Dark Mode vs Light Mode) */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-5 shadow-2xl backdrop-blur-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div 
-              className="flex h-11 w-11 items-center justify-center rounded-2xl border shadow-md shrink-0"
-              style={{
-                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
-                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
-                color: 'var(--theme-accent, #DB2777)',
-              }}
-            >
-              <SunMoon className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-black text-white">Appearance Mode</h3>
-                <span className="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[10px] font-bold text-zinc-300 border border-zinc-700 uppercase">
-                  {(activeTheme.mode || 'dark')} Active
-                </span>
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Switch between sleek Dark Mode and high-contrast Light Mode. Applies immediately to all cards, tables, inputs, and navigation.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 rounded-xl bg-zinc-950 p-1.5 border border-zinc-800 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleModeChange('dark')}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-                (activeTheme.mode || 'dark') === 'dark'
-                  ? 'bg-zinc-800 border border-zinc-600 text-white shadow-md font-black'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-              }`}
-            >
-              <Moon className="h-4 w-4 text-indigo-400" />
-              <span>🌙 Dark Mode</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleModeChange('light')}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
-                activeTheme.mode === 'light'
-                  ? 'bg-white border border-zinc-300 text-zinc-900 shadow-md font-black'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-              }`}
-            >
-              <Sun className="h-4 w-4 text-amber-500" />
-              <span>☀️ Light Mode</span>
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Five Predefined Themes Grid */}

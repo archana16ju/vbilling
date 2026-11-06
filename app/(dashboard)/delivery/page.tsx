@@ -2005,20 +2005,46 @@ export default function DeliveryManagementPage() {
               <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Order Items</div>
               <div className="max-h-56 overflow-y-auto no-scrollbar divide-y divide-zinc-800 border border-zinc-800 rounded-2xl bg-zinc-950">
                 {viewingOrderItems.items && viewingOrderItems.items.length > 0 ? (
-                  viewingOrderItems.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="h-5 w-5 rounded-md bg-pink-500/20 border border-pink-500/30 text-pink-400 flex items-center justify-center text-[11px] font-bold">
-                          {item.quantity}x
-                        </span>
-                        <span className="font-semibold text-white">{item.name}</span>
+                  viewingOrderItems.items.map((item: any, idx: number) => {
+                    const name = item.product?.name || item.name || item.productName || item.title || 'Product';
+                    const price = Number(item.product?.price ?? item.price ?? 0);
+                    const qty = Number(item.quantity ?? 1);
+                    const lineTotal = Number(item.total ?? (price * qty));
+                    const image = item.product?.image || item.image;
+                    const addOns = Array.isArray(item.selectedAddOns) ? item.selectedAddOns : [];
+
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-3 text-xs gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {image && (
+                            <img
+                              src={image}
+                              alt={name}
+                              className="h-8 w-8 rounded-lg object-cover border border-zinc-800 shrink-0 bg-zinc-900"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          )}
+                          <span className="h-5 w-5 rounded-md bg-pink-500/20 border border-pink-500/30 text-pink-400 flex items-center justify-center text-[11px] font-bold shrink-0">
+                            {qty}x
+                          </span>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-white block truncate">{name}</span>
+                            {addOns.length > 0 && (
+                              <div className="text-[10px] text-pink-400 truncate">
+                                + {addOns.map((a: any) => `${a.name || a.addonName || ''}${a.price ? ` (₹${a.price})` : ''}`).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right font-mono shrink-0">
+                          <span className="text-zinc-400 text-[11px] block">₹{price.toFixed(2)} each</span>
+                          <div className="font-bold text-white">₹{lineTotal.toFixed(2)}</div>
+                        </div>
                       </div>
-                      <div className="text-right font-mono">
-                        <span className="text-zinc-400 text-[11px]">₹{(item.price || 0).toFixed(2)} each</span>
-                        <div className="font-bold text-white">₹{((item.price || 0) * (item.quantity || 1)).toFixed(2)}</div>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-4 text-center text-xs text-zinc-500">No individual item details recorded for this order.</div>
                 )}

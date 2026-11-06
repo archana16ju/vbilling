@@ -35,11 +35,13 @@ export interface TerminalDesignState {
   quickDoubleTap: boolean;
 
   // Category Design options
-  categoryStyle: 'card-tile' | 'compact-list';
+  categoryStyle: 'card-tile' | 'compact-list' | 'grid-2col';
   categoryCardHeight: 'h-20' | 'h-24' | 'h-28';
   categoryThumbnailShape: 'rounded-full' | 'rounded-xl' | 'rounded-lg';
   showCategoryCount: boolean;
   categorySearchPlaceholder: string;
+  isFixedCategorySection: boolean;
+  categoryVisibleCount: number;
 
   // Persistence metadata
   isLoaded: boolean;
@@ -131,6 +133,8 @@ const initialDesignState: Omit<
   categoryThumbnailShape: 'rounded-full',
   showCategoryCount: true,
   categorySearchPlaceholder: 'Search category...',
+  isFixedCategorySection: false,
+  categoryVisibleCount: 4,
 
   // Metadata
   isLoaded: false,
@@ -286,6 +290,8 @@ export const useTerminalDesignStore = create<TerminalDesignState>()(
             categoryThumbnailShape: state.categoryThumbnailShape || 'rounded-full',
             showCategoryCount: state.showCategoryCount ?? true,
             categorySearchPlaceholder: state.categorySearchPlaceholder || 'Search category...',
+            isFixedCategorySection: state.isFixedCategorySection ?? false,
+            categoryVisibleCount: state.categoryVisibleCount || 4,
           };
 
           const res = await fetch('/api/companies/terminal-design', {

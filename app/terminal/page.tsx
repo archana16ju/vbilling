@@ -147,7 +147,7 @@ export default function TerminalPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Enlarged Category Section with rich image cards and overlay labels */}
-        <div className="hidden w-40 shrink-0 lg:block">
+        <div className={`hidden shrink-0 lg:block transition-all duration-200 ${design.categoryStyle === 'grid-2col' ? 'w-56 xl:w-64' : 'w-40'}`}>
           <CategoryPanel />
         </div>
 

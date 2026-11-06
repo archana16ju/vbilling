@@ -24,11 +24,13 @@ export interface PersistedTerminalDesign {
   quickDoubleTap?: boolean;
 
   // Category Design options
-  categoryStyle?: 'card-tile' | 'compact-list';
+  categoryStyle?: 'card-tile' | 'compact-list' | 'grid-2col';
   categoryCardHeight?: 'h-20' | 'h-24' | 'h-28';
   categoryThumbnailShape?: 'rounded-full' | 'rounded-xl' | 'rounded-lg';
   showCategoryCount?: boolean;
   categorySearchPlaceholder?: string;
+  isFixedCategorySection?: boolean;
+  categoryVisibleCount?: number;
 }
 
 export const DEFAULT_PERSISTED_TERMINAL_DESIGN: PersistedTerminalDesign = {
@@ -59,6 +61,8 @@ export const DEFAULT_PERSISTED_TERMINAL_DESIGN: PersistedTerminalDesign = {
   categoryThumbnailShape: 'rounded-full',
   showCategoryCount: true,
   categorySearchPlaceholder: 'Search category...',
+  isFixedCategorySection: false,
+  categoryVisibleCount: 4,
 };
 
 /**

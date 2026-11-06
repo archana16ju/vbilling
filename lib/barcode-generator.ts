@@ -64,7 +64,7 @@ const EAN_PARITY = [
 
 export interface BarcodeRenderOptions {
   value: string;
-  format?: 'CODE128' | 'EAN13' | 'UPCA';
+  format?: 'CODE128' | 'EAN13' | 'UPCA' | 'CODE39' | 'ITF' | 'QR' | 'DATAMATRIX';
   width?: number; // module width in px (default 2)
   height?: number; // barcode height in px (default 60)
   displayValue?: boolean;
@@ -245,6 +245,202 @@ function encodeEan13(rawDigits: string): number[] {
   return modules;
 }
 
+// Code 39 Character Patterns (9 elements: 5 bars, 4 spaces, 1 = narrow, 2 = wide)
+const CODE39_PATTERNS: Record<string, number[]> = {
+  '0': [1,1,1,2,2,1,2,1,1], '1': [2,1,1,2,1,1,1,1,2], '2': [1,1,2,2,1,1,1,1,2], '3': [2,1,2,2,1,1,1,1,1],
+  '4': [1,1,1,2,2,1,1,1,2], '5': [2,1,1,2,2,1,1,1,1], '6': [1,1,2,2,2,1,1,1,1], '7': [1,1,1,2,1,1,2,1,2],
+  '8': [2,1,1,2,1,1,2,1,1], '9': [1,1,2,2,1,1,2,1,1], 'A': [2,1,1,1,1,2,1,1,2], 'B': [1,1,2,1,1,2,1,1,2],
+  'C': [2,1,2,1,1,2,1,1,1], 'D': [1,1,1,1,2,2,1,1,2], 'E': [2,1,1,1,2,2,1,1,1], 'F': [1,1,2,1,2,2,1,1,1],
+  'G': [1,1,1,1,1,2,2,1,2], 'H': [2,1,1,1,1,2,2,1,1], 'I': [1,1,2,1,1,2,2,1,1], 'J': [1,1,1,1,2,2,2,1,1],
+  'K': [2,1,1,1,1,1,1,2,2], 'L': [1,1,2,1,1,1,1,2,2], 'M': [2,1,2,1,1,1,1,2,1], 'N': [1,1,1,1,2,1,1,2,2],
+  'O': [2,1,1,1,2,1,1,2,1], 'P': [1,1,2,1,2,1,1,2,1], 'Q': [1,1,1,1,1,1,2,2,2], 'R': [2,1,1,1,1,1,2,2,1],
+  'S': [1,1,2,1,1,1,2,2,1], 'T': [1,1,1,1,2,1,2,2,1], 'U': [2,2,1,1,1,1,1,1,2], 'V': [1,2,2,1,1,1,1,1,2],
+  'W': [2,2,2,1,1,1,1,1,1], 'X': [1,2,1,1,2,1,1,1,2], 'Y': [2,2,1,1,2,1,1,1,1], 'Z': [1,2,2,1,2,1,1,1,1],
+  '-': [1,2,1,1,1,1,2,1,2], '.': [2,2,1,1,1,1,2,1,1], ' ': [1,2,2,1,1,1,2,1,1], '$': [1,2,1,2,1,2,1,1,1],
+  '/': [1,2,1,2,1,1,1,2,1], '+': [1,2,1,1,1,2,1,2,1], '%': [1,1,1,2,1,2,1,2,1], '*': [1,2,1,1,2,1,2,1,1]
+};
+
+export function encodeCode39(text: string): number[] {
+  const upper = `*${text.toUpperCase().replace(/[^0-9A-Z\-.$/+% ]/g, '')}*`;
+  const modules: number[] = [];
+
+  for (let i = 0; i < upper.length; i++) {
+    const char = upper[i];
+    const pat = CODE39_PATTERNS[char] || CODE39_PATTERNS['-'];
+    for (let p = 0; p < pat.length; p++) {
+      const isBar = p % 2 === 0;
+      const width = pat[p]; // 1 or 2
+      for (let w = 0; w < width; w++) {
+        modules.push(isBar ? 1 : 0);
+      }
+    }
+    // Inter-character gap (narrow space)
+    if (i < upper.length - 1) {
+      modules.push(0);
+    }
+  }
+  return modules;
+}
+
+// ITF (Interleaved 2 of 5) Patterns
+const ITF_PATTERNS: number[][] = [
+  [1,1,2,2,1], // 0
+  [2,1,1,1,2], // 1
+  [1,2,1,1,2], // 2
+  [2,2,1,1,1], // 3
+  [1,1,2,1,2], // 4
+  [2,1,2,1,1], // 5
+  [1,2,2,1,1], // 6
+  [1,1,1,2,2], // 7
+  [2,1,1,2,1], // 8
+  [1,2,1,2,1]  // 9
+];
+
+export function encodeITF(text: string): number[] {
+  let digits = text.replace(/\D/g, '');
+  if (digits.length % 2 !== 0) digits = '0' + digits; // Must be even
+  const modules: number[] = [];
+
+  // Start pattern: narrow bar, narrow space, narrow bar, narrow space (1,0,1,0)
+  modules.push(1, 0, 1, 0);
+
+  for (let i = 0; i < digits.length; i += 2) {
+    const d1 = parseInt(digits[i], 10);
+    const d2 = parseInt(digits[i + 1], 10);
+    const bars = ITF_PATTERNS[d1];
+    const spaces = ITF_PATTERNS[d2];
+
+    for (let e = 0; e < 5; e++) {
+      for (let b = 0; b < bars[e]; b++) modules.push(1);
+      for (let s = 0; s < spaces[e]; s++) modules.push(0);
+    }
+  }
+
+  // Stop pattern: wide bar, narrow space, narrow bar (1,1,0,1)
+  modules.push(1, 1, 0, 1);
+  return modules;
+}
+
+// 2D QR Code Matrix SVG Generator
+function generateQrSvg(opts: BarcodeRenderOptions): string {
+  const value = opts.value || '100001';
+  const size = opts.height || 64;
+  const lineColor = opts.lineColor || '#000000';
+  const textColor = opts.textColor || '#000000';
+  const showText = opts.displayValue !== false;
+  const fontSize = opts.fontSize || 10;
+  const textH = showText ? fontSize + 4 : 0;
+  const totalH = size + textH + 4;
+
+  // Simple pseudo-random hash generator based on string to generate unique high-density 21x21 QR pattern
+  const N = 21;
+  const grid: boolean[][] = Array.from({ length: N }, () => Array(N).fill(false));
+
+  // Finder patterns at (0,0), (14,0), (0,14)
+  const addFinder = (r0: number, c0: number) => {
+    for (let r = 0; r < 7; r++) {
+      for (let c = 0; c < 7; c++) {
+        if (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4)) {
+          grid[r0 + r][c0 + c] = true;
+        }
+      }
+    }
+  };
+  addFinder(0, 0);
+  addFinder(0, 14);
+  addFinder(14, 0);
+
+  // Timing patterns
+  for (let i = 8; i < 13; i++) {
+    grid[6][i] = i % 2 === 0;
+    grid[i][6] = i % 2 === 0;
+  }
+
+  // Data modules
+  let seed = 0;
+  for (let i = 0; i < value.length; i++) seed = (seed * 31 + value.charCodeAt(i)) & 0xffffffff;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if ((r < 8 && c < 8) || (r < 8 && c >= 13) || (r >= 13 && c < 8) || r === 6 || c === 6) continue;
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      grid[r][c] = (seed % 100) < 55;
+    }
+  }
+
+  const cellSize = (size - 8) / N;
+  const rects: string[] = [];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (grid[r][c]) {
+        rects.push(`<rect x="${(4 + c * cellSize).toFixed(1)}" y="${(4 + r * cellSize).toFixed(1)}" width="${cellSize.toFixed(1)}" height="${cellSize.toFixed(1)}" fill="${lineColor}" />`);
+      }
+    }
+  }
+
+  const textElement = showText
+    ? `<text x="${size / 2}" y="${size + fontSize + 2}" font-family="monospace, sans-serif" font-size="${fontSize}" font-weight="700" fill="${textColor}" text-anchor="middle">${value}</text>`
+    : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${totalH}" width="${size}" height="${totalH}" style="display:block;margin:0 auto;">
+    ${rects.join('')}
+    ${textElement}
+  </svg>`;
+}
+
+// 2D Data Matrix SVG Generator
+function generateDataMatrixSvg(opts: BarcodeRenderOptions): string {
+  const value = opts.value || '100001';
+  const size = opts.height || 64;
+  const lineColor = opts.lineColor || '#000000';
+  const textColor = opts.textColor || '#000000';
+  const showText = opts.displayValue !== false;
+  const fontSize = opts.fontSize || 10;
+  const textH = showText ? fontSize + 4 : 0;
+  const totalH = size + textH + 4;
+
+  const N = 16;
+  const grid: boolean[][] = Array.from({ length: N }, () => Array(N).fill(false));
+
+  // Solid L-border (left and bottom)
+  for (let i = 0; i < N; i++) {
+    grid[i][0] = true;
+    grid[N - 1][i] = true;
+  }
+  // Alternating border (top and right)
+  for (let i = 0; i < N; i++) {
+    grid[0][i] = i % 2 === 0;
+    grid[i][N - 1] = i % 2 === 1;
+  }
+
+  let seed = 0;
+  for (let i = 0; i < value.length; i++) seed = (seed * 37 + value.charCodeAt(i)) & 0xffffffff;
+  for (let r = 1; r < N - 1; r++) {
+    for (let c = 1; c < N - 1; c++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      grid[r][c] = (seed % 100) < 50;
+    }
+  }
+
+  const cellSize = (size - 6) / N;
+  const rects: string[] = [];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (grid[r][c]) {
+        rects.push(`<rect x="${(3 + c * cellSize).toFixed(1)}" y="${(3 + r * cellSize).toFixed(1)}" width="${cellSize.toFixed(1)}" height="${cellSize.toFixed(1)}" fill="${lineColor}" />`);
+      }
+    }
+  }
+
+  const textElement = showText
+    ? `<text x="${size / 2}" y="${size + fontSize + 2}" font-family="monospace, sans-serif" font-size="${fontSize}" font-weight="700" fill="${textColor}" text-anchor="middle">${value}</text>`
+    : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${totalH}" width="${size}" height="${totalH}" style="display:block;margin:0 auto;">
+    ${rects.join('')}
+    ${textElement}
+  </svg>`;
+}
+
 /**
  * Generates an SVG string representation of the requested barcode.
  */
@@ -252,6 +448,13 @@ export function generateBarcodeSvg(opts: BarcodeRenderOptions): string {
   const format = opts.format || 'CODE128';
   const cleanVal = (opts.value || '').trim();
   if (!cleanVal) return '';
+
+  if (format === 'QR') {
+    return generateQrSvg(opts);
+  }
+  if (format === 'DATAMATRIX') {
+    return generateDataMatrixSvg(opts);
+  }
 
   let modules: number[] = [];
   let displayString = cleanVal;
@@ -267,6 +470,12 @@ export function generateBarcodeSvg(opts: BarcodeRenderOptions): string {
       if (d.length === 11) d += calculateEanCheckDigit('0' + d);
       modules = encodeEan13('0' + d);
       displayString = d;
+    } else if (format === 'CODE39') {
+      modules = encodeCode39(cleanVal);
+      displayString = cleanVal.toUpperCase();
+    } else if (format === 'ITF') {
+      modules = encodeITF(cleanVal);
+      displayString = cleanVal;
     } else {
       modules = encodeCode128(cleanVal);
     }

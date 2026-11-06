@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useTerminalStore } from "@/store/useTerminalStore"
-import { Monitor, Printer, Bluetooth, Wifi, Search, CheckCircle2, Network, LayoutGrid } from "lucide-react"
+import { Monitor, Printer, Bluetooth, Wifi, Search, CheckCircle2, Network, LayoutGrid, Barcode, ArrowRight, ArrowLeft, X, ChevronUp, ChevronDown, Maximize2, Minimize2, SlidersHorizontal } from "lucide-react"
 import KeyboardShortcutsSettingsPanel from "@/components/settings/KeyboardShortcutsSettingsPanel"
 import StorageManager from "@/components/settings/StorageManager"
 import PrinterDesignPanel from '@/components/settings/PrinterDesignPanel';
@@ -11,6 +11,8 @@ import CompanyPermissionsPanel from "@/components/settings/CompanyPermissionsPan
 import CompanyThemePanel from "@/components/settings/CompanyThemePanel"
 import TaxesChargesPanel from "@/components/settings/TaxesChargesPanel"
 import WhatsAppSettingsPanel from "@/components/settings/WhatsAppSettingsPanel"
+import BarcodePrinterSettingsSection from "@/components/settings/BarcodePrinterSettingsSection"
+import { useBarcodePrinterStore } from "@/store/useBarcodePrinterStore"
 
 const BASE_TABS = [
   { id: 'theme', label: '🎨 Company Theme' },
@@ -89,6 +91,22 @@ export default function SettingsPage() {
   const [wifiIp, setWifiIp] = useState(wifiPrinter?.ip || '')
   const [wifiPort, setWifiPort] = useState(wifiPrinter?.port || '9100')
   const [wifiName, setWifiName] = useState(wifiPrinter?.name || 'Network Printer')
+
+  // Printer Settings Overlay State
+  const barcodeSettings = useBarcodePrinterStore()
+  const [printerOverlay, setPrinterOverlay] = useState<'receipt' | 'barcode' | null>(null)
+  const [overlayHeightMode, setOverlayHeightMode] = useState<'compact' | 'standard' | 'tall' | 'full'>('standard')
+
+  // Close overlay on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && printerOverlay) {
+        setPrinterOverlay(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [printerOverlay])
 
   const scanBluetooth = async () => {
     setIsScanning(true);
@@ -206,162 +224,422 @@ export default function SettingsPage() {
               {activeTab === 'printer-design' && <PrinterDesignPanel />}
               {activeTab === 'terminal-design' && <TerminalDesignPanel />}
               {activeTab === 'printer' && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl text-white backdrop-blur-sm">
-                  <h2 className="mb-5 text-lg font-black text-white flex items-center gap-2">
-                    <Printer className="h-5 w-5 text-pink-400" /> Printer Settings
-                  </h2>
+                <div className="space-y-6">
+                  {/* Printer Hub Overview Banner */}
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl backdrop-blur-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <h2 className="text-xl font-black text-white flex items-center gap-2.5">
+                          <Printer className="h-6 w-6 text-pink-400" />
+                          Printer Settings
+                        </h2>
+                        <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                          Select a printer category below to manage hardware connections, printing formats, and configurations in an overlay.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-950/60 text-zinc-400 shrink-0">
+                        <SlidersHorizontal className="h-3.5 w-3.5 text-pink-400" />
+                        <span>2 Dedicated Printer Channels</span>
+                      </div>
+                    </div>
+                  </div>
 
-                  <div className="space-y-4">
-                    <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Monitor className="h-6 w-6 text-pink-400" />
+                  {/* Two Separate Grid Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Card 1: Receipt Printer */}
+                    <div
+                      onClick={() => setPrinterOverlay('receipt')}
+                      className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl hover:border-pink-500/50 hover:bg-zinc-900 transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-pink-500/10 hover:shadow-2xl"
+                    >
+                      <div className="space-y-4">
+                        {/* Header with Icon & Active Status Badge */}
+                        <div className="flex items-start justify-between">
+                          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/10 text-pink-400 border border-pink-500/30 group-hover:scale-105 transition-transform duration-300 shadow-inner">
+                            <Printer className="h-7 w-7" />
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-zinc-700/80 bg-zinc-950/70 text-zinc-300">
+                            <span className={`h-2 w-2 rounded-full ${printerType === 'none' ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
+                            {printerType === 'browser' && 'Browser Print'}
+                            {printerType === 'wire' && 'Wired POS (USB)'}
+                            {printerType === 'bluetooth' && (bluetoothPrinter ? `BT: ${bluetoothPrinter.name}` : 'Bluetooth POS')}
+                            {printerType === 'wifi' && (wifiPrinter ? `WiFi: ${wifiPrinter.ip}` : 'WiFi Network')}
+                            {printerType === 'none' && 'Disabled'}
+                          </span>
+                        </div>
+
+                        {/* Title & Description */}
                         <div>
-                          <div className="font-bold text-white">Browser Print (Default)</div>
-                          <div className="text-xs text-zinc-400">Use standard browser print dialog</div>
+                          <h3 className="text-lg font-black text-white group-hover:text-pink-300 transition-colors flex items-center gap-2">
+                            Receipt Printer
+                          </h3>
+                          <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                            Configure customer bill receipts, thermal POS printers, cash drawer kicks, and network / Bluetooth receipt printers.
+                          </p>
+                        </div>
+
+                        {/* Feature Badges */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium">Browser & ESC/POS</span>
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium">Auto-Cut</span>
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium">USB / BT / WiFi</span>
                         </div>
                       </div>
-                      <input
-                        type="radio"
-                        name="printerType"
-                        value="browser"
-                        checked={printerType === 'browser'}
-                        onChange={(e) => setPrinterType(e.target.value)}
-                        className="h-5 w-5 text-pink-600 focus:ring-pink-500"
-                      />
-                    </label>
 
-                    <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Printer className="h-6 w-6 text-pink-400" />
+                      {/* Card Footer Action */}
+                      <div className="pt-6 mt-4 border-t border-zinc-800/80 flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-400 group-hover:text-white transition-colors">
+                          Configure Receipt Printer
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-pink-400 group-hover:translate-x-1 transition-transform">
+                          <span>Open Overlay</span>
+                          <ArrowRight className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Barcode Label Printer */}
+                    <div
+                      onClick={() => setPrinterOverlay('barcode')}
+                      className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl hover:border-cyan-500/50 hover:bg-zinc-900 transition-all duration-300 cursor-pointer overflow-hidden hover:shadow-cyan-500/10 hover:shadow-2xl"
+                    >
+                      <div className="space-y-4">
+                        {/* Header with Icon & Active Status Badge */}
+                        <div className="flex items-start justify-between">
+                          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/10 text-cyan-400 border border-cyan-500/30 group-hover:scale-105 transition-transform duration-300 shadow-inner">
+                            <Barcode className="h-7 w-7" />
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border border-zinc-700/80 bg-zinc-950/70 text-zinc-300">
+                            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+                            {barcodeSettings.connectionType === 'network' && (barcodeSettings.networkIp ? `LAN: ${barcodeSettings.networkIp}` : 'Network IP')}
+                            {barcodeSettings.connectionType === 'usb' && 'USB Printer'}
+                            {barcodeSettings.connectionType === 'bluetooth' && (barcodeSettings.bluetoothDeviceName ? `BT: ${barcodeSettings.bluetoothDeviceName}` : 'Bluetooth')}
+                            {barcodeSettings.connectionType === 'system' && 'Windows Driver'}
+                          </span>
+                        </div>
+
+                        {/* Title & Description */}
                         <div>
-                          <div className="font-bold text-white">Wired Printer (USB/POS)</div>
-                          <div className="text-xs text-zinc-400">Print receipt directly to a connected wired printer</div>
+                          <h3 className="text-lg font-black text-white group-hover:text-cyan-300 transition-colors flex items-center gap-2">
+                            Barcode Label Printer
+                          </h3>
+                          <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                            Configure adhesive barcode & SKU label printers, customizable mm dimensions, density, speed, ZPL / TSPL / EPL / CPCL languages.
+                          </p>
                         </div>
-                      </div>
-                      <input
-                        type="radio"
-                        name="printerType"
-                        value="wire"
-                        checked={printerType === 'wire'}
-                        onChange={(e) => setPrinterType(e.target.value)}
-                        className="h-5 w-5 text-pink-600 focus:ring-pink-500"
-                      />
-                    </label>
 
-                    <label className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Bluetooth className="h-6 w-6 text-pink-400" />
-                          <div>
-                            <div className="font-bold text-white">Bluetooth Printer</div>
-                            <div className="text-xs text-zinc-400">Print wirelessly to a nearby Bluetooth printer</div>
-                          </div>
+                        {/* Feature Badges */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium font-mono uppercase">{barcodeSettings.printerLanguage}</span>
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium">{barcodeSettings.labelWidthMm}×{barcodeSettings.labelHeightMm} mm</span>
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium font-mono">{barcodeSettings.defaultBarcodeFormat}</span>
+                          <span className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 font-medium">Live Preview</span>
                         </div>
-                        <input
-                          type="radio"
-                          name="printerType"
-                          value="bluetooth"
-                          checked={printerType === 'bluetooth'}
-                          onChange={(e) => setPrinterType(e.target.value)}
-                          className="h-5 w-5 text-pink-600 focus:ring-pink-500"
-                        />
                       </div>
-                      {printerType === 'bluetooth' && (
-                        <div className="mt-4 border-t border-zinc-800 pt-4 pl-9">
-                          <div className="flex flex-col gap-3">
-                            <button
-                              onClick={(e) => { e.preventDefault(); scanBluetooth(); }}
-                              disabled={isScanning}
-                              className="flex w-fit items-center gap-2 rounded-xl btn-theme-primary px-5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 disabled:opacity-50 transition cursor-pointer"
-                            >
-                              <Search className="h-4 w-4" />
-                              {isScanning ? 'Scanning...' : 'Scan for Devices'}
-                            </button>
-                            {bluetoothPrinter ? (
-                              <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/15 p-2.5 rounded-xl border border-emerald-500/30 w-fit">
-                                <CheckCircle2 className="h-4 w-4" />
-                                Connected: <strong>{bluetoothPrinter.name}</strong>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-zinc-500">No Bluetooth printer selected.</div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </label>
 
-                    <label className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Wifi className="h-6 w-6 text-pink-400" />
-                          <div>
-                            <div className="font-bold text-white">WiFi / Network Printer</div>
-                            <div className="text-xs text-zinc-400">Print to a network IP printer</div>
-                          </div>
+                      {/* Card Footer Action */}
+                      <div className="pt-6 mt-4 border-t border-zinc-800/80 flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-400 group-hover:text-white transition-colors">
+                          Configure Barcode Printer
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 group-hover:translate-x-1 transition-transform">
+                          <span>Open Overlay</span>
+                          <ArrowRight className="h-4 w-4" />
                         </div>
-                        <input
-                          type="radio"
-                          name="printerType"
-                          value="wifi"
-                          checked={printerType === 'wifi'}
-                          onChange={(e) => setPrinterType(e.target.value)}
-                          className="h-5 w-5 text-pink-600 focus:ring-pink-500"
-                        />
                       </div>
-                      {printerType === 'wifi' && (
-                        <div className="mt-4 border-t border-zinc-800 pt-4 pl-9">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Device Name</label>
-                              <input type="text" value={wifiName} onChange={e => setWifiName(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white outline-none focus:border-pink-500" placeholder="Network Printer" />
+                    </div>
+                  </div>
+
+                  {/* Settings Overlay Modal */}
+                  {printerOverlay && (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+                      onClick={(e) => {
+                        if (e.target === e.currentTarget) setPrinterOverlay(null);
+                      }}
+                    >
+                      <div
+                        className={`w-full max-w-4xl bg-zinc-900 text-white border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 animate-in zoom-in-95 ${
+                          overlayHeightMode === 'compact'
+                            ? 'h-[60vh] max-h-[600px]'
+                            : overlayHeightMode === 'tall'
+                            ? 'h-[90vh] max-h-[920px]'
+                            : overlayHeightMode === 'full'
+                            ? 'h-[96vh]'
+                            : 'h-[78vh] max-h-[800px]'
+                        }`}
+                      >
+                        {/* Overlay Sticky Header */}
+                        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur shrink-0 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`p-2.5 rounded-xl border shrink-0 ${
+                              printerOverlay === 'receipt'
+                                ? 'bg-pink-500/10 text-pink-400 border-pink-500/20'
+                                : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                            }`}>
+                              {printerOverlay === 'receipt' ? <Printer className="h-5 w-5" /> : <Barcode className="h-5 w-5" />}
                             </div>
-                            <div>
-                              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">IP Address</label>
-                              <input type="text" value={wifiIp} onChange={e => setWifiIp(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white font-mono outline-none focus:border-pink-500" placeholder="192.168.1.100" />
+                            <div className="truncate">
+                              <h3 className="text-base font-black text-white truncate">
+                                {printerOverlay === 'receipt' ? 'Receipt Printer Settings' : 'Barcode Label Printer Settings'}
+                              </h3>
+                              <p className="text-[11px] text-zinc-400 truncate">
+                                {printerOverlay === 'receipt' ? 'Configure bill printing, POS cut & cash drawer' : 'Configure adhesive label dimensions, formats & command languages'}
+                              </p>
                             </div>
-                            <div>
-                              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Port</label>
-                              <input type="text" value={wifiPort} onChange={e => setWifiPort(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white font-mono outline-none focus:border-pink-500" placeholder="9100" />
-                            </div>
-                            <div className="flex items-end">
+                          </div>
+
+                          {/* Height Controls & Close Action */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Height Adjuster Toolbar */}
+                            <div className="hidden sm:flex items-center rounded-xl border border-zinc-800 bg-zinc-950/80 p-0.5 text-xs text-zinc-400">
+                              <span className="px-2 text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Height</span>
                               <button
-                                onClick={(e) => { e.preventDefault(); saveWifi(); }}
-                                className="flex w-full items-center justify-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg active:scale-95 transition cursor-pointer"
+                                type="button"
+                                onClick={() => {
+                                  const modes: ('compact' | 'standard' | 'tall' | 'full')[] = ['compact', 'standard', 'tall', 'full'];
+                                  const idx = modes.indexOf(overlayHeightMode);
+                                  if (idx > 0) setOverlayHeightMode(modes[idx - 1]);
+                                }}
+                                disabled={overlayHeightMode === 'compact'}
+                                title="Decrease Overlay Height"
+                                className="p-1 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
                               >
-                                Save WiFi Printer
+                                <ChevronDown className="h-4 w-4" />
+                              </button>
+                              <span className="px-2 text-[11px] font-mono font-bold text-zinc-300">
+                                {overlayHeightMode === 'compact' && '60%'}
+                                {overlayHeightMode === 'standard' && '78%'}
+                                {overlayHeightMode === 'tall' && '90%'}
+                                {overlayHeightMode === 'full' && '96%'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const modes: ('compact' | 'standard' | 'tall' | 'full')[] = ['compact', 'standard', 'tall', 'full'];
+                                  const idx = modes.indexOf(overlayHeightMode);
+                                  if (idx < modes.length - 1) setOverlayHeightMode(modes[idx + 1]);
+                                }}
+                                disabled={overlayHeightMode === 'full'}
+                                title="Increase Overlay Height"
+                                className="p-1 rounded-lg hover:bg-zinc-800 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setOverlayHeightMode(prev => prev === 'full' ? 'standard' : 'full')}
+                                title={overlayHeightMode === 'full' ? 'Restore Standard Height' : 'Maximize Height'}
+                                className="p-1 ml-0.5 rounded-lg hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+                              >
+                                {overlayHeightMode === 'full' ? <Minimize2 className="h-3.5 w-3.5 text-pink-400" /> : <Maximize2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>
+
+                            {/* Back to Printers Button */}
+                            <button
+                              type="button"
+                              onClick={() => setPrinterOverlay(null)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                            >
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Back to Printers</span>
+                            </button>
+
+                            {/* Close Icon Button */}
+                            <button
+                              type="button"
+                              onClick={() => setPrinterOverlay(null)}
+                              className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                              title="Close Overlay (Esc)"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
                           </div>
-                          {wifiPrinter && (
-                            <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/15 p-2.5 rounded-xl border border-emerald-500/30 w-fit">
-                              <CheckCircle2 className="h-4 w-4" />
-                              Configured: <strong>{wifiPrinter.name} ({wifiPrinter.ip})</strong>
-                            </div>
+                        </div>
+
+                        {/* Overlay Scrollable Content Area */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 [scrollbar-width:thin] [scrollbar-color:#3f3f46_transparent]">
+                          {printerOverlay === 'receipt' && (
+                            <div className="space-y-4">
+                              <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <Monitor className="h-6 w-6 text-pink-400" />
+                                  <div>
+                                    <div className="font-bold text-white">Browser Print (Default)</div>
+                                    <div className="text-xs text-zinc-400">Use standard browser print dialog</div>
+                                  </div>
+                                </div>
+                                <input
+                                  type="radio"
+                                  name="printerType"
+                                  value="browser"
+                                  checked={printerType === 'browser'}
+                                  onChange={(e) => setPrinterType(e.target.value)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500"
+                                />
+                              </label>
+
+                              <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <Printer className="h-6 w-6 text-pink-400" />
+                                  <div>
+                                    <div className="font-bold text-white">Wired Printer (USB/POS)</div>
+                                    <div className="text-xs text-zinc-400">Print receipt directly to a connected wired printer</div>
+                                  </div>
+                                </div>
+                                <input
+                                  type="radio"
+                                  name="printerType"
+                                  value="wire"
+                                  checked={printerType === 'wire'}
+                                  onChange={(e) => setPrinterType(e.target.value)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500"
+                                />
+                              </label>
+
+                              <label className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <Bluetooth className="h-6 w-6 text-pink-400" />
+                                    <div>
+                                      <div className="font-bold text-white">Bluetooth Printer</div>
+                                      <div className="text-xs text-zinc-400">Print wirelessly to a nearby Bluetooth printer</div>
+                                    </div>
+                                  </div>
+                                <input
+                                  type="radio"
+                                  name="printerType"
+                                  value="bluetooth"
+                                  checked={printerType === 'bluetooth'}
+                                  onChange={(e) => setPrinterType(e.target.value)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500"
+                                />
+                              </div>
+                              {printerType === 'bluetooth' && (
+                                <div className="mt-4 border-t border-zinc-800 pt-4 pl-9">
+                                  <div className="flex flex-col gap-3">
+                                    <button
+                                      onClick={(e) => { e.preventDefault(); scanBluetooth(); }}
+                                      disabled={isScanning}
+                                      className="flex w-fit items-center gap-2 rounded-xl btn-theme-primary px-5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 disabled:opacity-50 transition cursor-pointer"
+                                    >
+                                      <Search className="h-4 w-4" />
+                                      {isScanning ? 'Scanning...' : 'Scan for Devices'}
+                                    </button>
+                                    {bluetoothPrinter ? (
+                                      <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/15 p-2.5 rounded-xl border border-emerald-500/30 w-fit">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Connected: <strong>{bluetoothPrinter.name}</strong>
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs text-zinc-500">No Bluetooth printer selected.</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </label>
+
+                            <label className="flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Wifi className="h-6 w-6 text-pink-400" />
+                                  <div>
+                                    <div className="font-bold text-white">WiFi / Network Printer</div>
+                                    <div className="text-xs text-zinc-400">Print to a network IP printer</div>
+                                  </div>
+                                </div>
+                                <input
+                                  type="radio"
+                                  name="printerType"
+                                  value="wifi"
+                                  checked={printerType === 'wifi'}
+                                  onChange={(e) => setPrinterType(e.target.value)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500"
+                                />
+                              </div>
+                              {printerType === 'wifi' && (
+                                <div className="mt-4 border-t border-zinc-800 pt-4 pl-9">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Device Name</label>
+                                      <input type="text" value={wifiName} onChange={e => setWifiName(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white outline-none focus:border-pink-500" placeholder="Network Printer" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">IP Address</label>
+                                      <input type="text" value={wifiIp} onChange={e => setWifiIp(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white font-mono outline-none focus:border-pink-500" placeholder="192.168.1.100" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1.5">Port</label>
+                                      <input type="text" value={wifiPort} onChange={e => setWifiPort(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2.5 text-sm text-white font-mono outline-none focus:border-pink-500" placeholder="9100" />
+                                    </div>
+                                    <div className="flex items-end">
+                                      <button
+                                        onClick={(e) => { e.preventDefault(); saveWifi(); }}
+                                        className="flex w-full items-center justify-center gap-2 rounded-xl btn-theme-primary px-5 py-2.5 text-xs font-bold text-white shadow-lg active:scale-95 transition cursor-pointer"
+                                      >
+                                        Save WiFi Printer
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {wifiPrinter && (
+                                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/15 p-2.5 rounded-xl border border-emerald-500/30 w-fit">
+                                      <CheckCircle2 className="h-4 w-4" />
+                                      Configured: <strong>{wifiPrinter.name} ({wifiPrinter.ip})</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </label>
+
+                            <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-6 w-6 items-center justify-center font-bold text-zinc-500 text-xl">Ø</div>
+                                <div>
+                                  <div className="font-bold text-white">No Printer</div>
+                                  <div className="text-xs text-zinc-400">Do not print bills automatically</div>
+                                </div>
+                              </div>
+                              <input
+                                type="radio"
+                                name="printerType"
+                                value="none"
+                                checked={printerType === 'none'}
+                                onChange={(e) => setPrinterType(e.target.value)}
+                                className="h-5 w-5 text-pink-600 focus:ring-pink-500"
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {printerOverlay === 'barcode' && (
+                          <div>
+                            <BarcodePrinterSettingsSection />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Overlay Sticky Footer */}
+                      <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur shrink-0 flex items-center justify-between text-xs text-zinc-400">
+                        <div>
+                          {printerOverlay === 'receipt' ? (
+                            <span>Active Receipt Mode: <strong className="text-pink-300 font-mono">{printerType.toUpperCase()}</strong></span>
+                          ) : (
+                            <span>Active Barcode Mode: <strong className="text-cyan-300 font-mono">{barcodeSettings.connectionType.toUpperCase()} ({barcodeSettings.printerLanguage.toUpperCase()})</strong></span>
                           )}
                         </div>
-                      )}
-                    </label>
-
-                    <label className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 cursor-pointer hover:bg-zinc-800/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-6 w-6 items-center justify-center font-bold text-zinc-500 text-xl">Ø</div>
-                        <div>
-                          <div className="font-bold text-white">No Printer</div>
-                          <div className="text-xs text-zinc-400">Do not print bills automatically</div>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPrinterOverlay(null)}
+                          className="px-4 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-bold transition cursor-pointer"
+                        >
+                          Close & Return
+                        </button>
                       </div>
-                      <input
-                        type="radio"
-                        name="printerType"
-                        value="none"
-                        checked={printerType === 'none'}
-                        onChange={(e) => setPrinterType(e.target.value)}
-                        className="h-5 w-5 text-pink-600 focus:ring-pink-500"
-                      />
-                    </label>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            )}
 
               {activeTab === 'terminal' && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl text-white backdrop-blur-sm">

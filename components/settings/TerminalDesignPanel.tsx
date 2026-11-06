@@ -28,6 +28,7 @@ import {
   UtensilsCrossed,
   List,
   Grid,
+  Grid2X2,
   Search,
 } from 'lucide-react';
 
@@ -1098,7 +1099,182 @@ export default function TerminalDesignPanel() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Option 3: 2-Column Grid Box Layout (New) */}
+                  <div
+                    onClick={() => design.updateDesign({ categoryStyle: 'grid-2col' })}
+                    className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                      design.categoryStyle === 'grid-2col'
+                        ? 'border-theme bg-theme-badge/20 ring-2 ring-theme/30 shadow-md'
+                        : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40'
+                    }`}
+                    style={
+                      design.categoryStyle === 'grid-2col'
+                        ? {
+                            borderColor: 'var(--theme-accent, #DB2777)',
+                            backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.12))',
+                          }
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border transition-all ${
+                            design.categoryStyle === 'grid-2col'
+                              ? 'text-white shadow-xs'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 group-hover:bg-zinc-800'
+                          }`}
+                          style={
+                            design.categoryStyle === 'grid-2col'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <Grid2X2 className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm sm:text-base text-white">
+                              2-Column Grid Boxes
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border"
+                              style={{
+                                backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                                color: 'var(--theme-accent, #DB2777)',
+                                borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                              }}
+                            >
+                              2-Column Grid Box (New)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        {design.categoryStyle === 'grid-2col' && (
+                          <span
+                            className="hidden sm:inline-flex text-[11px] font-bold px-2 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                              color: 'var(--theme-accent, #DB2777)',
+                            }}
+                          >
+                            Active
+                          </span>
+                        )}
+                        <div
+                          className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            design.categoryStyle === 'grid-2col'
+                              ? 'text-white shadow-xs'
+                              : 'border-zinc-700 bg-zinc-900 group-hover:border-zinc-600'
+                          }`}
+                          style={
+                            design.categoryStyle === 'grid-2col'
+                              ? {
+                                  backgroundColor: 'var(--theme-accent, #DB2777)',
+                                  borderColor: 'var(--theme-accent, #DB2777)',
+                                }
+                              : undefined
+                          }
+                        >
+                          {design.categoryStyle === 'grid-2col' && (
+                            <Check className="h-3 w-3 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-zinc-400 sm:pl-[52px] leading-relaxed mb-3">
+                      Modern 2-column square photo grid boxes with category title overlay and active indicators.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🔲 2-Column Grid
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        🖼️ Compact Box Cards
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md">
+                        📱 Touchscreen Optimized
+                      </span>
+                    </div>
+                  </div>
                 </div>
+              </div>
+
+              {/* Fixed Category Section Display Option */}
+              <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-zinc-800 bg-zinc-950/60">
+                  <div>
+                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Fixed Category Section</span>
+                      {design.isFixedCategorySection && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-pink-500/20 text-pink-400 border border-pink-500/30">
+                          Active ({design.categoryVisibleCount || 4} Visible)
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-0.5">
+                      Fix category display height and limit how many categories (1 to 6) are visible before scrolling.
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={design.isFixedCategorySection ?? false}
+                      onChange={(e) => design.updateDesign({ isFixedCategorySection: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                  </label>
+                </div>
+
+                {design.isFixedCategorySection && (
+                  <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
+                        Visible Categories in Scroll View (1 to 6)
+                      </label>
+                      <span className="text-xs font-black text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded-md border border-pink-500/20">
+                        {design.categoryVisibleCount || 4} Categories
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Choose how many categories are visible at a glance in the scrollable sidebar before scrolling:
+                    </p>
+                    <div className="grid grid-cols-6 gap-2 pt-1">
+                      {[1, 2, 3, 4, 5, 6].map((count) => {
+                        const isSelected = (design.categoryVisibleCount || 4) === count;
+                        return (
+                          <button
+                            key={count}
+                            type="button"
+                            onClick={() => design.updateDesign({ categoryVisibleCount: count })}
+                            className={`py-2.5 rounded-xl text-xs font-black border transition-all text-center cursor-pointer ${
+                              isSelected
+                                ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white scale-105'
+                                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800'
+                            }`}
+                          >
+                            {count}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 flex items-center gap-1.5 pt-1">
+                      <Sparkles className="h-3 w-3 text-pink-400 shrink-0" />
+                      <span>
+                        Showing {design.categoryVisibleCount || 4} {(design.categoryVisibleCount || 4) === 1 ? 'category' : 'categories'} visible in viewport. Other categories scroll smoothly inside.
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sub-options for Card Tile */}
@@ -1172,6 +1348,35 @@ export default function TerminalDesignPanel() {
                         className="h-5 w-5 rounded border-zinc-700 bg-zinc-950 text-pink-600 focus:ring-pink-500 cursor-pointer"
                       />
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-options for 2-Column Grid Box */}
+              {design.categoryStyle === 'grid-2col' && (
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                    Grid Box Height &amp; Density
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { height: 'h-20' as const, label: 'Compact (80px)' },
+                      { height: 'h-24' as const, label: 'Standard (96px)' },
+                      { height: 'h-28' as const, label: 'Spacious (112px)' },
+                    ].map((item) => (
+                      <button
+                        key={item.height}
+                        type="button"
+                        onClick={() => design.updateDesign({ categoryCardHeight: item.height })}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                          (design.categoryCardHeight || 'h-24') === item.height
+                            ? 'btn-theme-primary text-white border-theme shadow-theme-glow preserve-white'
+                            : 'border-zinc-800 bg-zinc-950/70 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1657,7 +1862,11 @@ export default function TerminalDesignPanel() {
                   <div className="flex items-center justify-between pb-2 border-b border-zinc-800/50">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black uppercase text-zinc-300">
-                        {(design.categoryStyle || 'card-tile') === 'compact-list' ? 'Compact Row List Preview' : 'Visual Card Tile Preview'}
+                        {(design.categoryStyle || 'card-tile') === 'compact-list'
+                          ? 'Compact Row List Preview'
+                          : design.categoryStyle === 'grid-2col'
+                            ? '2-Column Grid Box Preview'
+                            : 'Visual Card Tile Preview'}
                       </span>
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-bold border"
@@ -1677,7 +1886,7 @@ export default function TerminalDesignPanel() {
 
                   <div className="flex gap-3">
                     {/* Live Category Sidebar Mock */}
-                    <div className={`w-44 shrink-0 rounded-xl border p-2 flex flex-col ${
+                    <div className={`${design.categoryStyle === 'grid-2col' ? 'w-52' : 'w-44'} shrink-0 rounded-xl border p-2 flex flex-col ${
                       isLightPreview ? 'bg-slate-100 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'
                     }`}>
                       {/* Header for compact-list */}
@@ -1773,8 +1982,85 @@ export default function TerminalDesignPanel() {
                             );
                           })}
                         </div>
+                      ) : design.categoryStyle === 'grid-2col' ? (
+                        <div
+                          className="space-y-1.5 overflow-y-auto no-scrollbar"
+                          style={design.isFixedCategorySection ? { maxHeight: `${Math.min(300, (design.categoryVisibleCount || 4) <= 2 ? 115 : (design.categoryVisibleCount || 4) <= 4 ? 175 : 235)}px` } : { maxHeight: '300px' }}
+                        >
+                          {/* All items card */}
+                          <div
+                            onClick={() => setPreviewCategoryId('all')}
+                            className={`flex items-center gap-1.5 p-1.5 rounded-xl border transition cursor-pointer h-9 ${
+                              previewCategoryId === 'all'
+                                ? 'border-theme ring-2 ring-[var(--theme-accent,#DB2777)] shadow-sm'
+                                : isLightPreview ? 'bg-white border-zinc-200 hover:border-zinc-300' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                            }`}
+                            style={
+                              previewCategoryId === 'all'
+                                ? {
+                                    background: 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-mid, #701A3B) 50%, var(--theme-gradient-end, #DB2777) 100%)',
+                                    borderColor: 'var(--theme-accent, #DB2777)',
+                                  }
+                                : undefined
+                            }
+                          >
+                            <div className={`h-5 w-5 rounded-md flex items-center justify-center shrink-0 border ${
+                              previewCategoryId === 'all' ? 'bg-black/40 border-white/20 text-white' : isLightPreview ? 'bg-zinc-100 border-zinc-200 text-zinc-600' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                            }`}>
+                              <UtensilsCrossed className="h-3 w-3" />
+                            </div>
+                            <span className={`text-[10px] font-black uppercase tracking-wider truncate flex-1 ${
+                              previewCategoryId === 'all' ? 'text-white' : isLightPreview ? 'text-zinc-800' : 'text-zinc-200'
+                            }`}>
+                              All Items
+                            </span>
+                            {previewCategoryId === 'all' && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-white shrink-0 mr-0.5" />
+                            )}
+                          </div>
+
+                          {/* 2-column grid */}
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {DEMO_CATEGORIES.filter(c => c.id !== 'all').map((cat) => {
+                              const isActive = previewCategoryId === cat.id;
+                              return (
+                                <div
+                                  key={cat.id}
+                                  onClick={() => setPreviewCategoryId(cat.id)}
+                                  className={`group relative flex w-full flex-col justify-end rounded-xl border overflow-hidden transition cursor-pointer h-16 ${
+                                    isActive
+                                      ? 'border-theme ring-2 ring-[var(--theme-accent,#DB2777)] shadow-sm'
+                                      : isLightPreview ? 'bg-white border-zinc-200 hover:border-zinc-300' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                                  }`}
+                                >
+                                  {cat.image ? (
+                                    <img src={cat.image} alt={cat.name} className="absolute inset-0 h-full w-full object-cover" />
+                                  ) : (
+                                    <div className={`absolute inset-0 flex items-center justify-center font-bold text-xs ${isLightPreview ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-800 text-zinc-300'}`}>
+                                      {cat.name.charAt(0)}
+                                    </div>
+                                  )}
+                                  {isActive && (
+                                    <span
+                                      className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full border border-black shadow"
+                                      style={{ backgroundColor: 'var(--theme-accent, #DB2777)' }}
+                                    />
+                                  )}
+                                  <div className="relative z-10 w-full bg-gradient-to-t from-black/90 via-black/55 to-transparent pt-2.5 pb-1 px-1">
+                                    <span className="font-extrabold text-[8px] text-white uppercase truncate block text-center drop-shadow">
+                                      {cat.name}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       ) : (
-                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto no-scrollbar">
+                        <div
+                          className="space-y-1.5 overflow-y-auto no-scrollbar"
+                          style={design.isFixedCategorySection ? { maxHeight: `${Math.min(300, (design.categoryVisibleCount || 4) * 60)}px` } : { maxHeight: '300px' }}
+                        >
                           {DEMO_CATEGORIES.map((cat) => {
                             const isActive = previewCategoryId === cat.id;
                             const cardH = (design.categoryCardHeight || 'h-24') === 'h-20' ? 'h-14' : (design.categoryCardHeight || 'h-24') === 'h-28' ? 'h-20' : 'h-16';
@@ -1836,9 +2122,19 @@ export default function TerminalDesignPanel() {
                         <p className="text-[11px] leading-relaxed">
                           {(design.categoryStyle || 'card-tile') === 'compact-list'
                             ? 'Compact Row List layout active. Featuring circular food thumbnails, category header counter badge, and theme gradient selected pills.'
-                            : 'Visual Card Tile layout active. Featuring large photo cards with bottom text overlays and full theme-gradient "All Items" tile.'
+                            : design.categoryStyle === 'grid-2col'
+                              ? '2-Column Grid Box layout active. Featuring compact 2-column square photo boxes with category title overlay and active indicators.'
+                              : 'Visual Card Tile layout active. Featuring large photo cards with bottom text overlays and full theme-gradient "All Items" tile.'
                           }
                         </p>
+                        {design.isFixedCategorySection && (
+                          <div className="pt-2 border-t border-zinc-800/40 flex items-center gap-2 text-[10px]">
+                            <span className="font-semibold text-zinc-300">Fixed Category View:</span>
+                            <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-pink-950 text-pink-300 border border-pink-700/50">
+                              {design.categoryVisibleCount || 4} Categories Visible
+                            </span>
+                          </div>
+                        )}
                         <div className="pt-2 border-t border-zinc-800/40 flex items-center gap-2 text-[10px]">
                           <span className="font-semibold text-zinc-300">Selected Category:</span>
                           <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700">

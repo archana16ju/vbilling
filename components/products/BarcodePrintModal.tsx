@@ -3,13 +3,15 @@
 import React, { useState } from 'react';
 import { Product } from '@/types/product';
 import { generateBarcodeSvg } from '@/lib/barcode-generator';
-import { Printer, X, Settings2, Eye, Copy, RefreshCw, Check } from 'lucide-react';
+import { Printer, X, Settings2, Eye, Copy, RefreshCw, Check, Send } from 'lucide-react';
+import { useBarcodePrinterStore } from '@/store/useBarcodePrinterStore';
+import { generateRawCommands, BarcodeFormatType, BarcodeLabelConfig, BarcodePrintPayloadItem } from '@/lib/barcode-printer-languages';
 
 export interface BarcodePrintItem {
   product: Product;
   barcode: string;
   barcodeType: 'internal' | 'manufacturer' | 'INTERNAL' | 'MANUFACTURER';
-  barcodeFormat: 'CODE128' | 'EAN13' | 'UPCA';
+  barcodeFormat: BarcodeFormatType | 'CODE128' | 'EAN13' | 'UPCA';
   copies: number;
 }
 
@@ -18,6 +20,7 @@ interface BarcodePrintModalProps {
   onClose: () => void;
   items: BarcodePrintItem[];
   currencySymbol?: string;
+  companyName?: string;
 }
 
 type LabelSize = '50x25' | '38x25' | '50x38' | 'a4' | 'thermal58';
@@ -35,18 +38,53 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   onClose,
   items: initialItems,
   currencySymbol = '₹',
+  companyName: propCompanyName,
 }) => {
   const [items, setItems] = useState<BarcodePrintItem[]>(initialItems);
   const [labelSize, setLabelSize] = useState<LabelSize>('50x25');
+  const [companyName, setCompanyName] = useState<string>(propCompanyName || '');
+  const [showCompanyName, setShowCompanyName] = useState(true);
   const [showProductName, setShowProductName] = useState(true);
+  const [showProductCode, setShowProductCode] = useState(true);
   const [showPrice, setShowPrice] = useState(true);
   const [showBarcodeText, setShowBarcodeText] = useState(true);
   const [globalCopies, setGlobalCopies] = useState<number>(1);
+
+  const printerSettings = useBarcodePrinterStore();
+  const [directPrinting, setDirectPrinting] = useState(false);
+  const [directPrintMsg, setDirectPrintMsg] = useState<{ success: boolean; text: string } | null>(null);
 
   // Sync when initialItems changes
   React.useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
+
+  // Sync default label preferences from printer store if available
+  React.useEffect(() => {
+    if (printerSettings.companyName && !propCompanyName) {
+      setCompanyName(printerSettings.companyName);
+    }
+  }, [printerSettings.companyName, propCompanyName]);
+
+  // Load company name if not provided
+  React.useEffect(() => {
+    if (propCompanyName) {
+      setCompanyName(propCompanyName);
+      return;
+    }
+    if (printerSettings.companyName) {
+      setCompanyName(printerSettings.companyName);
+      return;
+    }
+    fetch('/api/companies/active')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.activeCompany?.name) {
+          setCompanyName(data.activeCompany.name);
+        }
+      })
+      .catch(() => {});
+  }, [propCompanyName, printerSettings.companyName, isOpen]);
 
   if (!isOpen || items.length === 0) return null;
 
@@ -71,7 +109,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
   const flattenedLabels: {
     product: Product;
     barcode: string;
-    barcodeFormat: 'CODE128' | 'EAN13' | 'UPCA';
+    barcodeFormat: BarcodeFormatType;
     barcodeType: string;
   }[] = [];
   items.forEach((item) => {
@@ -80,7 +118,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
       flattenedLabels.push({
         product: item.product,
         barcode: item.barcode,
-        barcodeFormat: item.barcodeFormat,
+        barcodeFormat: (item.barcodeFormat || 'CODE128') as BarcodeFormatType,
         barcodeType: item.barcodeType,
       });
     }
@@ -88,6 +126,68 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDirectPrintToBarcodePrinter = async () => {
+    if (!printerSettings.networkIp) {
+      alert('Network printer IP is not set. Please configure it in Settings > Printer Settings > Barcode Label Printer.');
+      return;
+    }
+    setDirectPrinting(true);
+    setDirectPrintMsg(null);
+    try {
+      const config: BarcodeLabelConfig = {
+        widthMm: currentSizeConfig.widthMm,
+        heightMm: currentSizeConfig.heightMm,
+        gapMm: printerSettings.labelGapMm,
+        marginTopMm: printerSettings.marginTopMm,
+        marginLeftMm: printerSettings.marginLeftMm,
+        density: printerSettings.density,
+        speed: printerSettings.speed,
+        dpi: printerSettings.dpi,
+        orientation: printerSettings.orientation,
+        format: (flattenedLabels[0]?.barcodeFormat || printerSettings.defaultBarcodeFormat) as BarcodeFormatType,
+        showCompanyName,
+        companyName: companyName || printerSettings.companyName,
+        showProductName,
+        showProductCode,
+        showPrice,
+        showBarcodeText,
+        currencySymbol,
+      };
+
+      const payloadItems: BarcodePrintPayloadItem[] = flattenedLabels.map((lbl) => ({
+        name: lbl.product.name,
+        code: lbl.product.sku || (lbl.product as any).code || lbl.barcode,
+        barcode: lbl.barcode,
+        price: lbl.product.price,
+        copies: 1,
+      }));
+
+      const allCommands = generateRawCommands(printerSettings.printerLanguage, config, payloadItems);
+
+      const res = await fetch('/api/printer/barcode-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send-raw',
+          ip: printerSettings.networkIp,
+          port: printerSettings.networkPort || 9100,
+          commands: allCommands,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDirectPrintMsg({ success: true, text: `Sent ${flattenedLabels.length} labels directly to printer!` });
+        setTimeout(() => setDirectPrintMsg(null), 4000);
+      } else {
+        setDirectPrintMsg({ success: false, text: data.error || 'Direct print failed.' });
+      }
+    } catch (e: any) {
+      setDirectPrintMsg({ success: false, text: e.message || 'Direct print failed.' });
+    } finally {
+      setDirectPrinting(false);
+    }
   };
 
   return (
@@ -154,9 +254,21 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
 
             return (
               <div key={idx} className="barcode-label-print-unit">
+                {showCompanyName && (companyName || (lbl.product as any).companyName) && (
+                  <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '0.8mm', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    {companyName || (lbl.product as any).companyName}
+                  </div>
+                )}
+
                 {showProductName && (
-                  <div style={{ fontSize: '9pt', fontWeight: 700, lineHeight: 1.1, marginBottom: '1.5mm', maxHeight: '2.4em', overflow: 'hidden' }}>
+                  <div style={{ fontSize: '9pt', fontWeight: 700, lineHeight: 1.1, marginBottom: '1mm', maxHeight: '2.4em', overflow: 'hidden' }}>
                     {lbl.product.name}
+                  </div>
+                )}
+
+                {showProductCode && (lbl.product.sku || (lbl.product as any).code || lbl.barcode) && (
+                  <div style={{ fontSize: '7.5pt', fontWeight: 600, fontFamily: 'monospace', color: '#111', marginBottom: '1mm' }}>
+                    Code: {lbl.product.sku || (lbl.product as any).code || lbl.barcode}
                   </div>
                 )}
                 
@@ -164,7 +276,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                      dangerouslySetInnerHTML={{ __html: svgContent }} />
 
                 {showPrice && (
-                  <div style={{ fontSize: '9pt', fontWeight: 800, marginTop: '1.5mm' }}>
+                  <div style={{ fontSize: '9pt', fontWeight: 800, marginTop: '1.2mm' }}>
                     {currencySymbol}{lbl.product.price.toFixed(2)}
                   </div>
                 )}
@@ -203,7 +315,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-12 flex-1 overflow-hidden">
             
             {/* Left Column: Settings & Items List */}
-            <div className="md:col-span-5 p-5 border-r border-border overflow-y-auto space-y-5 bg-card/60">
+            <div className="md:col-span-5 p-5 border-r border-border overflow-y-auto space-y-5 bg-card/60 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               
               {/* Label Size Selection */}
               <div>
@@ -241,11 +353,29 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                   <label className="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
                     <input
                       type="checkbox"
+                      checked={showCompanyName}
+                      onChange={(e) => setShowCompanyName(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                    />
+                    Company Name
+                  </label>
+                  <label className="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
                       checked={showProductName}
                       onChange={(e) => setShowProductName(e.target.checked)}
                       className="rounded border-input text-primary focus:ring-primary h-4 w-4"
                     />
                     Product Name
+                  </label>
+                  <label className="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showProductCode}
+                      onChange={(e) => setShowProductCode(e.target.checked)}
+                      className="rounded border-input text-primary focus:ring-primary h-4 w-4"
+                    />
+                    Code
                   </label>
                   <label className="flex items-center gap-2.5 text-xs font-medium cursor-pointer">
                     <input
@@ -304,7 +434,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
                   Items to Print ({items.length})
                 </label>
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {items.map((it, idx) => (
                     <div
                       key={it.product.id + '-' + it.barcode}
@@ -337,7 +467,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
             </div>
 
             {/* Right Column: Live Label Preview */}
-            <div className="md:col-span-7 p-6 flex flex-col bg-muted/10 overflow-y-auto">
+            <div className="md:col-span-7 p-6 flex flex-col bg-muted/10 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <Eye className="w-4 h-4 text-primary" />
@@ -349,7 +479,7 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
               </div>
 
               {/* Preview Container */}
-              <div className="flex-1 flex flex-wrap items-center justify-center gap-4 p-4 rounded-xl border border-dashed border-border bg-background/50 overflow-y-auto min-h-[300px]">
+              <div className="flex-1 flex flex-wrap items-center justify-center gap-4 p-4 rounded-xl border border-dashed border-border bg-background/50 overflow-y-auto min-h-[300px] no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {flattenedLabels.slice(0, 6).map((lbl, idx) => {
                   const svg = generateBarcodeSvg({
                     value: lbl.barcode,
@@ -372,9 +502,21 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
                         minHeight: labelSize === '50x38' ? '150px' : '120px',
                       }}
                     >
+                      {showCompanyName && (companyName || (lbl.product as any).companyName) && (
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-gray-700 truncate w-full mb-0.5">
+                          {companyName || (lbl.product as any).companyName}
+                        </div>
+                      )}
+
                       {showProductName && (
-                        <div className="text-xs font-bold text-gray-900 truncate w-full mb-1">
+                        <div className="text-xs font-bold text-gray-900 truncate w-full mb-0.5">
                           {lbl.product.name}
+                        </div>
+                      )}
+
+                      {showProductCode && (lbl.product.sku || (lbl.product as any).code || lbl.barcode) && (
+                        <div className="text-[10px] font-mono font-semibold text-gray-600 truncate w-full mb-1">
+                          Code: {lbl.product.sku || (lbl.product as any).code || lbl.barcode}
                         </div>
                       )}
                       
@@ -400,11 +542,16 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
           </div>
 
           {/* Modal Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/40">
-            <div className="text-xs text-muted-foreground">
-              Ready to print <span className="font-bold text-foreground">{totalLabels}</span> {totalLabels === 1 ? 'label' : 'labels'} on {currentSizeConfig.name}
+          <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 border-t border-border bg-muted/40 gap-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <span>Ready to print <span className="font-bold text-foreground">{totalLabels}</span> {totalLabels === 1 ? 'label' : 'labels'} on {currentSizeConfig.name}</span>
+              {directPrintMsg && (
+                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${directPrintMsg.success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                  {directPrintMsg.text}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
@@ -412,6 +559,18 @@ export const BarcodePrintModal: React.FC<BarcodePrintModalProps> = ({
               >
                 Cancel
               </button>
+              {printerSettings.connectionType === 'network' && (
+                <button
+                  type="button"
+                  disabled={directPrinting}
+                  onClick={handleDirectPrintToBarcodePrinter}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 shadow-sm transition active:scale-95 disabled:opacity-50"
+                  title={`Send directly via ${printerSettings.printerLanguage.toUpperCase()} to ${printerSettings.networkIp}`}
+                >
+                  <Send className="w-3.5 h-3.5 text-pink-400" />
+                  <span>{directPrinting ? 'Sending...' : 'Direct Thermal Print'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handlePrint}

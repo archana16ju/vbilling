@@ -54,6 +54,39 @@ export default function CategoryPanel() {
   const showCategoryCount = design.showCategoryCount ?? true
   const searchPlaceholder = design.categorySearchPlaceholder || (categoryStyle === 'compact-list' ? 'Filter categories...' : 'Search category...')
 
+  // Fixed Category Section calculation
+  const isFixed = design.isFixedCategorySection ?? false
+  const visibleCount = Math.max(1, Math.min(6, design.categoryVisibleCount || 4))
+
+  const getContainerStyle = (styleType: 'card-tile' | 'compact-list' | 'grid-2col'): React.CSSProperties | undefined => {
+    if (!isFixed) return undefined
+
+    if (styleType === 'card-tile') {
+      const itemH = cardHeight === 'h-20' ? 80 : cardHeight === 'h-28' ? 112 : 96
+      const gap = 10
+      const totalH = visibleCount * itemH + (visibleCount - 1) * gap
+      return { maxHeight: `${totalH}px`, height: `${totalH}px` }
+    }
+
+    if (styleType === 'compact-list') {
+      const itemH = 43
+      const gap = 4
+      const totalH = visibleCount * itemH + (visibleCount - 1) * gap
+      return { maxHeight: `${totalH}px`, height: `${totalH}px` }
+    }
+
+    if (styleType === 'grid-2col') {
+      const allItemsH = 48
+      const boxH = cardHeight === 'h-20' ? 80 : cardHeight === 'h-28' ? 112 : 96
+      const gap = 8
+      const rows = Math.ceil(visibleCount / 2)
+      const totalH = allItemsH + gap + (rows * boxH) + Math.max(0, rows - 1) * gap
+      return { maxHeight: `${totalH}px`, height: `${totalH}px` }
+    }
+
+    return undefined
+  }
+
   return (
     <div
       className={`relative flex h-full w-full flex-col select-none transition-colors duration-150 border-r ${
@@ -129,7 +162,8 @@ export default function CategoryPanel() {
       {categoryStyle === 'card-tile' && (
         <div
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto no-scrollbar px-2.5 pb-4 space-y-2.5"
+          style={getContainerStyle('card-tile')}
+          className={`${isFixed ? 'shrink-0' : 'flex-1'} overflow-y-auto no-scrollbar px-2.5 pb-4 space-y-2.5`}
         >
           {/* "ALL ITEMS" Visual Card */}
           <button
@@ -253,7 +287,8 @@ export default function CategoryPanel() {
       {categoryStyle === 'compact-list' && (
         <div
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto no-scrollbar px-2 pb-4 space-y-1"
+          style={getContainerStyle('compact-list')}
+          className={`${isFixed ? 'shrink-0' : 'flex-1'} overflow-y-auto no-scrollbar px-2 pb-4 space-y-1`}
         >
           {/* "ALL ITEMS" Row */}
           <button
@@ -400,6 +435,131 @@ export default function CategoryPanel() {
                 </button>
               )
             })
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          STYLE 3: 2-COLUMN GRID BOX LAYOUT (NEW)
+      ────────────────────────────────────────────────────────────── */}
+      {categoryStyle === 'grid-2col' && (
+        <div
+          onScroll={handleScroll}
+          style={getContainerStyle('grid-2col')}
+          className={`${isFixed ? 'shrink-0' : 'flex-1'} overflow-y-auto no-scrollbar px-2 pb-4 space-y-2`}
+        >
+          {/* "ALL ITEMS" Full-width Card in Grid */}
+          <button
+            type="button"
+            onClick={() => setCategory('all')}
+            onMouseEnter={(e) => showTooltip(e, 'All Items')}
+            onMouseLeave={hideTooltip}
+            className={`group relative flex w-full items-center justify-between px-3 py-2 rounded-xl border overflow-hidden transition-all duration-200 cursor-pointer active:scale-95 shadow-sm h-12 ${
+              isAllActive
+                ? "border-theme shadow-md ring-2 ring-[var(--theme-accent,#DB2777)]"
+                : isLight
+                  ? "bg-white border-zinc-200 hover:border-zinc-400 hover:shadow-md"
+                  : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850"
+            }`}
+            style={
+              isAllActive
+                ? {
+                    background: 'linear-gradient(135deg, var(--theme-gradient-start, #1F0715) 0%, var(--theme-gradient-mid, #701A3B) 50%, var(--theme-gradient-end, #DB2777) 100%)',
+                    borderColor: 'var(--theme-accent, #DB2777)',
+                  }
+                : undefined
+            }
+            aria-label="All Items"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div
+                className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
+                  isAllActive
+                    ? 'bg-black/35 border-white/20 text-white'
+                    : isLight
+                      ? 'bg-zinc-100 border-zinc-200 text-zinc-600'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-400 group-hover:text-white'
+                }`}
+              >
+                <UtensilsCrossed className="h-3.5 w-3.5" />
+              </div>
+              <span className={`text-xs font-black uppercase tracking-wider truncate ${
+                isAllActive ? 'text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : isLight ? 'text-zinc-800' : 'text-zinc-200'
+              }`}>
+                All Items
+              </span>
+            </div>
+
+            {isAllActive && (
+              <span
+                className="h-2 w-2 rounded-full border border-black shadow shrink-0"
+                style={{ backgroundColor: '#ffffff' }}
+              />
+            )}
+          </button>
+
+          {/* 2-Column Grid of Category Boxes */}
+          {filteredCategories.length === 0 && categorySearchQuery ? (
+            <div className="text-center py-8 px-2 text-xs text-zinc-500">
+              No category found for &quot;{categorySearchQuery}&quot;
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {filteredCategories.map((category) => {
+                const isActive = selectedCategoryId === category.id
+                const boxHeightClass = cardHeight === 'h-20' ? 'h-20' : cardHeight === 'h-28' ? 'h-28' : 'h-24'
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => setCategory(category.id)}
+                    onMouseEnter={(e) => showTooltip(e, category.name)}
+                    onMouseLeave={hideTooltip}
+                    className={`group relative flex w-full flex-col justify-end rounded-xl border overflow-hidden transition-all duration-200 cursor-pointer active:scale-95 shadow-sm ${boxHeightClass} ${
+                      isActive
+                        ? "border-theme shadow-md ring-2 ring-[var(--theme-accent,#DB2777)]"
+                        : isLight
+                          ? "bg-white border-zinc-200 hover:border-zinc-400 hover:shadow-md"
+                          : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850"
+                    }`}
+                    aria-label={category.name}
+                  >
+                    {/* Category Image or Fallback */}
+                    {category.image ? (
+                      <img
+                        src={category.image}
+                        alt={category.name}
+                        className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div
+                        className={`absolute inset-0 flex items-center justify-center font-black text-xl uppercase ${
+                          isLight ? 'bg-zinc-200 text-zinc-600' : 'bg-zinc-800 text-zinc-300'
+                        }`}
+                      >
+                        {category.name.charAt(0)}
+                      </div>
+                    )}
+
+                    {/* Active indicator dot */}
+                    {isActive && (
+                      <span
+                        className="absolute top-1.5 right-1.5 z-20 h-2.5 w-2.5 rounded-full border border-black shadow"
+                        style={{ backgroundColor: 'var(--theme-accent, #DB2777)' }}
+                      />
+                    )}
+
+                    {/* Bottom Overlay with Category Name inside the box */}
+                    <div className="relative z-10 w-full bg-gradient-to-t from-black/95 via-black/60 to-transparent pt-5 pb-1.5 px-1.5 flex items-end">
+                      <span className="font-bold text-[11px] text-white tracking-tight line-clamp-2 leading-tight w-full text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+                        {category.name}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           )}
         </div>
       )}

@@ -55,6 +55,7 @@ export default function ProductsPage() {
   // Barcode Printing State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
   const [printItems, setPrintItems] = useState<BarcodePrintItem[]>([])
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   // Table search & filter
   const [tableSearch, setTableSearch] = useState('')
@@ -291,6 +292,55 @@ export default function ProductsPage() {
     setPrintItems(itemsToPrint);
     setIsPrintModalOpen(true);
   }
+
+  // Row selection handlers
+  const toggleSelectProduct = (id: string) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (tableFilteredProducts.length === 0) return;
+    const allSelected = tableFilteredProducts.length > 0 && tableFilteredProducts.every(p => selectedProductIds.includes(p.id));
+    if (allSelected) {
+      const filteredIds = new Set(tableFilteredProducts.map(p => p.id));
+      setSelectedProductIds(prev => prev.filter(id => !filteredIds.has(id)));
+    } else {
+      const newSelected = new Set([...selectedProductIds, ...tableFilteredProducts.map(p => p.id)]);
+      setSelectedProductIds(Array.from(newSelected));
+    }
+  };
+
+  const handlePrintSelectedProducts = () => {
+    const selectedProducts = products.filter(p => selectedProductIds.includes(p.id));
+    if (selectedProducts.length === 0) {
+      alert('Please select at least one product to print barcode labels.');
+      return;
+    }
+    const itemsToPrint: BarcodePrintItem[] = [];
+    selectedProducts.forEach(p => {
+      const primaryBc = (p.barcodes || []).find(b => b.barcodeType === 'INTERNAL') || (p.barcodes && p.barcodes[0]);
+      const barcodeStr = primaryBc?.barcode || p.barcode;
+      if (barcodeStr) {
+        itemsToPrint.push({
+          product: p,
+          barcode: barcodeStr,
+          barcodeType: (primaryBc?.barcodeType || 'INTERNAL') as 'INTERNAL' | 'MANUFACTURER',
+          barcodeFormat: (primaryBc?.barcodeFormat || 'CODE128') as BarcodeFormat,
+          copies: 1,
+        });
+      }
+    });
+
+    if (itemsToPrint.length === 0) {
+      alert('None of the selected products have a barcode assigned.');
+      return;
+    }
+
+    setPrintItems(itemsToPrint);
+    setIsPrintModalOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -940,20 +990,45 @@ export default function ProductsPage() {
 
       {/* Main Products Table View */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 shadow-lg overflow-hidden">
-        {/* Table Search Toolbar */}
+        {/* Table Search & Bulk Action Toolbar */}
         <div className="p-4 border-b border-zinc-800 bg-zinc-950/40 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search by name, SKU, or barcode..."
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:outline-none"
-            />
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search by name, SKU, or barcode..."
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            {selectedProductIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handlePrintSelectedProducts}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold text-xs shadow-md transition shrink-0 cursor-pointer animate-in fade-in"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>Print Barcodes ({selectedProductIds.length})</span>
+              </button>
+            )}
           </div>
-          <div className="text-xs text-zinc-400 font-mono">
-            Showing <strong className="text-white">{tableFilteredProducts.length}</strong> of {products.length} products
+
+          <div className="flex items-center gap-3 text-xs">
+            {selectedProductIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedProductIds([])}
+                className="text-zinc-400 hover:text-white underline cursor-pointer"
+              >
+                Clear Selection
+              </button>
+            )}
+            <div className="text-zinc-400 font-mono">
+              Showing <strong className="text-white">{tableFilteredProducts.length}</strong> of {products.length} products
+            </div>
           </div>
         </div>
 
@@ -961,6 +1036,15 @@ export default function ProductsPage() {
           <table className="w-full text-left text-sm text-zinc-300">
             <thead className="bg-zinc-950/80 text-xs uppercase text-zinc-400 border-b border-zinc-800">
               <tr>
+                <th className="px-4 py-4 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={tableFilteredProducts.length > 0 && tableFilteredProducts.every(p => selectedProductIds.includes(p.id))}
+                    onChange={toggleSelectAll}
+                    className="rounded border-zinc-700 bg-zinc-900 text-pink-600 focus:ring-pink-500 h-4 w-4 cursor-pointer"
+                    title="Select / Deselect all"
+                  />
+                </th>
                 <th className="px-5 py-4 font-bold">Product Name</th>
                 <th className="px-4 py-4 font-bold">Barcode(s)</th>
                 <th className="px-4 py-4 font-bold">SKU</th>
@@ -974,14 +1058,14 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-zinc-800">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-zinc-400">
+                  <td colSpan={9} className="p-8 text-center text-zinc-400">
                     <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-2 border-pink-500 border-t-transparent" />
                     Loading products...
                   </td>
                 </tr>
               ) : tableFilteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-zinc-500">
+                  <td colSpan={9} className="p-8 text-center text-zinc-500">
                     <Package className="mx-auto mb-2 h-8 w-8 text-zinc-600" />
                     No products found matching your search.
                   </td>
@@ -996,8 +1080,18 @@ export default function ProductsPage() {
                 const mfgBcs = (p.barcodes || []).filter(b => b.barcodeType === 'MANUFACTURER');
                 const displayBc = internalBc?.barcode || p.barcode || (mfgBcs[0]?.barcode);
 
+                const isSelected = selectedProductIds.includes(p.id);
+
                 return (
-                  <tr key={p.id} className="hover:bg-zinc-800/40 transition-colors">
+                  <tr key={p.id} className={`hover:bg-zinc-800/40 transition-colors ${isSelected ? 'bg-pink-950/20' : ''}`}>
+                    <td className="px-4 py-3.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectProduct(p.id)}
+                        className="rounded border-zinc-700 bg-zinc-900 text-pink-600 focus:ring-pink-500 h-4 w-4 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-5 py-3.5 font-bold text-white">
                       <div className="flex items-center gap-3">
                         {p.image ? (

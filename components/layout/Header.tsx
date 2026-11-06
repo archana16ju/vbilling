@@ -1,13 +1,56 @@
 'use client';
-import { UserCircle, Building2, Shield, Truck } from "lucide-react"
+import { UserCircle, Building2, Shield, Truck, Sun, Moon } from "lucide-react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
 
+/* ─────────────────────────────────────────
+   Tooltip wrapper – matches Terminal Header style
+───────────────────────────────────────── */
+function Tip({
+  label,
+  children,
+  side = 'bottom',
+}: {
+  label: string;
+  children: React.ReactNode;
+  side?: 'bottom' | 'top';
+}) {
+  return (
+    <div className="relative group/tip flex items-center justify-center">
+      {children}
+      <div
+        className={`
+          pointer-events-none absolute z-[100] whitespace-nowrap
+          rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm
+          px-2.5 py-1 text-[11px] font-bold text-white shadow-xl
+          opacity-0 scale-95
+          group-hover/tip:opacity-100 group-hover/tip:scale-100
+          transition-all duration-150
+          ${side === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'}
+          left-1/2 -translate-x-1/2
+        `}
+      >
+        {label}
+        <span
+          className={`
+            absolute left-1/2 -translate-x-1/2 border-4 border-transparent
+            ${side === 'bottom'
+              ? 'bottom-full border-b-zinc-700'
+              : 'top-full border-t-zinc-700'}
+          `}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function Header() {
   const [role, setRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
   const [activeCompany, setActiveCompany] = useState<{ id: string; name: string; code: string } | null>(null)
   const [currentDate, setCurrentDate] = useState('')
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString('en-IN', {
@@ -16,17 +59,36 @@ export default function Header() {
       month: 'long',
       day: 'numeric'
     }))
+
     const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
     const r = match ? match[2] : null;
     if (r) setRole(r === 'admin' ? 'company_admin' : r);
 
-    // Fetch verified session to guarantee role is immediately available
+    const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/);
+    const u = userMatch ? userMatch[2] : null;
+    if (u) setUsername(u);
+
+    // Initial theme mode detection
+    const savedUserMode = u ? localStorage.getItem(`dashboard_theme_mode_${u}`) : null;
+    const savedGlobalMode = localStorage.getItem('dashboard_theme_mode');
+    const isLightActive = typeof document !== 'undefined' && document.documentElement.classList.contains('light-mode');
+    const determinedMode = (savedUserMode || savedGlobalMode || (isLightActive ? 'light' : 'dark')) as 'dark' | 'light';
+    setThemeMode(determinedMode);
+
+    // Fetch verified session to guarantee role & username are immediately available
     fetch('/api/auth/me')
       .then(res => res.ok ? res.json() : null)
       .then(me => {
         if (me && me.authenticated && me.role) {
           const normalized = me.role === 'admin' ? 'company_admin' : me.role;
           setRole(normalized);
+          if (me.username) {
+            setUsername(me.username);
+            const userSpecificMode = localStorage.getItem(`dashboard_theme_mode_${me.username}`);
+            if (userSpecificMode === 'light' || userSpecificMode === 'dark') {
+              setThemeMode(userSpecificMode);
+            }
+          }
           try {
             document.cookie = `auth_role=${normalized}; path=/; max-age=604800; SameSite=Lax`;
             if (me.username) document.cookie = `auth_username=${me.username}; path=/; max-age=604800; SameSite=Lax`;
@@ -65,11 +127,57 @@ export default function Header() {
       }
     };
 
+    const handleExternalThemeChange = (e: any) => {
+      const mode = e?.detail?.mode;
+      if (mode === 'light' || mode === 'dark') {
+        setThemeMode(mode);
+      }
+    };
+
     window.addEventListener('company-switched', handleCompanySwitched);
+    window.addEventListener('dashboard-theme-mode-changed', handleExternalThemeChange);
+
     return () => {
       window.removeEventListener('company-switched', handleCompanySwitched);
+      window.removeEventListener('dashboard-theme-mode-changed', handleExternalThemeChange);
     };
-  }, [])
+  }, []);
+
+  // Handler for independent dark/light mode toggle
+  const handleThemeToggle = (newMode: 'dark' | 'light') => {
+    setThemeMode(newMode);
+    try {
+      localStorage.setItem('dashboard_theme_mode', newMode);
+      if (username) {
+        localStorage.setItem(`dashboard_theme_mode_${username}`, newMode);
+      }
+    } catch {}
+
+    const root = document.documentElement;
+    root.setAttribute('data-theme', newMode);
+    if (newMode === 'light') {
+      root.classList.add('light-mode');
+      root.classList.remove('dark-mode', 'dark');
+      root.style.setProperty('--theme-mode', 'light');
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'light');
+        document.body.classList.add('light-mode');
+        document.body.classList.remove('dark-mode', 'dark');
+      }
+    } else {
+      root.classList.add('dark-mode', 'dark');
+      root.classList.remove('light-mode');
+      root.style.setProperty('--theme-mode', 'dark');
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'dark');
+        document.body.classList.add('dark-mode');
+        document.body.classList.add('dark');
+        document.body.classList.remove('light-mode');
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent('dashboard-theme-mode-changed', { detail: { mode: newMode } }));
+  };
 
   const isSuperAdmin = role === 'super_admin';
 
@@ -83,39 +191,92 @@ export default function Header() {
           <span className="text-xs font-medium text-zinc-400">{currentDate}</span>
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-6">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* ── Company Name – Terminal Icon-Based Design ── */}
           {activeCompany && (
-            isSuperAdmin ? (
-              <Link
-                href="/super-admin"
-                className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-theme px-3.5 py-1.5 text-xs font-bold text-zinc-200 transition cursor-pointer hover:bg-zinc-800/80"
-                title="Super Admin: Click to manage companies"
-              >
-                <Building2 className="h-4 w-4 text-theme-accent" />
-                <span>{activeCompany.name}</span>
-                <span className="rounded-md bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-[10px] font-mono text-theme-accent">
-                  {activeCompany.code}
-                </span>
-              </Link>
-            ) : (
-              <div
-                className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 text-xs font-bold text-zinc-200"
-                title="Assigned Company Context"
-              >
-                <Building2 className="h-4 w-4 text-theme-accent" />
-                <span>{activeCompany.name}</span>
-                <span className="rounded-md bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-[10px] font-mono text-theme-badge">
-                  {activeCompany.code}
-                </span>
-              </div>
-            )
+            <Tip label={activeCompany.name}>
+              {isSuperAdmin ? (
+                <Link
+                  href="/super-admin"
+                  className="flex h-8 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-300 transition-all hover:bg-zinc-800 hover:border-theme hover:text-white shadow-sm cursor-pointer"
+                  title="Super Admin: Click to manage companies"
+                >
+                  <Building2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--theme-accent, #DB2777)' }} />
+                  <span className="font-bold text-zinc-200">{activeCompany.name}</span>
+                  <span
+                    className="rounded px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-[10px] font-mono"
+                    style={{ color: 'var(--theme-badge-text, #F472B6)' }}
+                  >
+                    {activeCompany.code}
+                  </span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (role === 'company_admin' || role === 'admin') window.location.href = '/companies';
+                  }}
+                  className={`flex h-8 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-300 transition-all shadow-sm ${
+                    role === 'company_admin' || role === 'admin'
+                      ? 'cursor-pointer hover:bg-zinc-800 hover:border-theme hover:text-white'
+                      : 'cursor-default'
+                  }`}
+                  title={role === 'company_admin' || role === 'admin' ? "Click to view company details" : activeCompany.name}
+                >
+                  <Building2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--theme-accent, #DB2777)' }} />
+                  <span className="font-bold text-zinc-200">{activeCompany.name}</span>
+                  <span
+                    className="rounded px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-[10px] font-mono"
+                    style={{ color: 'var(--theme-badge-text, #F472B6)' }}
+                  >
+                    {activeCompany.code}
+                  </span>
+                </button>
+              )}
+            </Tip>
           )}
+
+          {/* ── Dashboard Independent Theme Mode (Dark & Light Mode Icons - Terminal Style) ── */}
+          <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/90 p-1 shadow-sm">
+            <Tip label="Light Mode">
+              <button
+                type="button"
+                onClick={() => handleThemeToggle('light')}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
+                }`}
+                title="Switch to Light Mode"
+                aria-label="Dashboard Light Mode"
+              >
+                <Sun className="h-3.5 w-3.5" />
+              </button>
+            </Tip>
+
+            <Tip label="Dark Mode">
+              <button
+                type="button"
+                onClick={() => handleThemeToggle('dark')}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  themeMode === 'dark'
+                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
+                }`}
+                title="Switch to Dark Mode"
+                aria-label="Dashboard Dark Mode"
+              >
+                <Moon className="h-3.5 w-3.5" />
+              </button>
+            </Tip>
+          </div>
 
           {/* Shift Alerts Notification Bell - Strictly for assigned staff, not Super Admin or Company Admin */}
           {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (
             <ShiftAlertsBell />
           )}
 
+          {/* User Session & Avatar */}
           <div className="flex items-center gap-3 text-zinc-400">
             <div className="text-right hidden sm:block">
               <div className="text-sm font-bold flex items-center justify-end gap-1.5">
@@ -152,5 +313,5 @@ export default function Header() {
       {/* Top Dynamic Theme Accent Bar */}
       <div className="h-[2px] w-full bg-theme-bar opacity-80" />
     </header>
-  )
+  );
 }
