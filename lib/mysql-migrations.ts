@@ -1555,6 +1555,403 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 31,
+    name: "031_create_product_batches_and_transactions",
+    up: async (conn) => {
+      // 1. product_batches table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS product_batches (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          item_type ENUM('product', 'raw_material') NOT NULL DEFAULT 'product',
+          item_id VARCHAR(64) NOT NULL,
+          batch_number VARCHAR(100) NOT NULL,
+          manufacturing_date DATE NULL,
+          expiry_date DATE NOT NULL,
+          initial_quantity DECIMAL(12,3) NOT NULL,
+          current_quantity DECIMAL(12,3) NOT NULL,
+          purchase_cost DECIMAL(12,2) DEFAULT 0,
+          selling_price DECIMAL(12,2) NULL,
+          supplier_id VARCHAR(64) NULL,
+          purchase_order_id VARCHAR(64) NULL,
+          status ENUM('active', 'near_expiry', 'expired', 'exhausted', 'quarantined') DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_batches_company (company_id),
+          INDEX idx_batches_item (company_id, item_id, item_type),
+          INDEX idx_batches_expiry (company_id, expiry_date),
+          INDEX idx_batches_status (status),
+          UNIQUE KEY uq_company_item_batch (company_id, item_type, item_id, batch_number)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 2. batch_transactions table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS batch_transactions (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          batch_id VARCHAR(64) NOT NULL,
+          sale_id VARCHAR(64) NULL,
+          transaction_type ENUM('inward', 'sale_deduction', 'waste_expired', 'manual_adjustment', 'return_restock', 'quarantine') NOT NULL,
+          quantity DECIMAL(12,3) NOT NULL,
+          quantity_after DECIMAL(12,3) NOT NULL,
+          reason VARCHAR(255) NULL,
+          created_by VARCHAR(64) NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_btx_company (company_id),
+          INDEX idx_btx_batch (batch_id),
+          INDEX idx_btx_sale (sale_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 3. Add is_batch_tracked to products table
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('products', 'is_batch_tracked'))) {
+        await conn.query('ALTER TABLE products ADD COLUMN is_batch_tracked TINYINT(1) DEFAULT 0');
+      }
+    },
+  },
+  {
+    version: 32,
+    name: "032_create_loyalty_tables_and_customer_fields",
+    up: async (conn) => {
+      // 1. loyalty_settings table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS loyalty_settings (
+          company_id VARCHAR(64) PRIMARY KEY,
+          is_enabled TINYINT(1) DEFAULT 1,
+          points_per_amount DECIMAL(10,2) DEFAULT 100.00,
+          amount_per_point DECIMAL(10,2) DEFAULT 1.00,
+          min_points_to_redeem INT DEFAULT 50,
+          max_redeem_percent_per_bill DECIMAL(5,2) DEFAULT 50.00,
+          min_bill_amount_to_earn DECIMAL(10,2) DEFAULT 100.00,
+          silver_threshold INT DEFAULT 0,
+          gold_threshold INT DEFAULT 500,
+          platinum_threshold INT DEFAULT 1500,
+          silver_multiplier DECIMAL(4,2) DEFAULT 1.00,
+          gold_multiplier DECIMAL(4,2) DEFAULT 1.25,
+          platinum_multiplier DECIMAL(4,2) DEFAULT 1.50,
+          expiry_months INT DEFAULT 0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 2. loyalty_transactions table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS loyalty_transactions (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          customer_id VARCHAR(64) NOT NULL,
+          sale_id VARCHAR(64) NULL,
+          type ENUM('earned', 'redeemed', 'expired', 'adjustment', 'refund_reversal') NOT NULL,
+          points INT NOT NULL,
+          balance_after INT NOT NULL,
+          monetary_value DECIMAL(10,2) DEFAULT 0.00,
+          note VARCHAR(255) NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_ltx_company (company_id),
+          INDEX idx_ltx_customer (company_id, customer_id),
+          INDEX idx_ltx_sale (sale_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 3. Add loyalty fields to customers table
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('customers', 'loyalty_points_balance'))) {
+        await conn.query('ALTER TABLE customers ADD COLUMN loyalty_points_balance INT DEFAULT 0');
+      }
+      if (!(await columnExists('customers', 'loyalty_tier'))) {
+        await conn.query("ALTER TABLE customers ADD COLUMN loyalty_tier ENUM('Silver', 'Gold', 'Platinum') DEFAULT 'Silver'");
+      }
+      if (!(await columnExists('customers', 'total_points_earned'))) {
+        await conn.query('ALTER TABLE customers ADD COLUMN total_points_earned INT DEFAULT 0');
+      }
+      if (!(await columnExists('customers', 'total_points_redeemed'))) {
+        await conn.query('ALTER TABLE customers ADD COLUMN total_points_redeemed INT DEFAULT 0');
+      }
+    },
+  },
+  {
+    version: 33,
+    name: "033_create_promotions_and_usages",
+    up: async (conn) => {
+      // 1. promotions table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS promotions (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          code VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          description TEXT NULL,
+          promo_type ENUM('percentage', 'flat_amount', 'bogo', 'happy_hour') NOT NULL,
+          discount_value DECIMAL(10,2) NOT NULL,
+          max_discount_amount DECIMAL(10,2) NULL,
+          min_cart_value DECIMAL(10,2) DEFAULT 0.00,
+          start_date DATETIME NOT NULL,
+          end_date DATETIME NOT NULL,
+          is_happy_hour TINYINT(1) DEFAULT 0,
+          happy_hour_start TIME NULL,
+          happy_hour_end TIME NULL,
+          applicable_days_json JSON NULL,
+          applicable_scope ENUM('entire_bill', 'specific_categories', 'specific_products') DEFAULT 'entire_bill',
+          scope_ids_json JSON NULL,
+          bogo_buy_product_id VARCHAR(64) NULL,
+          bogo_buy_quantity INT DEFAULT 1,
+          bogo_get_product_id VARCHAR(64) NULL,
+          bogo_get_quantity INT DEFAULT 1,
+          usage_limit_total INT NULL,
+          usage_limit_per_customer INT DEFAULT 1,
+          total_used_count INT DEFAULT 0,
+          is_active TINYINT(1) DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_promotions_company (company_id),
+          INDEX idx_promotions_code (code),
+          INDEX idx_promotions_dates (start_date, end_date),
+          INDEX idx_promotions_active (is_active),
+          UNIQUE KEY uq_company_promo_code (company_id, code)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 2. promotion_usages table
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS promotion_usages (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          promotion_id VARCHAR(64) NOT NULL,
+          sale_id VARCHAR(64) NOT NULL,
+          customer_id VARCHAR(64) NULL,
+          discount_amount DECIMAL(10,2) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_pu_company (company_id),
+          INDEX idx_pu_promotion (promotion_id),
+          INDEX idx_pu_sale (sale_id),
+          INDEX idx_pu_customer (customer_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      `);
+
+      // 3. Add allow_promo_stacking to companies table
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('companies', 'allow_promo_stacking'))) {
+        await conn.query('ALTER TABLE companies ADD COLUMN allow_promo_stacking TINYINT(1) DEFAULT 0');
+      }
+    },
+  },
+  {
+    version: 34,
+    name: "034_fix_collations_and_missing_columns",
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      // 1. Ensure is_batch_tracked exists on products
+      if (!(await columnExists('products', 'is_batch_tracked'))) {
+        await conn.query('ALTER TABLE products ADD COLUMN is_batch_tracked TINYINT(1) DEFAULT 0');
+      }
+
+      // 2. Ensure allow_promo_stacking exists on companies
+      if (!(await columnExists('companies', 'allow_promo_stacking'))) {
+        await conn.query('ALTER TABLE companies ADD COLUMN allow_promo_stacking TINYINT(1) DEFAULT 0');
+      }
+
+      // 3. Align table collations with local MySQL default utf8mb4_0900_ai_ci to prevent JOIN collation mismatches
+      const tablesToAlign = [
+        'product_batches',
+        'batch_transactions',
+        'loyalty_settings',
+        'loyalty_transactions',
+        'promotions',
+        'promotion_usages',
+      ];
+
+      for (const tableName of tablesToAlign) {
+        try {
+          await conn.query(
+            `ALTER TABLE ${tableName} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`
+          );
+        } catch (e: any) {
+          console.warn(`Collation alignment notice for ${tableName}:`, e.message);
+        }
+      }
+    },
+  },
+  {
+    version: 35,
+    name: '035_add_promotional_price_to_promotions',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('promotions', 'promotional_price'))) {
+        await conn.query('ALTER TABLE promotions ADD COLUMN promotional_price DECIMAL(10, 2) NULL AFTER bogo_buy_quantity');
+      }
+    },
+  },
+  {
+    version: 36,
+    name: '036_add_promotion_and_loyalty_columns_to_sales',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('sales', 'promo_code'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN promo_code VARCHAR(100) NULL');
+      }
+      if (!(await columnExists('sales', 'promo_title'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN promo_title VARCHAR(255) NULL');
+      }
+      if (!(await columnExists('sales', 'promo_discount'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN promo_discount DECIMAL(10, 2) DEFAULT 0.00');
+      }
+      if (!(await columnExists('sales', 'manual_discount'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN manual_discount DECIMAL(10, 2) DEFAULT 0.00');
+      }
+      if (!(await columnExists('sales', 'loyalty_points_redeemed'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN loyalty_points_redeemed INT DEFAULT 0');
+      }
+      if (!(await columnExists('sales', 'loyalty_discount'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN loyalty_discount DECIMAL(10, 2) DEFAULT 0.00');
+      }
+      if (!(await columnExists('sales', 'loyalty_points_earned'))) {
+        await conn.query('ALTER TABLE sales ADD COLUMN loyalty_points_earned INT DEFAULT 0');
+      }
+    },
+  },
+  {
+    version: 37,
+    name: '037_add_min_stock_to_batches_and_linked_products_to_raw_materials',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('product_batches', 'min_stock_level'))) {
+        await conn.query('ALTER TABLE product_batches ADD COLUMN min_stock_level DECIMAL(12, 3) DEFAULT 0.000 AFTER current_quantity');
+      }
+
+      if (!(await columnExists('raw_materials', 'linked_products_json'))) {
+        await conn.query('ALTER TABLE raw_materials ADD COLUMN linked_products_json JSON NULL AFTER low_stock_limit');
+      }
+    },
+  },
+  {
+    version: 38,
+    name: '038_add_min_stock_and_replenishment_fields',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('products', 'min_stock'))) {
+        await conn.query('ALTER TABLE products ADD COLUMN min_stock DECIMAL(10,3) DEFAULT 5.000 AFTER discount');
+      }
+
+      if (!(await columnExists('raw_materials', 'status'))) {
+        await conn.query("ALTER TABLE raw_materials ADD COLUMN status VARCHAR(50) DEFAULT 'In Stock' AFTER linked_products_json");
+      }
+
+      if (!(await columnExists('raw_materials', 'last_replenished_at'))) {
+        await conn.query('ALTER TABLE raw_materials ADD COLUMN last_replenished_at TIMESTAMP NULL AFTER status');
+      }
+
+      if (!(await columnExists('stock_transactions', 'raw_material_name'))) {
+        await conn.query('ALTER TABLE stock_transactions ADD COLUMN raw_material_name VARCHAR(255) NULL AFTER raw_material_id');
+      }
+    },
+  },
+  {
+    version: 39,
+    name: '039_allow_custom_promotion_types',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (await columnExists('promotions', 'promo_type')) {
+        await conn.query("ALTER TABLE promotions MODIFY COLUMN promo_type VARCHAR(64) NOT NULL DEFAULT 'percentage'");
+      }
+    },
+  },
+  {
+    version: 40,
+    name: '040_auto_reorder_supplier_and_target_stock',
+    up: async (conn) => {
+      async function columnExists(table: string, column: string): Promise<boolean> {
+        const [rows]: any = await conn.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+           WHERE TABLE_SCHEMA = 'local_billing_db' AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        return rows.length > 0;
+      }
+
+      if (!(await columnExists('raw_materials', 'target_stock'))) {
+        await conn.query('ALTER TABLE raw_materials ADD COLUMN target_stock DECIMAL(12, 3) DEFAULT 999.000 AFTER low_stock_limit');
+      }
+      if (!(await columnExists('raw_materials', 'supplier_id'))) {
+        await conn.query('ALTER TABLE raw_materials ADD COLUMN supplier_id VARCHAR(64) NULL AFTER supplier_name');
+        await conn.query('ALTER TABLE raw_materials ADD INDEX idx_rm_supplier (supplier_id)');
+      }
+    },
+  },
 ];
 
 /**

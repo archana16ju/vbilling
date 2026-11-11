@@ -35,6 +35,7 @@ import {
   mysqlImportOnlineOrder,
 } from '@/lib/mysql-billing';
 import { Delivery, DeliveryPerson, DeliveryStatus, OnlineOrderConfig } from '@/types/delivery';
+import { ensureMongoIndexes } from '@/lib/mongodb-init';
 
 export async function getDb() {
   if (isLocalMySqlMode()) {
@@ -42,7 +43,9 @@ export async function getDb() {
   }
   const client = await clientPromise;
   if (!client) throw new Error('MongoDB is offline/disconnected');
-  return client.db();
+  const db = client.db();
+  await ensureMongoIndexes(db);
+  return db;
 }
 
 // --- PRODUCTS ---
@@ -309,6 +312,45 @@ export async function recordSale(sale: any) {
     const productIds = sale.items.map((i: any) => i.product.id);
     const dbProducts = await db.collection('products').find({ id: { $in: productIds } }).toArray();
 
+    // Strict Expiry & Batch validation before accepting sale (Zero Food Override Allowed)
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const item of sale.items || []) {
+      const prod = item.product || item;
+      const prodId = prod?.id || item.productId || item.id;
+      const dbP = dbProducts.find((p: any) => p.id === prodId);
+      const isBatchTracked = dbP ? Boolean(dbP.is_batch_tracked || dbP.isBatchTracked) : false;
+
+      if (item.batchId) {
+        const b = await db.collection('product_batches').findOne({ id: item.batchId });
+        if (b) {
+          if (b.status === 'quarantined') {
+            return { success: false, error: `Batch #${b.batchNumber} is quarantined. Sale prohibited.` };
+          }
+          if (b.expiryDate < todayStr || b.status === 'expired') {
+            return {
+              success: false,
+              error: `Item "${dbP?.name || prod?.name || 'Item'}" has expired (Batch: #${b.batchNumber}, Expiry: ${b.expiryDate}). Sale strictly prohibited.`,
+            };
+          }
+        }
+      } else if (isBatchTracked && prodId) {
+        const { allocateFefo } = await import('./batches');
+        const fefo = await allocateFefo(prodId, Number(item.quantity) || 1, 'product');
+        if (fefo.hasExpiredStock && fefo.unallocatedQuantity > 0) {
+          return {
+            success: false,
+            error: `Item "${dbP?.name || prod?.name || 'Item'}" has expired batches and no valid stock remaining. Sale strictly prohibited.`,
+          };
+        }
+        if (fefo.unallocatedQuantity > 0) {
+          return {
+            success: false,
+            error: `Insufficient batch stock for "${dbP?.name || prod?.name || 'Item'}". Required: ${item.quantity || 1}, Available: ${fefo.allocated.reduce((sum, a) => sum + a.quantity, 0)}.`,
+          };
+        }
+      }
+    }
+
     let calculatedSubtotal = 0;
     let calculatedTax = 0;
     let calculatedItemDiscounts = 0;
@@ -381,12 +423,16 @@ export async function recordSale(sale: any) {
       if (productToUse.rawMaterials && productToUse.rawMaterials.length > 0) {
         const deductions = await calculateRecipeDeduction(productToUse.rawMaterials, item.quantity, allRawMaterials);
         for (const d of deductions) {
+          const rm = allRawMaterials.find(m => m.id === d.materialId);
+          const prev = rm?.currentStock || 0;
+          const next = Math.max(0, parseFloat((prev - d.quantityToDeduct).toFixed(3)));
           stockTxs.push({
             rawMaterialId: d.materialId,
-            type: 'Stock Deduction',
-            quantityBefore: 0, // Simplified for now, backend will handle $inc
+            rawMaterialName: rm?.name || 'Raw Material',
+            type: 'Sale Deduction',
+            quantityBefore: prev,
             quantityChanged: -d.quantityToDeduct,
-            quantityAfter: 0,
+            quantityAfter: next,
             reason: `Sale ${finalSale.id}`,
             referenceId: finalSale.id
           });
@@ -409,6 +455,75 @@ export async function recordSale(sale: any) {
         timestamp: Date.now()
       });
     }
+
+    // Batch stock deductions (direct batch or FEFO)
+    try {
+      const { allocateFefo } = await import('./batches');
+      for (const item of finalSale.items) {
+        const prodId = item.product?.id || item.productId || item.id;
+        if (item.batchId) {
+          await db.collection('product_batches').updateOne(
+            { id: item.batchId },
+            { $inc: { currentQuantity: -(item.quantity || 1) } }
+          );
+        } else if (prodId) {
+          const fefo = await allocateFefo(prodId, item.quantity || 1, 'product');
+          for (const a of fefo.allocated) {
+            await db.collection('product_batches').updateOne(
+              { id: a.batchId },
+              { $inc: { currentQuantity: -a.quantity } }
+            );
+          }
+        }
+      }
+    } catch {}
+
+    // Promotion usage recording
+    try {
+      if (finalSale.promoCode) {
+        const promo = await db.collection('promotions').findOne({ code: finalSale.promoCode.trim().toUpperCase() });
+        if (promo) {
+          await db.collection('promotion_usages').insertOne({
+            id: 'pu_' + Date.now(),
+            companyId: finalSale.companyId || 'comp_default',
+            promotionId: promo.id,
+            saleId: finalSale.id,
+            customerId: finalSale.customerId || null,
+            discountAmount: finalSale.promoDiscount || 0,
+            createdAt: Date.now()
+          });
+          await db.collection('promotions').updateOne(
+            { id: promo.id },
+            { $inc: { totalUsedCount: 1 } }
+          );
+        }
+      }
+    } catch {}
+
+    // Customer Loyalty points redemption & accrual
+    try {
+      if (finalSale.customerId) {
+        const { processLoyaltyTransaction } = await import('./loyalty');
+        if (finalSale.loyaltyPointsRedeemed && finalSale.loyaltyPointsRedeemed > 0) {
+          await processLoyaltyTransaction(
+            finalSale.customerId,
+            -finalSale.loyaltyPointsRedeemed,
+            'redeemed',
+            finalSale.id,
+            `Redeemed on bill ${finalSale.id}`
+          );
+        }
+        if (finalSale.loyaltyPointsEarned && finalSale.loyaltyPointsEarned > 0) {
+          await processLoyaltyTransaction(
+            finalSale.customerId,
+            finalSale.loyaltyPointsEarned,
+            'earned',
+            finalSale.id,
+            `Earned from bill ${finalSale.id}`
+          );
+        }
+      }
+    } catch {}
 
     return { success: true, sale: finalSale };
   } catch (err: any) {
@@ -459,9 +574,9 @@ export async function updateSalePayment(
   }
 }
 
-export async function refundSale(billId: string, reason?: string) {
+export async function refundSale(billId: string, reason?: string, batchAction: 'restock' | 'quarantine' = 'restock') {
   if (isLocalMySqlMode()) {
-    return await mysqlRefundSale(billId, reason);
+    return await mysqlRefundSale(billId, reason, batchAction);
   }
   try {
     const db = await getDb();
@@ -484,6 +599,91 @@ export async function refundSale(billId: string, reason?: string) {
         },
       }
     );
+
+    // Batch reversal / quarantine
+    try {
+      const bTxs = await db.collection('batch_transactions').find({
+        saleId: billId,
+        transactionType: 'sale_deduction'
+      }).toArray();
+
+      for (const tx of bTxs) {
+        const qty = Math.abs(Number(tx.quantity));
+        if (batchAction === 'restock') {
+          await db.collection('product_batches').updateOne(
+            { id: tx.batchId },
+            { $inc: { currentQuantity: qty } }
+          );
+          await db.collection('batch_transactions').insertOne({
+            id: `btx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            companyId: tx.companyId,
+            batchId: tx.batchId,
+            saleId: billId,
+            transactionType: 'return_restock',
+            quantity: qty,
+            quantityAfter: 0,
+            reason: reason || `Refund restock for bill ${billId}`,
+            createdAt: Date.now()
+          });
+        } else {
+          await db.collection('batch_transactions').insertOne({
+            id: `btx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            companyId: tx.companyId,
+            batchId: tx.batchId,
+            saleId: billId,
+            transactionType: 'quarantine',
+            quantity: 0,
+            quantityAfter: 0,
+            reason: reason || `Refund quarantine/wastage for bill ${billId}`,
+            createdAt: Date.now()
+          });
+        }
+      }
+    } catch (bErr) {
+      console.warn('Batch refund notice:', bErr);
+    }
+
+    // Loyalty points reversal / restoration
+    try {
+      const lTxs = await db.collection('loyalty_transactions').find({ saleId: billId }).toArray();
+      const { processLoyaltyTransaction } = await import('./loyalty');
+      for (const ltx of lTxs) {
+        if (ltx.type === 'earned' && Number(ltx.points) > 0) {
+          await processLoyaltyTransaction(
+            ltx.customerId,
+            -Number(ltx.points),
+            'refund_reversal',
+            billId,
+            `Clawback earned points from refund of bill ${billId}`
+          );
+        } else if (ltx.type === 'redeemed' && Number(ltx.points) < 0) {
+          await processLoyaltyTransaction(
+            ltx.customerId,
+            Math.abs(Number(ltx.points)),
+            'refund_reversal',
+            billId,
+            `Restore redeemed points from refund of bill ${billId}`
+          );
+        }
+      }
+    } catch (lErr) {
+      console.warn('Loyalty refund notice:', lErr);
+    }
+
+    // Promotion usage rollback
+    try {
+      const usages = await db.collection('promotion_usages').find({ saleId: billId }).toArray();
+      for (const u of usages) {
+        await db.collection('promotions').updateOne(
+          { id: u.promotionId },
+          { $inc: { totalUsedCount: -1 } }
+        );
+      }
+      await db.collection('promotion_usages').deleteMany({ saleId: billId });
+    } catch (pErr) {
+      console.warn('Promotion refund notice:', pErr);
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error('refundSale error:', err);

@@ -5,13 +5,11 @@ import React from 'react';
 export function KpiCardSkeleton() {
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 shadow-xl relative overflow-hidden animate-pulse">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <div className="h-3 w-20 rounded bg-zinc-800" />
-          <div className="h-7 w-28 rounded bg-zinc-700/60" />
-        </div>
-        <div className="h-6 w-6 rounded bg-zinc-800" />
+      <div className="flex items-start justify-between gap-2">
+        <div className="h-3 w-20 rounded bg-zinc-800" />
+        <div className="h-6 w-6 rounded-lg bg-zinc-800 shrink-0" />
       </div>
+      <div className="mt-2.5 h-7 w-28 rounded bg-zinc-700/60" />
       <div className="mt-3 flex items-center justify-between">
         <div className="h-3 w-16 rounded bg-zinc-800" />
         <div className="h-3 w-12 rounded bg-zinc-800" />

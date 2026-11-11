@@ -23,8 +23,20 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
   let itemsHtml = '';
   if (saleData.items && saleData.items.length > 0) {
     itemsHtml = saleData.items.map((item: any) => {
-      let itemNameStr = design.showItemName ? item.product.name : '';
-      if (design.showSku && item.product.sku) itemNameStr += ` [${item.product.sku}]`;
+      let itemNameStr = design.showItemName ? (item.product?.name || item.name || '') : '';
+      if (design.showSku && item.product?.sku) itemNameStr += ` [${item.product.sku}]`;
+
+      const isFreeItem = Boolean(
+        item.isFree ||
+        item.isFreeBogo ||
+        item.product?.isFree ||
+        item.product?.isFreeBogo ||
+        (typeof item.notes === 'string' && item.notes.toLowerCase().includes('free')) ||
+        (saleData.bogoGetProductId && (item.product?.id === saleData.bogoGetProductId || item.productId === saleData.bogoGetProductId))
+      );
+      if (isFreeItem) {
+        itemNameStr += ` <span style="font-size: 0.85em; font-weight: bold; color: #16a34a; background: #e8f5e9; padding: 1px 4px; border-radius: 3px;">[FREE - BOGO]</span>`;
+      }
       
       const qty = item.quantity || 1;
       const price = parseFloat(item.rate || (item.product && item.product.price) || 0);
@@ -34,6 +46,10 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       const taxable = itemSubtotal - itemDisc;
       const fullTaxRate = (item.product && typeof item.product.tax === 'number') ? item.product.tax : 0;
       const itemTax = item.tax !== undefined ? item.tax : taxable * (fullTaxRate / 100);
+
+      if (item.batchNumber) {
+        itemNameStr += ` <span style="font-size: 0.85em; color: #555;">(B: ${item.batchNumber}${item.expiryDate ? ` Exp: ${item.expiryDate}` : ''})</span>`;
+      }
 
       let itemLine = `<div class="row"><div class="name">${itemNameStr}</div>`;
       if (design.showRate) itemLine += `<div class="price">₹${item.rate || item.product.price}</div>`;
@@ -112,7 +128,12 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
   let roundOffAmount = 0;
   let finalGrandTotal = exactTotal;
 
-  if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
+  if (saleData.total !== undefined && saleData.total !== null && !isNaN(Number(saleData.total))) {
+    finalGrandTotal = Number(saleData.total);
+    if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
+      roundOffAmount = Number(saleData.roundOff);
+    }
+  } else if (saleData.roundOff !== undefined && saleData.roundOff !== null) {
     roundOffAmount = saleData.roundOff;
     finalGrandTotal = parseFloat((exactTotal + roundOffAmount).toFixed(2));
   } else if (design.showRoundOff) {
@@ -121,6 +142,7 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
     finalGrandTotal = ro.grandTotal;
   }
 
+  const couponDiscount = Number(saleData.promoDiscount) || (saleData.promoCode ? Number(saleData.discount) : 0);
   const footerLines = design.footerText.split('\n').filter(Boolean);
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${(saleData.id || saleData.billId) || ''}</title>
@@ -163,7 +185,10 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
     <hr class="divider">
     <div class="totals-container">
       ${design.showSubtotal ? `<div class="totals-row"><span>Sub Total :</span><span>₹${(saleData.subtotal || 0).toFixed(2)}</span></div>` : ''}
-      ${design.showBillDiscount && saleData.discount > 0 ? `<div class="totals-row"><span>Discount :</span><span>-₹${(saleData.discount || 0).toFixed(2)}</span></div>` : ''}
+      ${saleData.promoTitle ? `<div class="totals-row" style="font-size: 0.88em; color: #555;"><span>Offer :</span><span>${saleData.promoTitle}</span></div>` : ''}
+      ${couponDiscount > 0 ? `<div class="totals-row" style="font-weight: bold; color: #16a34a;"><span>Coupon Discount :</span><span>-₹${couponDiscount.toFixed(2)}</span></div>` : ''}
+      ${saleData.manualDiscount > 0 ? `<div class="totals-row"><span>Manual Discount :</span><span>-₹${(saleData.manualDiscount || 0).toFixed(2)}</span></div>` : (design.showBillDiscount && (saleData.discount || 0) > 0 && !saleData.promoCode && !(saleData.loyaltyPointsRedeemed > 0)) ? `<div class="totals-row"><span>Discount :</span><span>-₹${(saleData.discount || 0).toFixed(2)}</span></div>` : ''}
+      ${saleData.loyaltyPointsRedeemed > 0 ? `<div class="totals-row"><span>Points Redeemed (${saleData.loyaltyPointsRedeemed} pts) :</span><span>-₹${(saleData.loyaltyDiscount || 0).toFixed(2)}</span></div>` : ''}
       ${design.showBillTax && !design.showCgstSgst && (saleData.tax || 0) > 0 ? `<div class="totals-row"><span>Tax :</span><span>+₹${(saleData.tax || 0).toFixed(2)}</span></div>` : ''}
       ${design.showCgstSgst ? `
         <div class="totals-row"><span>CGST :</span><span>₹${totalCgst.toFixed(2)}</span></div>
@@ -172,6 +197,7 @@ export function generateReceiptHtml(saleData: any, design: PrinterDesignState) {
       ${design.showRoundOff ? `<div class="totals-row"><span>Round Off :</span><span>${roundOffAmount >= 0 ? '+' : '-'}₹${Math.abs(roundOffAmount).toFixed(2)}</span></div>` : ''}
     </div>
     ${design.showGrandTotal ? `<hr class="divider-solid"><div class="grand-total"><span>Grand Total :</span><span>₹${finalGrandTotal.toFixed(2)}</span></div><hr class="divider-solid">` : ''}
+    ${saleData.loyaltyPointsEarned > 0 ? `<div class="inv-info" style="justify-content: center; font-weight: bold; margin: 4px 0;"><span>★ Loyalty Points Earned: +${saleData.loyaltyPointsEarned} pts ★</span></div>` : ''}
     ${design.showFooter ? `<div class="footer">${footerLines.map(l => `<div>${l}</div>`).join('')}</div>` : ''}
     <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 1000); }</script>
   </body></html>`;

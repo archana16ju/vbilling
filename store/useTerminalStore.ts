@@ -6,16 +6,33 @@ import { persist } from 'zustand/middleware'
 import { Product, PRODUCTS, Category, CATEGORIES } from '@/lib/mock-data'
 import { CartItemData, calculateRoundOff } from '@/lib/calculations'
 import { RawMaterial } from '@/types/product'
+import { Promotion } from '@/types/promotions'
+import { getProductPromotionTag } from '@/lib/promotion-helper'
 
 export type HeldCart = {
   id: string
   items: CartItemData[]
   timestamp: number
   orderNote?: string
-  selectedCustomer?: { id?: string; name: string; phone?: string; email?: string; address?: string } | null
+  customerId?: string
+  promoCode?: string
+  promoDiscount?: number
+  loyaltyPointsRedeemed?: number
+  loyaltyDiscount?: number
+  loyaltyPointsEarned?: number
+  selectedCustomer?: { id?: string; name: string; phone?: string; email?: string; address?: string; loyaltyPointsBalance?: number; loyaltyTier?: string } | null
 }
 
 export type Sale = {
+  customerId?: string;
+  promoCode?: string;
+  promoTitle?: string;
+  promoDiscount?: number;
+  manualDiscount?: number;
+  bogoGetProductId?: string;
+  loyaltyPointsRedeemed?: number;
+  loyaltyDiscount?: number;
+  loyaltyPointsEarned?: number;
   id: string
   items: CartItemData[]
   subtotal: number
@@ -88,8 +105,8 @@ type TerminalState = {
   heldCarts: HeldCart[]
   orderNote: string
   setOrderNote: (note: string) => void
-  selectedCustomer: { id?: string; name: string; phone?: string; email?: string; address?: string } | null
-  setSelectedCustomer: (customer: { id?: string; name: string; phone?: string; email?: string; address?: string } | null) => void
+  selectedCustomer: { id?: string; name: string; phone?: string; email?: string; address?: string; loyaltyPointsBalance?: number; loyaltyTier?: string } | null
+  setSelectedCustomer: (customer: { id?: string; name: string; phone?: string; email?: string; address?: string; loyaltyPointsBalance?: number; loyaltyTier?: string } | null) => void
   
   setCategory: (id: string) => void
   setSearchQuery: (query: string) => void
@@ -120,6 +137,10 @@ type TerminalState = {
   setProducts: (products: Product[]) => void
   setCategories: (categories: Category[]) => void
   setRawMaterials: (materials: RawMaterial[]) => void
+  promotions: Promotion[]
+  setPromotions: (promotions: Promotion[]) => void
+  updateItemPrice: (identifier: string, price: number) => void
+  resetItemPrice: (identifier: string) => void
   clearSales: () => void
   
   addOfflineSale: (sale: Sale) => void
@@ -244,6 +265,7 @@ export const useTerminalStore = create<TerminalState>()(
       products: PRODUCTS,
       categories: CATEGORIES,
       rawMaterials: [],
+      promotions: [],
       sales: [],
       offlineQueue: [],
       terminalModeOverride: null,
@@ -345,6 +367,9 @@ export const useTerminalStore = create<TerminalState>()(
   })),
   
   addToCart: (product) => set((state) => {
+    const promoTag = getProductPromotionTag(product, state.promotions);
+    const hasPromoPrice = promoTag && promoTag.promotionalPrice !== undefined && promoTag.promotionalPrice !== null;
+    const effectivePrice = hasPromoPrice ? promoTag.promotionalPrice! : product.price;
     const existing = state.cart.find(i => i.product.id === product.id && (!i.selectedAddOns || i.selectedAddOns.length === 0));
     if (existing) {
       const newQuantity = existing.quantity + product.quantityStep;
@@ -356,11 +381,25 @@ export const useTerminalStore = create<TerminalState>()(
       };
     } else {
       const lineId = 'line_' + product.id + '_' + Date.now();
-      return { cart: [...state.cart, { product, quantity: product.quantityStep, lineId }] };
+      return {
+        cart: [
+          ...state.cart,
+          {
+            product: { ...product, price: effectivePrice },
+            quantity: product.quantityStep,
+            lineId,
+            originalPrice: product.price,
+            promotionalPrice: effectivePrice,
+          }
+        ]
+      };
     }
   }),
 
   addToCartWithAddons: (product, selectedAddOns, quantity = 1) => set((state) => {
+    const promoTag = getProductPromotionTag(product, state.promotions);
+    const hasPromoPrice = promoTag && promoTag.promotionalPrice !== undefined && promoTag.promotionalPrice !== null;
+    const effectivePrice = hasPromoPrice ? promoTag.promotionalPrice! : product.price;
     const sortedAddonKey = (selectedAddOns || [])
       .map(a => `${a.id}:${a.quantity}`)
       .sort()
@@ -388,10 +427,12 @@ export const useTerminalStore = create<TerminalState>()(
         cart: [
           ...state.cart,
           {
-            product,
+            product: { ...product, price: effectivePrice },
             quantity: Math.min(quantity, product.stock),
             selectedAddOns,
             lineId,
+            originalPrice: product.price,
+            promotionalPrice: effectivePrice,
           }
         ]
       };
@@ -431,6 +472,34 @@ export const useTerminalStore = create<TerminalState>()(
     )
   })),
   
+  updateItemPrice: (identifier, price) => set((state) => ({
+    cart: state.cart.map((i) => {
+      const isTarget = i.lineId ? i.lineId === identifier : i.product.id === identifier;
+      if (!isTarget) return i;
+      const orig = i.originalPrice !== undefined ? i.originalPrice : i.product.price;
+      const safePrice = Math.max(0, Number(price) || 0);
+      return {
+        ...i,
+        originalPrice: orig,
+        promotionalPrice: safePrice,
+        product: { ...i.product, price: safePrice },
+      };
+    })
+  })),
+
+  resetItemPrice: (identifier) => set((state) => ({
+    cart: state.cart.map((i) => {
+      const isTarget = i.lineId ? i.lineId === identifier : i.product.id === identifier;
+      if (!isTarget) return i;
+      const orig = i.originalPrice !== undefined ? i.originalPrice : i.product.price;
+      return {
+        ...i,
+        promotionalPrice: orig,
+        product: { ...i.product, price: orig },
+      };
+    })
+  })),
+
   clearCart: () => set({ cart: [], discountValue: 0, orderNote: '', selectedCustomer: null }),
   
   setDiscount: (value, isPercentage) => set({ discountValue: value, isDiscountPercentage: isPercentage }),
@@ -551,6 +620,7 @@ export const useTerminalStore = create<TerminalState>()(
       const em = String(design?.email || '');
       const gst = String(design?.gstNumber || '');
       const header = String(design?.customHeaderText || '');
+      const couponDiscount = Number(saleData?.promoDiscount) || (saleData?.promoCode ? Number(saleData?.discount) : 0);
 
       const rawText = `
 ${design?.showCompanyName && compName ? formatLine(' '.repeat(Math.max(0, Math.floor((48 - compName.length) / 2))) + compName, '') : ''}
@@ -566,6 +636,10 @@ ${formatLine(`Payment: ${saleData.paymentMethod}`, timeStr)}
 ${"ITEM".padEnd(15)} ${"PRICE".padStart(7)} ${"QTY".padStart(4)} ${"TAX".padStart(8)} ${"TOTAL".padStart(10)}
 ${(Array.isArray(saleData.items) ? saleData.items : []).map((item: any) => {
   let name = String(item?.product?.name || item?.name || 'Item');
+  const isFree = Boolean(item?.isFree || item?.isFreeBogo || item?.product?.isFree || item?.product?.isFreeBogo || (saleData?.bogoGetProductId && (item?.product?.id === saleData.bogoGetProductId || item?.productId === saleData.bogoGetProductId)));
+  if (isFree) {
+    name += ' [FREE]';
+  }
   const priceVal = parseFloat(item?.rate || (item?.product && item.product.price) || item?.price || 0);
   const price = String(priceVal.toFixed(2)).padStart(7);
   const qtyVal = item?.quantity || 1;
@@ -593,7 +667,7 @@ ${(Array.isArray(saleData.items) ? saleData.items : []).map((item: any) => {
   }
 }).join('\n')}
 ------------------------------------------------
-${design?.showSubtotal ? formatSummaryRight('Sub Total :', String((saleData.subtotal || 0).toFixed(2))) + '\n' : ''}${design?.showBillDiscount && (saleData.discount || 0) > 0 ? formatSummaryRight('Discount :', '-' + String((saleData.discount || 0).toFixed(2))) + '\n' : ''}${design?.showBillTax && !design?.showCgstSgst && (saleData.tax || 0) > 0 ? formatSummaryRight('Tax :', '+' + String((saleData.tax || 0).toFixed(2))) + '\n' : ''}${design?.showCgstSgst ? formatSummaryRight('CGST :', String(totalCgst.toFixed(2))) + '\n' + formatSummaryRight('SGST :', String(totalSgst.toFixed(2))) + '\n' : ''}${design?.showRoundOff ? formatSummaryRight('Round Off :', (roundOffAmount >= 0 ? '+' : '-') + 'Rs' + Math.abs(roundOffAmount).toFixed(2)) + '\n' : ''}------------------------------------------------
+${design?.showSubtotal ? formatSummaryRight('Sub Total :', String((saleData.subtotal || 0).toFixed(2))) + '\n' : ''}${saleData?.promoTitle ? formatSummaryRight('Offer :', String(saleData.promoTitle)) + '\n' : ''}${couponDiscount > 0 ? formatSummaryRight('Coupon Discount :', '-' + String(couponDiscount.toFixed(2))) + '\n' : ''}${saleData?.manualDiscount && saleData.manualDiscount > 0 ? formatSummaryRight('Manual Disc :', '-' + String(saleData.manualDiscount.toFixed(2))) + '\n' : (!saleData?.promoCode && design?.showBillDiscount && (saleData.discount || 0) > 0 ? formatSummaryRight('Discount :', '-' + String((saleData.discount || 0).toFixed(2))) + '\n' : '')}${saleData?.loyaltyDiscount && saleData.loyaltyDiscount > 0 ? formatSummaryRight(`Loyalty (${saleData.loyaltyPointsRedeemed || 0} pts) :`, '-' + String(saleData.loyaltyDiscount.toFixed(2))) + '\n' : ''}${design?.showBillTax && !design?.showCgstSgst && (saleData.tax || 0) > 0 ? formatSummaryRight('Tax :', '+' + String((saleData.tax || 0).toFixed(2))) + '\n' : ''}${design?.showCgstSgst ? formatSummaryRight('CGST :', String(totalCgst.toFixed(2))) + '\n' + formatSummaryRight('SGST :', String(totalSgst.toFixed(2))) + '\n' : ''}${design?.showRoundOff ? formatSummaryRight('Round Off :', (roundOffAmount >= 0 ? '+' : '-') + 'Rs' + Math.abs(roundOffAmount).toFixed(2)) + '\n' : ''}------------------------------------------------
 ${design?.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.toFixed(2))) + '\n------------------------------------------------' : ''}
           *** Thank You, Visit Again! ***       
 `.replace(/\n\n+/g, '\n');
@@ -638,6 +712,7 @@ ${design?.showGrandTotal ? formatLine('Grand Total :', String(finalGrandTotal.to
   setProducts: (products) => set({ products }),
   setCategories: (categories) => set({ categories }),
   setRawMaterials: (rawMaterials) => set({ rawMaterials }),
+  setPromotions: (promotions) => set({ promotions }),
   clearSales: () => set({ sales: [], offlineQueue: [] }),
   
   addOfflineSale: (sale) => set((state) => ({ 

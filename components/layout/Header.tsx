@@ -3,6 +3,7 @@ import { UserCircle, Building2, Shield, Truck, Sun, Moon } from "lucide-react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
+import ReplenishmentNotificationBell from "@/components/notifications/ReplenishmentNotificationBell"
 
 /* ─────────────────────────────────────────
    Tooltip wrapper – matches Terminal Header style
@@ -270,6 +271,9 @@ export default function Header() {
               </button>
             </Tip>
           </div>
+ 
+          {/* Stock Replenishment Notification Bell */}
+          <ReplenishmentNotificationBell />
 
           {/* Shift Alerts Notification Bell - Strictly for assigned staff, not Super Admin or Company Admin */}
           {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (

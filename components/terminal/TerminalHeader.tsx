@@ -5,7 +5,6 @@ import {
   UserCircle,
   LayoutDashboard,
   Building2,
-  LogOut,
   ChefHat,
   UtensilsCrossed,
   Truck,
@@ -663,9 +662,18 @@ export default function TerminalHeader() {
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-theme-accent hover:bg-theme-badge border border-transparent hover:border-theme transition cursor-pointer"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <svg
+                    className="h-4 w-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <circle cx="8.5" cy="6.5" r="3.5" />
+                    <path d="M2.5 19c0-3.3 2.7-6 6-6s6 2.7 6 6H2.5z" />
+                    <polygon points="16,8.5 21.5,12 16,15.5" />
+                  </svg>
                   <span>Logout</span>
                 </button>
               </div>

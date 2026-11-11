@@ -24,13 +24,23 @@ import {
   X,
   FileSpreadsheet,
   ChevronRight,
-  TrendingUp,
   FileText,
   RefreshCw,
+  Award,
+  Crown,
+  Coins,
+  Sparkles,
+  Sliders,
 } from 'lucide-react';
 import { CustomerWithStats } from '@/lib/mysql-billing';
 import { useTerminalStore } from '@/store/useTerminalStore';
 import { useShortcutsStore } from '@/store/useShortcutsStore';
+import {
+  getLoyaltySettings,
+  saveLoyaltySettings,
+  getCustomerLoyaltyHistory,
+} from '@/lib/actions/loyalty';
+import { LoyaltySettings, DEFAULT_LOYALTY_SETTINGS, LoyaltyTransaction } from '@/types/loyalty';
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -64,6 +74,32 @@ export default function CustomersPage() {
   const [csvText, setCsvText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Loyalty Program state
+  const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings | null>(null);
+  const [isLoyaltyModalOpen, setIsLoyaltyModalOpen] = useState(false);
+  const [loyaltyForm, setLoyaltyForm] = useState<LoyaltySettings>({
+    companyId: '',
+    isEnabled: true,
+    pointsPerAmount: 100,
+    amountPerPoint: 1.0,
+    minPointsToRedeem: 50,
+    maxRedeemPercentPerBill: 50,
+    minBillAmountToEarn: 100,
+    silverThreshold: 0,
+    goldThreshold: 500,
+    platinumThreshold: 1500,
+    silverMultiplier: 1.0,
+    goldMultiplier: 1.25,
+    platinumMultiplier: 1.5,
+    expiryMonths: 12,
+    updatedAt: Date.now(),
+  });
+  const [isSavingLoyalty, setIsSavingLoyalty] = useState(false);
+  const [loyaltySaveMsg, setLoyaltySaveMsg] = useState<string | null>(null);
+  const [loyaltyHistory, setLoyaltyHistory] = useState<LoyaltyTransaction[]>([]);
+  const [isLoadingLoyalty, setIsLoadingLoyalty] = useState(false);
+  const [detailTab, setDetailTab] = useState<'details' | 'loyalty' | 'orders'>('details');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,14 +180,24 @@ export default function CustomersPage() {
 
   useEffect(() => {
     fetchCustomers();
+    // Load loyalty settings
+    getLoyaltySettings()
+      .then((settings) => {
+        if (settings) {
+          setLoyaltySettings(settings);
+          setLoyaltyForm(settings);
+        }
+      })
+      .catch((err) => console.error('Failed to load loyalty settings:', err));
   }, []);
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
 
-  // Fetch recent orders whenever the selected customer changes
+  // Fetch recent orders & loyalty history whenever the selected customer changes
   useEffect(() => {
     if (!selectedCustomer) {
       setSelectedCustomerOrders([]);
+      setLoyaltyHistory([]);
       return;
     }
 
@@ -175,7 +221,20 @@ export default function CustomersPage() {
       }
     };
 
+    const fetchLoyalty = async () => {
+      try {
+        setIsLoadingLoyalty(true);
+        const history = await getCustomerLoyaltyHistory(selectedCustomer.id);
+        setLoyaltyHistory(history);
+      } catch (err) {
+        console.error('Failed to load customer loyalty history:', err);
+      } finally {
+        setIsLoadingLoyalty(false);
+      }
+    };
+
     fetchOrders();
+    fetchLoyalty();
   }, [selectedCustomerId]);
 
   const handleOpenAdd = () => {
@@ -345,6 +404,25 @@ export default function CustomersPage() {
     }
   };
 
+  const handleSaveLoyaltySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingLoyalty(true);
+    setLoyaltySaveMsg(null);
+    try {
+      const updated = await saveLoyaltySettings(loyaltyForm);
+      setLoyaltySettings(updated);
+      setLoyaltySaveMsg('Loyalty rules updated successfully!');
+      setTimeout(() => {
+        setLoyaltySaveMsg(null);
+        setIsLoyaltyModalOpen(false);
+      }, 1200);
+    } catch (err: any) {
+      setLoyaltySaveMsg(`Failed to save: ${err.message}`);
+    } finally {
+      setIsSavingLoyalty(false);
+    }
+  };
+
   const filteredCustomers = customers.filter((c) => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
@@ -426,6 +504,14 @@ export default function CustomersPage() {
           {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             <button
+              onClick={() => setIsLoyaltyModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/20 backdrop-blur-md px-3.5 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/30 transition cursor-pointer shadow-sm shadow-amber-900/30"
+              title="Configure Customer Loyalty & Rewards"
+            >
+              <Award className="h-3.5 w-3.5 text-amber-300" />
+              Loyalty Rules
+            </button>
+            <button
               onClick={handleRefresh}
               disabled={isRefreshing}
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-black/30 backdrop-blur-md px-3.5 py-2 text-xs font-bold text-white hover:bg-black/50 transition cursor-pointer disabled:opacity-50"
@@ -458,8 +544,9 @@ export default function CustomersPage() {
         <div className="lg:col-span-7 bg-zinc-900/80 rounded-2xl border border-zinc-800 shadow-xl flex flex-col overflow-hidden backdrop-blur-sm">
           {/* Table Header */}
           <div className="grid grid-cols-12 px-5 py-3 border-b border-zinc-800 text-[11px] font-bold text-zinc-400 uppercase tracking-wider bg-zinc-950/80">
-            <div className="col-span-5">GUEST</div>
-            <div className="col-span-3">PHONE</div>
+            <div className="col-span-4">GUEST</div>
+            <div className="col-span-2">TIER & POINTS</div>
+            <div className="col-span-2">PHONE</div>
             <div className="col-span-1 text-center">VISITS</div>
             <div className="col-span-1 text-center">LAST VISIT</div>
             <div className="col-span-2 text-right">SPENT</div>
@@ -490,7 +577,7 @@ export default function CustomersPage() {
                     }`}
                   >
                     {/* Guest Avatar & Name */}
-                    <div className="col-span-5 flex items-center gap-3 min-w-0 pr-2">
+                    <div className="col-span-4 flex items-center gap-3 min-w-0 pr-2">
                       <div
                         className={`h-9 w-9 rounded-xl shrink-0 flex items-center justify-center font-bold text-xs uppercase ${
                           isSelected
@@ -512,8 +599,25 @@ export default function CustomersPage() {
                       </div>
                     </div>
 
+                    {/* Loyalty Tier & Points */}
+                    <div className="col-span-2 flex flex-col items-start gap-0.5 pr-2">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                        cust.loyaltyTier === 'Platinum'
+                          ? 'bg-purple-950/80 text-purple-300 border border-purple-700/60'
+                          : cust.loyaltyTier === 'Gold'
+                            ? 'bg-amber-950/80 text-amber-300 border border-amber-700/60'
+                            : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                      }`}>
+                        {cust.loyaltyTier === 'Platinum' ? <Crown className="h-2.5 w-2.5 text-purple-400" /> : cust.loyaltyTier === 'Gold' ? <Award className="h-2.5 w-2.5 text-amber-400" /> : <Sparkles className="h-2.5 w-2.5 text-zinc-400" />}
+                        {cust.loyaltyTier || 'Silver'}
+                      </span>
+                      <span className="text-[11px] font-mono font-bold text-amber-400">
+                        {Number(cust.loyaltyPointsBalance || 0).toLocaleString()} pts
+                      </span>
+                    </div>
+
                     {/* Phone */}
-                    <div className="col-span-3 text-xs text-zinc-400 font-mono truncate">
+                    <div className="col-span-2 text-xs text-zinc-400 font-mono truncate">
                       {cust.phone || '-'}
                     </div>
 
@@ -590,124 +694,268 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
-                {/* 3 Metric Cards */}
-                <div className="grid grid-cols-3 gap-3 mt-5">
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-center">
-                    <span className="block text-xl font-bold text-pink-400 font-mono">
+                {/* 4 Metric Cards */}
+                <div className="grid grid-cols-4 gap-2 mt-4">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-center">
+                    <span className="block text-lg font-bold text-pink-400 font-mono">
                       {selectedCustomer.visits}
                     </span>
-                    <span className="text-[11px] text-zinc-400 font-medium">visits</span>
+                    <span className="text-[10px] text-zinc-400 font-medium">visits</span>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-center">
-                    <span className="block text-xl font-bold text-white font-mono">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-center">
+                    <span className="block text-lg font-bold text-white font-mono">
                       ₹{selectedCustomer.avgBill.toFixed(0)}
                     </span>
-                    <span className="text-[11px] text-zinc-400 font-medium">avg bill</span>
+                    <span className="text-[10px] text-zinc-400 font-medium">avg bill</span>
                   </div>
 
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-center">
-                    <span className="block text-xl font-bold text-emerald-400 font-mono">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-center">
+                    <span className="block text-lg font-bold text-emerald-400 font-mono">
                       ₹{selectedCustomer.totalSpent.toFixed(0)}
                     </span>
-                    <span className="text-[11px] text-zinc-400 font-medium">total spent</span>
+                    <span className="text-[10px] text-zinc-400 font-medium">total spent</span>
                   </div>
+
+                  <div className="rounded-xl border border-amber-900/50 bg-amber-950/30 p-2.5 text-center">
+                    <span className="block text-lg font-bold text-amber-300 font-mono">
+                      {Number(selectedCustomer.loyaltyPointsBalance || 0).toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-amber-200/80 font-medium flex items-center justify-center gap-1">
+                      <Award className="h-2.5 w-2.5 text-amber-400" />
+                      {selectedCustomer.loyaltyTier || 'Silver'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tab Switcher */}
+                <div className="flex border-b border-zinc-800/80 mt-4 -mb-1 gap-1">
+                  <button
+                    onClick={() => setDetailTab('details')}
+                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      detailTab === 'details'
+                        ? 'border-pink-500 text-white'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setDetailTab('loyalty')}
+                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                      detailTab === 'loyalty'
+                        ? 'border-amber-500 text-amber-300'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Award className="h-3 w-3 text-amber-400" />
+                    Loyalty ({loyaltyHistory.length})
+                  </button>
+                  <button
+                    onClick={() => setDetailTab('orders')}
+                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+                      detailTab === 'orders'
+                        ? 'border-pink-500 text-white'
+                        : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Orders ({selectedCustomerOrders.length})
+                  </button>
                 </div>
               </div>
 
-              {/* Scrollable details: Address, Meal Plans, Recent Orders */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-6 no-scrollbar">
-                {/* ADDRESS SECTION */}
-                <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
-                    ADDRESS
-                  </h4>
-                  {selectedCustomer.address ? (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 flex items-start gap-2.5">
-                      <MapPin className="h-4 w-4 text-pink-400 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs text-zinc-300 leading-relaxed whitespace-pre-line">
-                        {selectedCustomer.address}
-                      </div>
-                      <button
-                        onClick={() => handleOpenEdit(selectedCustomer)}
-                        className="text-xs font-bold text-pink-400 hover:underline shrink-0 cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleOpenEdit(selectedCustomer)}
-                      className="text-xs font-bold text-pink-400 hover:text-pink-300 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      + Add a delivery address
-                    </button>
-                  )}
-                </div>
-
-                {/* MEAL PLANS / NOTES SECTION */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                      MEAL PLANS
-                    </h4>
-                    <span className="text-xs font-bold text-pink-400 hover:underline cursor-pointer">
-                      + Sell a plan
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-500">No plan on this guest.</p>
-                </div>
-
-                {/* RECENT ORDERS SECTION */}
-                <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
-                    RECENT ORDERS
-                  </h4>
-                  {isLoadingOrders ? (
-                    <div className="py-4 text-center text-xs text-zinc-500 animate-pulse">
-                      Loading recent bills...
-                    </div>
-                  ) : selectedCustomerOrders.length === 0 ? (
-                    <p className="text-xs text-zinc-500 py-2">No past orders recorded yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selectedCustomerOrders.map((order: any) => {
-                        const itemCount = Array.isArray(order.items) ? order.items.length : 0;
-                        const isPaid = order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'cancelled';
-                        return (
-                          <div
-                            key={order.id}
-                            className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 transition"
-                          >
-                            <div>
-                              <span className="font-mono text-xs font-bold text-white block">
-                                #{order.billNumber || order.id}
-                              </span>
-                              <span className="text-[11px] text-zinc-400">
-                                {formatDate(order.timestamp)} · {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <span
-                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                  isPaid
-                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                                }`}
-                              >
-                                {isPaid ? 'Paid' : 'Unpaid'}
-                              </span>
-                              <span className="font-mono text-xs font-bold text-pink-400 min-w-[60px] text-right">
-                                ₹{Number(order.total || 0).toFixed(2)}
-                              </span>
-                            </div>
+              {/* Scrollable details: Address, Meal Plans, Recent Orders, Loyalty Ledger */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
+                {detailTab === 'loyalty' ? (
+                  /* LOYALTY LEDGER TAB */
+                  <div className="space-y-4">
+                    {/* Tier and Points Summary Card */}
+                    <div className="rounded-2xl border border-amber-900/60 bg-gradient-to-br from-amber-950/40 via-zinc-900/80 to-zinc-950 p-4 shadow-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            {selectedCustomer.loyaltyTier === 'Platinum' ? <Crown className="h-5 w-5" /> : <Award className="h-5 w-5" />}
                           </div>
-                        );
-                      })}
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400/80 block">Current Tier</span>
+                            <span className="text-base font-black text-white">{selectedCustomer.loyaltyTier || 'Silver'} Member</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 block">Balance Value</span>
+                          <span className="text-sm font-mono font-black text-amber-300">
+                            ≈ ₹{((Number(selectedCustomer.loyaltyPointsBalance || 0)) * (loyaltySettings?.amountPerPoint || 1)).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-900/40 text-xs">
+                        <div className="bg-zinc-950/60 rounded-xl p-2 text-center border border-zinc-800">
+                          <span className="text-[10px] text-zinc-400 block">Lifetime Earned</span>
+                          <span className="font-mono font-bold text-emerald-400">+{Number(selectedCustomer.totalPointsEarned || 0).toLocaleString()} pts</span>
+                        </div>
+                        <div className="bg-zinc-950/60 rounded-xl p-2 text-center border border-zinc-800">
+                          <span className="text-[10px] text-zinc-400 block">Total Redeemed</span>
+                          <span className="font-mono font-bold text-rose-400">-{Number(selectedCustomer.totalPointsRedeemed || 0).toLocaleString()} pts</span>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    {/* Transaction History */}
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-2 flex items-center justify-between">
+                        <span>Points Activity Ledger</span>
+                        <span className="text-[10px] text-zinc-500 font-mono">{loyaltyHistory.length} entries</span>
+                      </h4>
+
+                      {isLoadingLoyalty ? (
+                        <div className="py-6 text-center text-xs text-zinc-500 animate-pulse">Loading points ledger...</div>
+                      ) : loyaltyHistory.length === 0 ? (
+                        <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/40 text-center text-xs text-zinc-500">
+                          No loyalty points transactions yet. Points will be automatically credited on completed bills!
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {loyaltyHistory.map((tx) => {
+                            const isPositive = tx.points >= 0;
+                            return (
+                              <div
+                                key={tx.id}
+                                className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 transition"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                      tx.type === 'earned'
+                                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+                                        : tx.type === 'redeemed'
+                                          ? 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
+                                          : 'bg-zinc-800 text-zinc-300'
+                                    }`}>
+                                      {tx.type}
+                                    </span>
+                                    {tx.saleId && (
+                                      <span className="font-mono text-[11px] text-zinc-400">Bill #{tx.saleId}</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-zinc-500 mt-1">
+                                    {formatDate(tx.createdAt)} {tx.note ? `· ${tx.note}` : ''}
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <span className={`font-mono text-xs font-black block ${
+                                    isPositive ? 'text-emerald-400' : 'text-rose-400'
+                                  }`}>
+                                    {isPositive ? '+' : ''}{tx.points} pts
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 font-mono">
+                                    Bal: {tx.balanceAfter} pts
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : detailTab === 'orders' ? (
+                  /* ORDERS TAB */
+                  <div>
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                      RECENT ORDERS
+                    </h4>
+                    {isLoadingOrders ? (
+                      <div className="py-4 text-center text-xs text-zinc-500 animate-pulse">
+                        Loading recent bills...
+                      </div>
+                    ) : selectedCustomerOrders.length === 0 ? (
+                      <p className="text-xs text-zinc-500 py-2">No past orders recorded yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedCustomerOrders.map((order: any) => {
+                          const itemCount = Array.isArray(order.items) ? order.items.length : 0;
+                          const isPaid = order.paymentStatus !== 'unpaid' && order.paymentStatus !== 'cancelled';
+                          return (
+                            <div
+                              key={order.id}
+                              className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 transition"
+                            >
+                              <div>
+                                <span className="font-mono text-xs font-bold text-white block">
+                                  #{order.billNumber || order.id}
+                                </span>
+                                <span className="text-[11px] text-zinc-400">
+                                  {formatDate(order.timestamp)} · {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                    isPaid
+                                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                  }`}
+                                >
+                                  {isPaid ? 'Paid' : 'Unpaid'}
+                                </span>
+                                <span className="font-mono text-xs font-bold text-pink-400 min-w-[60px] text-right">
+                                  ₹{Number(order.total || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* OVERVIEW & ADDRESS TAB */
+                  <>
+                    {/* ADDRESS SECTION */}
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                        ADDRESS
+                      </h4>
+                      {selectedCustomer.address ? (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 flex items-start gap-2.5">
+                          <MapPin className="h-4 w-4 text-pink-400 shrink-0 mt-0.5" />
+                          <div className="flex-1 text-xs text-zinc-300 leading-relaxed whitespace-pre-line">
+                            {selectedCustomer.address}
+                          </div>
+                          <button
+                            onClick={() => handleOpenEdit(selectedCustomer)}
+                            className="text-xs font-bold text-pink-400 hover:underline shrink-0 cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenEdit(selectedCustomer)}
+                          className="text-xs font-bold text-pink-400 hover:text-pink-300 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          + Add a delivery address
+                        </button>
+                      )}
+                    </div>
+
+                    {/* MEAL PLANS / NOTES SECTION */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                          MEAL PLANS
+                        </h4>
+                        <span className="text-xs font-bold text-pink-400 hover:underline cursor-pointer">
+                          + Sell a plan
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500">No plan on this guest.</p>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Sticky Footer Actions */}
@@ -903,6 +1151,253 @@ export default function CustomersPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loyalty Program Rules Modal */}
+      {isLoyaltyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150 no-scrollbar">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Loyalty & Rewards Configuration</h3>
+                  <p className="text-xs text-zinc-400">Rules for point accumulation, tiers and checkout redemption</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLoyaltyModalOpen(false)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveLoyaltySettings} className="mt-4 space-y-4">
+              {/* Program Enabled Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/60">
+                <div>
+                  <span className="text-xs font-bold text-white block">Enable Loyalty Program</span>
+                  <span className="text-[11px] text-zinc-400">Award points automatically during checkout</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={loyaltyForm.isEnabled}
+                    onChange={(e) => setLoyaltyForm({ ...loyaltyForm, isEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* Core Earning & Redemption Rates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/40">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Points Earning Rate
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-400">₹</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={loyaltyForm.pointsPerAmount}
+                      onChange={(e) => setLoyaltyForm({ ...loyaltyForm, pointsPerAmount: Number(e.target.value) || 100 })}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-zinc-400 whitespace-nowrap">= 1 pt</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Spend ₹100 to get 1 point</span>
+                </div>
+
+                <div className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/40">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Redemption Value
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-400 whitespace-nowrap">1 pt = ₹</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={0.1}
+                      value={loyaltyForm.amountPerPoint}
+                      onChange={(e) => setLoyaltyForm({ ...loyaltyForm, amountPerPoint: Number(e.target.value) || 1 })}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Each point gives ₹1.00 discount</span>
+                </div>
+              </div>
+
+              {/* Thresholds & Bill Limits */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Min Points to Redeem
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={loyaltyForm.minPointsToRedeem}
+                    onChange={(e) => setLoyaltyForm({ ...loyaltyForm, minPointsToRedeem: Number(e.target.value) || 0 })}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Max Redeem % per Bill
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={loyaltyForm.maxRedeemPercentPerBill}
+                      onChange={(e) => setLoyaltyForm({ ...loyaltyForm, maxRedeemPercentPerBill: Number(e.target.value) || 50 })}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-xs text-zinc-500">%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Min Bill to Earn
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs text-zinc-500">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={loyaltyForm.minBillAmountToEarn}
+                      onChange={(e) => setLoyaltyForm({ ...loyaltyForm, minBillAmountToEarn: Number(e.target.value) || 0 })}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-6 pr-3 py-1.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Membership Tier Thresholds & Multipliers */}
+              <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-3">
+                <span className="text-xs font-bold text-white block flex items-center gap-1.5">
+                  <Crown className="h-3.5 w-3.5 text-amber-400" />
+                  Membership Tiers & Earning Multipliers
+                </span>
+
+                <div className="grid grid-cols-3 gap-2.5 text-xs">
+                  {/* Silver */}
+                  <div className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60">
+                    <span className="font-bold text-zinc-300 block mb-1.5">Silver Tier</span>
+                    <div className="space-y-1.5 text-[11px]">
+                      <div>
+                        <span className="text-zinc-500 block text-[9px] uppercase">Min Points</span>
+                        <input
+                          type="number"
+                          value={loyaltyForm.silverThreshold}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, silverThreshold: Number(e.target.value) || 0 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-zinc-300"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-zinc-500 block text-[9px] uppercase">Multiplier</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={loyaltyForm.silverMultiplier}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, silverMultiplier: Number(e.target.value) || 1 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-zinc-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gold */}
+                  <div className="p-2.5 rounded-xl border border-amber-900/40 bg-amber-950/20">
+                    <span className="font-bold text-amber-300 block mb-1.5">Gold Tier</span>
+                    <div className="space-y-1.5 text-[11px]">
+                      <div>
+                        <span className="text-amber-400/70 block text-[9px] uppercase">Min Points</span>
+                        <input
+                          type="number"
+                          value={loyaltyForm.goldThreshold}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, goldThreshold: Number(e.target.value) || 500 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-amber-300"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-amber-400/70 block text-[9px] uppercase">Multiplier</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={loyaltyForm.goldMultiplier}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, goldMultiplier: Number(e.target.value) || 1.25 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-amber-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Platinum */}
+                  <div className="p-2.5 rounded-xl border border-purple-900/40 bg-purple-950/20">
+                    <span className="font-bold text-purple-300 block mb-1.5">Platinum Tier</span>
+                    <div className="space-y-1.5 text-[11px]">
+                      <div>
+                        <span className="text-purple-400/70 block text-[9px] uppercase">Min Points</span>
+                        <input
+                          type="number"
+                          value={loyaltyForm.platinumThreshold}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, platinumThreshold: Number(e.target.value) || 1500 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-purple-300"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-purple-400/70 block text-[9px] uppercase">Multiplier</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={loyaltyForm.platinumMultiplier}
+                          onChange={(e) => setLoyaltyForm({ ...loyaltyForm, platinumMultiplier: Number(e.target.value) || 1.5 })}
+                          className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-mono text-purple-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {loyaltySaveMsg && (
+                <div className={`rounded-xl p-2.5 text-xs border ${
+                  loyaltySaveMsg.includes('Failed')
+                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                    : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                }`}>
+                  {loyaltySaveMsg}
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsLoyaltyModalOpen(false)}
+                  className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingLoyalty}
+                  className="rounded-xl bg-amber-500 hover:bg-amber-400 px-5 py-2 text-xs font-black text-zinc-950 shadow-lg active:scale-95 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {isSavingLoyalty ? 'Saving...' : 'Save Loyalty Rules'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

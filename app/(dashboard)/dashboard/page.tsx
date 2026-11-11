@@ -411,17 +411,17 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Card 1: Total Gross Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-theme relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                {isIndividualUserView ? "User Collections" : "Total Collections"}
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {currencySymbol}{overview ? overview.totalCollections.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 truncate">
+              {isIndividualUserView ? "User Collections" : "Total Collections"}
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-pink-500/10 border border-pink-500/20 text-theme-accent group-hover:scale-110 transition-transform">
+              <CircleDollarSign className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <CircleDollarSign className="h-6 w-6 text-theme-accent shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate" title={`${currencySymbol}${overview ? overview.totalCollections.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}`}>
+            {currencySymbol}{overview ? overview.totalCollections.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.totalBills : 0} bills invoiced</span>
             <span className="font-mono text-zinc-300">
@@ -432,17 +432,17 @@ export default function DashboardPage() {
 
         {/* Card 2: Cash Drawer Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-emerald-500/50 relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                Cash Collections
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {currencySymbol}{overview ? overview.collections.cash.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 truncate">
+              Cash Collections
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:scale-110 transition-transform">
+              <Banknote className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <Banknote className="h-6 w-6 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate" title={`${currencySymbol}${overview ? overview.collections.cash.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}`}>
+            {currencySymbol}{overview ? overview.collections.cash.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.cash.count : 0} cash bills</span>
             <span className="font-mono text-emerald-400">
@@ -453,17 +453,17 @@ export default function DashboardPage() {
 
         {/* Card 3: UPI / QR Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-purple-500/50 relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-400">
-                UPI / QR Digital
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {currencySymbol}{overview ? overview.collections.upi.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-400 truncate">
+              UPI / QR Digital
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 group-hover:scale-110 transition-transform">
+              <QrCode className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <QrCode className="h-6 w-6 text-purple-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate" title={`${currencySymbol}${overview ? overview.collections.upi.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}`}>
+            {currencySymbol}{overview ? overview.collections.upi.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.upi.count : 0} UPI bills</span>
             <span className="font-mono text-purple-400">
@@ -474,17 +474,17 @@ export default function DashboardPage() {
 
         {/* Card 4: Card POS Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-cyan-500/50 relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">
-                Card POS Swipes
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {currencySymbol}{overview ? overview.collections.card.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 truncate">
+              Card POS Swipes
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 group-hover:scale-110 transition-transform">
+              <CreditCard className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <CreditCard className="h-6 w-6 text-cyan-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate" title={`${currencySymbol}${overview ? overview.collections.card.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}`}>
+            {currencySymbol}{overview ? overview.collections.card.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.card.count : 0} card bills</span>
             <span className="font-mono text-cyan-400">
@@ -495,17 +495,17 @@ export default function DashboardPage() {
 
         {/* Card 5: Credit / Bill Only Collections */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-amber-500/50 relative overflow-hidden group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                Credit / Bill Only
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {currencySymbol}{overview ? overview.collections.billOnly.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 truncate">
+              Credit / Bill Only
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-110 transition-transform">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <Clock className="h-6 w-6 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate" title={`${currencySymbol}${overview ? overview.collections.billOnly.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}`}>
+            {currencySymbol}{overview ? overview.collections.billOnly.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span>{overview ? overview.collections.billOnly.count : 0} unsettled</span>
             <span className="font-mono text-amber-400">Pay Later</span>
@@ -518,18 +518,18 @@ export default function DashboardPage() {
           className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-pink-500/60 hover:bg-zinc-900/90 relative overflow-hidden group cursor-pointer block"
           title="Open Products & Menu Collection"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-pink-400 flex items-center gap-1">
-                <span>Total Products</span>
-                <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {overview ? overview.totalProducts : 0}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pink-400 flex items-center gap-1 truncate">
+              <span>Total Products</span>
+              <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 group-hover:scale-110 transition-transform">
+              <Package className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <Package className="h-6 w-6 text-pink-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate">
+            {overview ? overview.totalProducts : 0}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span className="text-zinc-400">Catalog Menu</span>
             {overview && overview.lowStockCount > 0 ? (
@@ -549,18 +549,18 @@ export default function DashboardPage() {
           className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-xl transition-all hover:border-amber-500/60 hover:bg-zinc-900/90 relative overflow-hidden group cursor-pointer block"
           title="Open Categories Collection"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                <span>Total Category</span>
-                <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </p>
-              <h3 className="mt-2 text-2xl font-black text-white font-mono">
-                {overview ? overview.totalCategories : 0}
-              </h3>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1 truncate">
+              <span>Total Category</span>
+              <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+            </p>
+            <div className="shrink-0 p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-110 transition-transform">
+              <Layers className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <Layers className="h-6 w-6 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
           </div>
+          <h3 className="mt-2 text-xl sm:text-2xl font-black text-white font-mono tracking-tight truncate">
+            {overview ? overview.totalCategories : 0}
+          </h3>
           <p className="mt-3 text-[11px] font-medium text-zinc-400 flex items-center justify-between">
             <span className="text-zinc-400">Menu Groups</span>
             <span className="font-mono text-zinc-400 group-hover:text-zinc-200 transition">View All →</span>

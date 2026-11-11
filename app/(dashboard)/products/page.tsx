@@ -4,14 +4,16 @@ import { Product } from "@/lib/mock-data"
 import { 
   Package, Plus, Edit2, Trash2, RefreshCw, Trash, Layers, Check, 
   Barcode as BarcodeIcon, Printer, QrCode, AlertCircle, PlusCircle, CheckCircle2,
-  X, Search, Tag
+  X, Search, Tag, Boxes
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createProduct, updateProduct, deleteProduct as deleteProductDb, getProducts, getCategories } from "@/lib/actions/db"
-import { getRawMaterials } from "@/lib/actions/inventory"
+import { getRawMaterials, getSuppliers } from "@/lib/actions/inventory"
 import { getAddonGroups } from "@/lib/actions/addons"
 import { getNextInternalBarcodeAction, checkBarcodeUniqueAction } from "@/lib/actions/barcodes"
-import { RawMaterial, RecipeItem, ProductUnit, BarcodeFormat, ProductBarcode } from "@/types/product"
+import { getProductBatches } from "@/lib/actions/batches"
+import { RawMaterial, RecipeItem, ProductUnit, BarcodeFormat, ProductBarcode, Supplier } from "@/types/product"
+import { ProductBatch } from "@/types/batches"
 import { AddonGroup } from "@/types/addons"
 import { 
   generateBarcodeSvg, 
@@ -21,10 +23,21 @@ import {
   detectBarcodeFormat 
 } from "@/lib/barcode-generator"
 import { BarcodePrintModal, BarcodePrintItem } from "@/components/products/BarcodePrintModal"
+import BatchModal from "@/components/stocks/BatchModal"
 
 interface MfgBarcodeEntry {
   barcode: string
   format: BarcodeFormat
+}
+
+function getDaysLeft(expiryDate?: string | null): number | null {
+  if (!expiryDate) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const exp = new Date(expiryDate)
+  exp.setHours(0, 0, 0, 0)
+  if (isNaN(exp.getTime())) return null
+  return Math.ceil((exp.getTime() - today.getTime()) / 86400000)
 }
 
 export default function ProductsPage() {
@@ -33,11 +46,13 @@ export default function ProductsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isBatchTracked, setIsBatchTracked] = useState(false)
   
   const [availableMaterials, setAvailableMaterials] = useState<RawMaterial[]>([])
   const [currentRecipe, setCurrentRecipe] = useState<RecipeItem[]>([])
   const [availableAddonGroups, setAvailableAddonGroups] = useState<AddonGroup[]>([])
   const [selectedAddonGroupIds, setSelectedAddonGroupIds] = useState<string[]>([])
+  const [formSupplier, setFormSupplier] = useState<string>('')
 
   // Barcode Management State
   const [barcodeTab, setBarcodeTab] = useState<'INTERNAL' | 'MANUFACTURER'>('INTERNAL')
@@ -57,22 +72,33 @@ export default function ProductsPage() {
   const [printItems, setPrintItems] = useState<BarcodePrintItem[]>([])
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
+  // Batches & Suppliers State
+  const [batches, setBatches] = useState<ProductBatch[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false)
+  const [batchModalProduct, setBatchModalProduct] = useState<Product | null>(null)
+  const [editingBatch, setEditingBatch] = useState<ProductBatch | null>(null)
+
   // Table search & filter
   const [tableSearch, setTableSearch] = useState('')
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [dbProducts, dbCategories, dbMaterials, dbAddonGroups] = await Promise.all([
+      const [dbProducts, dbCategories, dbMaterials, dbAddonGroups, dbBatches, dbSuppliers] = await Promise.all([
         getProducts(),
         getCategories(),
         getRawMaterials().catch(() => []),
         getAddonGroups().catch(() => []),
+        getProductBatches().catch(() => []),
+        getSuppliers().catch(() => []),
       ])
       setProducts(dbProducts)
       setCategories(dbCategories)
       setAvailableMaterials(dbMaterials)
       setAvailableAddonGroups(dbAddonGroups || [])
+      setBatches(dbBatches || [])
+      setSuppliers(dbSuppliers || [])
     } catch (e) {
       console.error('Failed to load products from DB:', e)
     } finally {
@@ -84,6 +110,32 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Map batches by product ID
+  const productBatchesMap = useMemo(() => {
+    const map = new Map<string, ProductBatch[]>()
+    for (const b of batches) {
+      if (b.itemType === 'product') {
+        const list = map.get(b.itemId) || []
+        list.push(b)
+        map.set(b.itemId, list)
+      }
+    }
+    return map
+  }, [batches])
+
+  const openAddBatchForProduct = (product: Product) => {
+    setBatchModalProduct(product)
+    setEditingBatch(null)
+    setIsBatchModalOpen(true)
+  }
+
+  const openEditBatch = (batch: ProductBatch) => {
+    const prod = products.find(p => p.id === batch.itemId) || null
+    setBatchModalProduct(prod)
+    setEditingBatch(batch)
+    setIsBatchModalOpen(true)
+  }
 
   const maxPlates = useMemo(() => {
     if (currentRecipe.length === 0) return null;
@@ -132,6 +184,8 @@ export default function ProductsPage() {
         setInternalBarcode('');
       }
 
+      setIsBatchTracked(Boolean(product.isBatchTracked));
+      setFormSupplier(product.supplierName || (product as any).preferredSupplier || '');
       setMfgBarcodes(existingMfgs.map(m => ({ barcode: m.barcode, format: m.barcodeFormat })));
       setBarcodeTab(existingInternal || product.barcode ? 'INTERNAL' : existingMfgs.length > 0 ? 'MANUFACTURER' : 'INTERNAL');
       setInternalUniqueStatus({ checked: true, isUnique: true });
@@ -139,6 +193,8 @@ export default function ProductsPage() {
       setEditingProduct(null)
       setCurrentRecipe([])
       setSelectedAddonGroupIds([])
+      setIsBatchTracked(false)
+      setFormSupplier('')
       setMfgBarcodes([])
       setBarcodeTab('INTERNAL')
       setNewMfgBarcode('')
@@ -164,6 +220,8 @@ export default function ProductsPage() {
     setIsFormOpen(false)
     setEditingProduct(null)
     setSelectedAddonGroupIds([])
+    setIsBatchTracked(false)
+    setFormSupplier('')
     setInternalBarcode('')
     setMfgBarcodes([])
     setNewMfgBarcode('')
@@ -394,6 +452,8 @@ export default function ProductsPage() {
 
     // Primary barcode value for backward compatibility
     const primaryBarcodeValue = cleanInternal || (mfgBarcodes[0] ? mfgBarcodes[0].barcode : '');
+    const minStockInput = formData.get("minStock");
+    const minStockVal = minStockInput !== null && minStockInput !== '' ? Number(minStockInput) : 10;
 
     if (editingProduct) {
       const updates: Partial<Product> = {
@@ -403,6 +463,7 @@ export default function ProductsPage() {
         barcodes: compiledBarcodes,
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
+        minStock: minStockVal,
         unit: formData.get("unit") as string as ProductUnit,
         quantityStep: Number(formData.get("quantityStep")),
         categoryId: formData.get("categoryId") as string,
@@ -411,6 +472,9 @@ export default function ProductsPage() {
         image: imageUrl,
         rawMaterials: currentRecipe,
         addonGroupIds: selectedAddonGroupIds,
+        isBatchTracked: isBatchTracked,
+        supplierName: formSupplier.trim() || undefined,
+        preferredSupplier: formSupplier.trim() || undefined,
       };
       await updateProduct(editingProduct.id, updates);
       editProduct(editingProduct.id, updates);
@@ -422,6 +486,7 @@ export default function ProductsPage() {
         barcodes: compiledBarcodes,
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
+        minStock: minStockVal,
         unit: formData.get("unit") as string as ProductUnit,
         quantityStep: Number(formData.get("quantityStep")),
         categoryId: formData.get("categoryId") as string,
@@ -430,6 +495,9 @@ export default function ProductsPage() {
         image: imageUrl,
         rawMaterials: currentRecipe,
         addonGroupIds: selectedAddonGroupIds,
+        isBatchTracked: isBatchTracked,
+        supplierName: formSupplier.trim() || undefined,
+        preferredSupplier: formSupplier.trim() || undefined,
       };
       const created = await createProduct(newProductPayload);
       addProduct(created);
@@ -537,6 +605,10 @@ export default function ProductsPage() {
                     <input required defaultValue={editingProduct?.stock} type="number" name="stock" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:outline-none" />
                   </div>
                   <div>
+                    <label className="block text-xs font-bold text-zinc-300">Minimum Stock Quantity</label>
+                    <input defaultValue={editingProduct?.minStock ?? (editingProduct as any)?.minStockLevel ?? 10} type="number" step="any" name="minStock" placeholder="e.g. 10" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-xs font-mono text-white placeholder-zinc-500 focus:border-pink-500 focus:outline-none" />
+                  </div>
+                  <div>
                     <label className="block text-xs font-bold text-zinc-300">Unit</label>
                     <input required defaultValue={editingProduct?.unit} name="unit" placeholder="e.g. piece, kg" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-xs text-white placeholder-zinc-500 focus:border-pink-500 focus:outline-none" />
                   </div>
@@ -561,6 +633,26 @@ export default function ProductsPage() {
                   <div>
                     <label className="block text-xs font-bold text-zinc-300">Image</label>
                     <input type="file" accept="image/*" name="imageFile" className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-1.5 text-xs text-zinc-400 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-zinc-200 hover:file:bg-zinc-700 cursor-pointer" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-zinc-300">
+                      Preferred Supplier / Commonly Purchased From
+                    </label>
+                    <select
+                      value={formSupplier}
+                      onChange={(e) => setFormSupplier(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                    >
+                      <option value="">No Preferred Supplier (Select...)</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.name} className="bg-zinc-900 text-white">
+                          {s.name} {s.phone ? `(${s.phone})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      Whenever you run low on this item, this supplier is saved as the preferred source for reordering.
+                    </p>
                   </div>
                 </div>
 
@@ -834,6 +926,36 @@ export default function ProductsPage() {
                 </div>
 
                 {/* =========================================================================
+                    Batch & Expiry Date Tracking (FEFO) Section
+                    ========================================================================= */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-950/60 border border-purple-800/80 text-purple-300">
+                        <Boxes className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-pink-300 text-xs uppercase tracking-wider">
+                          Batch & Expiry Tracking (FEFO)
+                        </h3>
+                        <p className="text-[11px] text-zinc-400">
+                          Track batch numbers, manufacturing/expiry dates, and automatically prioritize earliest expiring stock (FEFO).
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={isBatchTracked}
+                        onChange={(e) => setIsBatchTracked(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* =========================================================================
                     Product Add-ons Section
                     ========================================================================= */}
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
@@ -982,6 +1104,61 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Batch Overview for Product */}
+                {editingProduct && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-wider text-pink-300 flex items-center gap-1.5">
+                          <Boxes className="h-3.5 w-3.5 text-pink-400" />
+                          Batch Details
+                        </div>
+                        <div className="text-[11px] text-zinc-400">
+                          Batches, lot numbers, stock, and minimum levels.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openAddBatchForProduct(editingProduct)}
+                        className="rounded-lg border border-pink-500/40 bg-pink-950/40 px-2.5 py-1 text-[11px] font-bold text-pink-200 hover:bg-pink-900/60 hover:text-white transition cursor-pointer"
+                      >
+                        + Add Batch
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {(productBatchesMap.get(editingProduct.id) || []).length === 0 ? (
+                        <p className="text-[11px] text-zinc-500 italic py-1">No batches recorded for this product.</p>
+                      ) : (
+                        (productBatchesMap.get(editingProduct.id) || []).map((b) => (
+                          <div
+                            key={b.id}
+                            className="flex items-center justify-between bg-zinc-950/80 border border-zinc-800 rounded-lg p-2 text-xs"
+                          >
+                            <div>
+                              <div className="font-mono font-bold text-white text-[11px]">{b.batchNumber}</div>
+                              <div className="text-[10px] text-zinc-400">
+                                Stock: <strong className="text-pink-300">{b.currentQuantity}</strong> (Init: {b.initialQuantity})
+                                {b.minStockLevel ? ` · Min: ${b.minStockLevel}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-zinc-400">{b.expiryDate}</span>
+                              <button
+                                type="button"
+                                onClick={() => openEditBatch(b)}
+                                className="text-pink-400 hover:text-pink-300 font-bold text-xs"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </form>
           </div>
@@ -1046,11 +1223,11 @@ export default function ProductsPage() {
                   />
                 </th>
                 <th className="px-5 py-4 font-bold">Product Name</th>
-                <th className="px-4 py-4 font-bold">Barcode(s)</th>
-                <th className="px-4 py-4 font-bold">SKU</th>
-                <th className="px-4 py-4 font-bold">Category</th>
                 <th className="px-4 py-4 font-bold">Price</th>
                 <th className="px-4 py-4 font-bold">Stock</th>
+                <th className="px-4 py-4 font-bold">Min Stock</th>
+                <th className="px-4 py-4 font-bold text-center">Reorder Status</th>
+                <th className="px-4 py-4 font-bold">Batch Details</th>
                 <th className="px-4 py-4 font-bold">Add-ons</th>
                 <th className="px-5 py-4 font-bold text-right">Actions</th>
               </tr>
@@ -1075,11 +1252,6 @@ export default function ProductsPage() {
                   .map((gId) => availableAddonGroups.find((g) => g.id === gId))
                   .filter(Boolean) as AddonGroup[];
 
-                // Barcodes attached
-                const internalBc = (p.barcodes || []).find(b => b.barcodeType === 'INTERNAL');
-                const mfgBcs = (p.barcodes || []).filter(b => b.barcodeType === 'MANUFACTURER');
-                const displayBc = internalBc?.barcode || p.barcode || (mfgBcs[0]?.barcode);
-
                 const isSelected = selectedProductIds.includes(p.id);
 
                 return (
@@ -1102,38 +1274,136 @@ export default function ProductsPage() {
                           </div>
                         )}
                         <div>
-                          <span>{p.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{p.name}</span>
+                            {p.isBatchTracked && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-purple-950/80 border border-purple-800 text-[10px] text-purple-300 font-bold px-1.5 py-0.5">
+                                <Boxes className="h-3 w-3" /> Batch Tracked
+                              </span>
+                            )}
+                            {(p.supplierName || (p as any).preferredSupplier) && (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-950/80 border border-blue-800 text-[10px] text-blue-300 font-medium px-1.5 py-0.5">
+                                Preferred: {p.supplierName || (p as any).preferredSupplier}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
 
-                    {/* Barcodes Column */}
-                    <td className="px-4 py-3.5 text-xs">
-                      {displayBc ? (
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-zinc-800/80 border border-zinc-700/80 font-mono text-[11px] text-zinc-200 font-bold">
-                            <BarcodeIcon className="h-3 w-3 text-pink-400" />
-                            {displayBc}
-                          </span>
-                          {mfgBcs.length > 0 && internalBc && (
-                            <span className="text-[10px] font-mono text-zinc-400 pl-1" title={mfgBcs.map(m => `${m.barcode} (${m.barcodeFormat})`).join(', ')}>
-                              +{mfgBcs.length} mfg
+                    <td className="px-4 py-3.5 font-black font-mono text-pink-300">₹{p.price}</td>
+                    <td className="px-4 py-3.5 text-zinc-300 font-medium font-mono">{p.stock} {p.unit}</td>
+                    <td className="px-4 py-3.5 text-zinc-400 font-medium font-mono">
+                      <span>{Number((p as any).minStock ?? (p as any).minStockLevel ?? 10)}</span> <span className="text-zinc-600 text-xs">{p.unit}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      {(() => {
+                        const mStock = Number((p as any).minStock ?? (p as any).minStockLevel ?? 10)
+                        const cStock = Number(p.stock) || 0
+                        if (cStock <= 0) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                              Out of Stock
                             </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-zinc-600 italic text-xs">None</span>
-                      )}
+                          )
+                        }
+                        if (cStock <= mStock) {
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                              <AlertCircle className="h-3 w-3" /> Reorder Needed
+                            </span>
+                          )
+                        }
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <CheckCircle2 className="h-3 w-3" /> In Stock
+                          </span>
+                        )
+                      })()}
                     </td>
 
-                    <td className="px-4 py-3.5 font-mono text-xs text-zinc-400">{p.sku}</td>
+                    {/* Batch Details Column */}
                     <td className="px-4 py-3.5 text-xs">
-                      <span className="rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-0.5 text-zinc-300">
-                        {categories.find(c => c.id === p.categoryId)?.name || p.categoryId}
-                      </span>
+                      {(() => {
+                        const itemBatches = productBatchesMap.get(p.id) || [];
+                        if (itemBatches.length === 0) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-600 italic">No batches</span>
+                              <button
+                                type="button"
+                                onClick={() => openAddBatchForProduct(p)}
+                                className="text-[10px] font-bold text-pink-400 hover:text-pink-300 underline cursor-pointer"
+                              >
+                                + Batch
+                              </button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="space-y-1">
+                            {itemBatches.slice(0, 2).map((b) => {
+                              const daysLeft = getDaysLeft(b.expiryDate);
+                              return (
+                                <div
+                                  key={b.id}
+                                  onClick={() => openEditBatch(b)}
+                                  className="w-fit min-w-[155px] max-w-[195px] rounded-lg bg-zinc-950/80 border border-zinc-800 hover:border-pink-500/50 p-1.5 cursor-pointer transition text-xs shadow-sm"
+                                  title="Click to view/edit batch details"
+                                >
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className="font-mono font-bold text-white text-[11px] truncate">{b.batchNumber}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                      b.status === 'active'
+                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                        : b.status === 'near_expiry'
+                                        ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                        : 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    }`}>
+                                      {b.status}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 text-[10px] mt-1 pt-1 border-t border-zinc-800/60">
+                                    <span className="text-zinc-400">
+                                      Stock: <strong className="text-pink-300 font-mono font-bold">{b.currentQuantity}</strong>
+                                      {b.minStockLevel ? <span className="text-zinc-500 ml-1">· min {b.minStockLevel}</span> : null}
+                                    </span>
+                                    {b.expiryDate && (
+                                      <div className="text-right shrink-0 leading-tight">
+                                        <div className="text-zinc-400 font-mono text-[9px]">{b.expiryDate}</div>
+                                        {daysLeft !== null && (
+                                          <div
+                                            className={`text-[9px] font-bold ${
+                                              daysLeft < 0
+                                                ? 'text-rose-400'
+                                                : daysLeft <= 30
+                                                ? 'text-amber-400'
+                                                : 'text-emerald-400'
+                                            }`}
+                                          >
+                                            {daysLeft < 0
+                                              ? `Expired ${Math.abs(daysLeft)}d ago`
+                                              : daysLeft === 0
+                                              ? 'Expires today'
+                                              : `${daysLeft} days left`}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {itemBatches.length > 2 && (
+                              <div className="text-[10px] text-zinc-400">
+                                +{itemBatches.length - 2} more batches ({itemBatches.reduce((acc, curr) => acc + curr.currentQuantity, 0)} total)
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-3.5 font-black font-mono text-pink-300">₹{p.price}</td>
-                    <td className="px-4 py-3.5 text-zinc-300 font-medium">{p.stock} {p.unit}</td>
+
                     <td className="px-4 py-3.5 text-xs">
                       {assignedGroups.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -1153,6 +1423,14 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Batch Management Action */}
+                        <button
+                          onClick={() => openAddBatchForProduct(p)}
+                          className="text-zinc-400 hover:text-pink-300 transition cursor-pointer p-1"
+                          title="Manage Batches"
+                        >
+                          <Boxes className="h-4 w-4" />
+                        </button>
                         {/* Print Barcode Action */}
                         <button
                           onClick={() => handlePrintSingleProduct(p)}
@@ -1196,6 +1474,19 @@ export default function ProductsPage() {
         onClose={() => setIsPrintModalOpen(false)}
         items={printItems}
         currencySymbol="₹"
+      />
+
+      {/* Batch Management Modal */}
+      <BatchModal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        onSaved={fetchData}
+        products={products}
+        rawMaterials={availableMaterials}
+        suppliers={suppliers}
+        initialBatch={editingBatch}
+        defaultItemType="product"
+        defaultItemId={batchModalProduct?.id}
       />
     </div>
   )

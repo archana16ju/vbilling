@@ -18,6 +18,11 @@ export type Product = {
   rawMaterials?: RecipeItem[]
   addonGroupIds?: string[]
   barcodes?: ProductBarcode[]
+  isBatchTracked?: boolean
+  minStockLevel?: number
+  minStock?: number
+  supplierName?: string
+  preferredSupplier?: string
 }
 
 export type Category = {

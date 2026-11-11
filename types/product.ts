@@ -39,6 +39,13 @@ export interface RecipeItem {
   unit: ProductUnit
 }
 
+export interface LinkedProductRef {
+  productId: string
+  productName?: string
+  quantity: number
+  unit: ProductUnit
+}
+
 export interface Product {
   id: string
   companyId?: string
@@ -53,6 +60,8 @@ export interface Product {
   image?: string
   tax?: number
   discount?: number
+  minStockLevel?: number
+  minStock?: number
   
   // Recipe Additions
   recipeYield?: number
@@ -60,6 +69,9 @@ export interface Product {
   rawMaterials?: RecipeItem[]
   addonGroupIds?: string[]
   barcodes?: ProductBarcode[]
+  isBatchTracked?: boolean
+  supplierName?: string
+  preferredSupplier?: string
 }
 
 export interface RawMaterial {
@@ -68,20 +80,28 @@ export interface RawMaterial {
   unit: ProductUnit
   currentStock: number
   minimumStock: number
+  targetStock?: number
   isActive: boolean
   lastUpdated?: number
   purchaseUnit?: string
   conversionFactor?: number
   category?: string
+  supplierId?: string
   supplierName?: string
+  preferredSupplier?: string
   shelfLifeDays?: number
   costPerUnit?: number
+  linkedProducts?: LinkedProductRef[]
+  status?: 'In Stock' | 'Low Stock' | 'Replenished' | 'Out of Stock' | string
+  lastReplenishedAt?: number
 }
 
 export interface StockTransaction {
   id: string
+  companyId?: string
   rawMaterialId: string
-  type: 'Opening Stock' | 'Stock Added' | 'Stock Deduction' | 'Stock Adjustment' | 'Stock Return' | 'Wastage' | 'Manual Correction' | 'Production' | 'Bill Cancelled/Refund'
+  rawMaterialName?: string
+  type: 'Opening Stock' | 'Stock Added' | 'Stock Deduction' | 'Sale Deduction' | 'Auto Replenishment' | 'Manual Adjustment' | 'Stock Adjustment' | 'Stock Return' | 'Wastage' | 'Manual Correction' | 'Production' | 'Bill Cancelled/Refund' | string
   quantityBefore: number
   quantityChanged: number
   quantityAfter: number
@@ -119,6 +139,9 @@ export interface PurchaseOrder {
   totalAmount: number
   paidAmount: number
   owedAmount: number
-  state: 'Draft' | 'Pending' | 'Part delivered' | 'Delivered' | 'Cancelled'
+  state: 'Draft' | 'Pending' | 'Part delivered' | 'Delivered' | 'Cancelled' | 'Pending Approval' | 'Approved' | 'Rejected' | 'Ordered' | string
   itemsJson?: string
+  notes?: string
+  approvedAt?: string | number
+  rejectedAt?: string | number
 }

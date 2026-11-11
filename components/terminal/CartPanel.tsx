@@ -35,8 +35,17 @@ import {
   Percent,
   Plus,
   Send,
+  Tag,
+  Award,
+  Crown,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { validatePromotion, getPromoStackingSetting, getPromotions } from '@/lib/actions/promotions';
+import { getLoyaltySettings } from '@/lib/actions/loyalty';
+import { LoyaltySettings } from '@/types/loyalty';
 
 export default function CartPanel() {
   const {
@@ -64,6 +73,8 @@ export default function CartPanel() {
     setSelectedCustomer,
     updateQuantity,
     removeFromCart,
+    promotions = [],
+    addToCart,
   } = useTerminalStore();
 
   const shortcutsStore = useShortcutsStore();
@@ -97,6 +108,7 @@ export default function CartPanel() {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'UPI' | 'Pay Later'>('Cash');
   const [mounted, setMounted] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
+  const [isOffersModalOpen, setIsOffersModalOpen] = useState(false);
 
   // Modals for Customer & Order Note
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -126,13 +138,109 @@ export default function CartPanel() {
     }
   }, [cartSafe, selectedCartItemId]);
 
+  // Promo & Loyalty State
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string;
+    discountAmount: number;
+    title: string;
+    promoId?: string;
+    bogoGetProductId?: string;
+  } | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
+
+  const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings | null>(null);
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState<number>(0);
+  const [allowPromoStacking, setAllowPromoStacking] = useState<boolean>(false);
+
+  useEffect(() => {
+    getLoyaltySettings()
+      .then((s) => {
+        if (s) setLoyaltySettings(s);
+      })
+      .catch(() => {});
+
+    getPromoStackingSetting()
+      .then((allowed) => {
+        setAllowPromoStacking(allowed);
+      })
+      .catch(() => {});
+
+    getPromotions()
+      .then((promos) => {
+        if (Array.isArray(promos)) {
+          useTerminalStore.getState().setPromotions(promos);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Refresh promotions whenever offers modal is opened
+  useEffect(() => {
+    if (isOffersModalOpen) {
+      getPromotions()
+        .then((promos) => {
+          if (Array.isArray(promos)) {
+            useTerminalStore.getState().setPromotions(promos);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOffersModalOpen]);
+
+  // Reset promo / loyalty when cart is emptied
+  useEffect(() => {
+    if (cartSafe.length === 0) {
+      setAppliedPromo(null);
+      setLoyaltyPointsToRedeem(0);
+      setPromoError(null);
+    }
+  }, [cartSafe.length]);
+
+  // Active store promotions
+  const activePromotions = (promotions || []).filter((p) => {
+    if (!p.isActive) return false;
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const sDate = p.startDate ? String(p.startDate).split('T')[0] : '';
+    const eDate = p.endDate ? String(p.endDate).split('T')[0] : '';
+    if (sDate && todayStr < sDate) return false;
+    if (eDate && todayStr > eDate) return false;
+    return true;
+  });
+
   // Calculations
   const subtotal = calculateSubtotal(cartSafe);
   const itemDiscounts = calculateTotalDiscount(cartSafe);
-  const globalDiscountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage);
-  const totalDiscountAmount = itemDiscounts + globalDiscountAmount;
+  const manualDiscountAmount = calculateDiscount(subtotal, discountValue, isDiscountPercentage);
+  const promoDiscountAmount = appliedPromo ? Math.min(appliedPromo.discountAmount, Math.max(0, subtotal - itemDiscounts - manualDiscountAmount)) : 0;
+
+  // Customer Loyalty Calculations
+  const customerPoints = Number(selectedCustomer?.loyaltyPointsBalance || (selectedCustomer as any)?.loyalty_points_balance || 0);
+  const maxRedeemPercent = loyaltySettings?.maxRedeemPercentPerBill || 50;
+  const maxRedeemValue = (subtotal * maxRedeemPercent) / 100;
+  const maxPointsAllowedByBill = Math.floor(maxRedeemValue / (loyaltySettings?.amountPerPoint || 1));
+  const maxRedeemablePoints = Math.min(customerPoints, maxPointsAllowedByBill);
+  const effectivePointsToRedeem = Math.min(loyaltyPointsToRedeem, maxRedeemablePoints);
+  const loyaltyDiscountAmount = effectivePointsToRedeem * (loyaltySettings?.amountPerPoint || 1);
+
+  // Projected points to earn on this sale
+  const customerTier = (selectedCustomer?.loyaltyTier || (selectedCustomer as any)?.loyalty_tier || 'Silver') as string;
+  const tierMultiplier = customerTier === 'Platinum'
+    ? (loyaltySettings?.platinumMultiplier || 1.5)
+    : customerTier === 'Gold'
+      ? (loyaltySettings?.goldMultiplier || 1.25)
+      : (loyaltySettings?.silverMultiplier || 1.0);
+  const pointsPerAmount = loyaltySettings?.pointsPerAmount || 100;
+  const minBillToEarn = loyaltySettings?.minBillAmountToEarn || 0;
+  const projectedLoyaltyPointsEarned = (loyaltySettings?.isEnabled && subtotal >= minBillToEarn)
+    ? Math.floor((subtotal / pointsPerAmount) * tierMultiplier)
+    : 0;
+
+  const totalDiscountAmount = itemDiscounts + manualDiscountAmount + promoDiscountAmount + loyaltyDiscountAmount;
   const totalTax = calculateTotalTax(cartSafe);
-  const exactTotal = calculateGlobalTotal(subtotal, totalDiscountAmount, totalTax);
+  const exactTotal = Math.max(0, subtotal - totalDiscountAmount + totalTax);
   const { roundOffAmount, grandTotal } = calculateRoundOff(
     exactTotal,
     printerDesign.showRoundOff,
@@ -141,6 +249,61 @@ export default function CartPanel() {
     printerDesign.roundOffAbove
   );
   const total = grandTotal;
+
+  const handleApplyPromo = async (codeOverride?: string) => {
+    const code = (codeOverride || promoInput).trim();
+    if (!code || cartSafe.length === 0) return;
+    if (!allowPromoStacking && (discountValue > 0 || manualDiscountAmount > 0)) {
+      setPromoError('Cannot combine promo codes with manual discounts. Please remove manual discount first, or enable Promo Stacking in company settings.');
+      return;
+    }
+    setPromoError(null);
+    setIsValidatingPromo(true);
+    try {
+      const itemsForValidation = cartSafe.map((i) => ({
+        productId: i.product.id,
+        categoryId: i.product.categoryId,
+        quantity: i.quantity,
+        price: i.product.price,
+      }));
+      const res = await validatePromotion(
+        code,
+        itemsForValidation,
+        subtotal,
+        selectedCustomer?.id
+      );
+      if (res.isValid && res.promotion) {
+        if (res.autoAddProduct?.product) {
+          const qty = res.autoAddProduct.quantity || 1;
+          for (let i = 0; i < qty; i++) {
+            addToCart({ ...res.autoAddProduct.product, isFreeBogo: true } as any);
+          }
+          showActionNotification(`🎁 Free item (${res.autoAddProduct.product.name}) added to cart!`);
+        }
+        setAppliedPromo({
+          code: res.promotion.code,
+          discountAmount: res.discountAmount,
+          title: res.promotion.title,
+          promoId: res.promotion.id,
+          bogoGetProductId: res.promotion.bogoGetProductId || (res.autoAddProduct?.product ? ((res.autoAddProduct.product as any).id || (res.autoAddProduct.product as any)._id) : undefined),
+        });
+        setPromoInput('');
+        setPromoError(null);
+        setIsOffersModalOpen(false);
+      } else {
+        setPromoError(res.errorMessage || 'Invalid promo code');
+      }
+    } catch (err: any) {
+      setPromoError(err.message || 'Error validating promo code');
+    } finally {
+      setIsValidatingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoError(null);
+  };
 
 
   // Open DeliveryConfirmationModal (WhatsApp send) after a paid bill is completed
@@ -253,6 +416,8 @@ export default function CartPanel() {
       discount: totalDiscountAmount,
       discountValue: discountValue,
       isDiscountPercentage,
+      manualDiscount: manualDiscountAmount,
+      itemDiscounts,
       tax: totalTax,
       cgst: totalTax / 2,
       sgst: totalTax / 2,
@@ -277,6 +442,14 @@ export default function CartPanel() {
       onlineOrderId: deliveryInfo?.onlineOrderId || undefined,
       paymentStatus: opts.isBillOnly ? 'unpaid' : 'paid',
       servingStatus: opts.isSendToKitchen ? 'Pending' : (orderType === 'Dine In' ? 'Served' : 'Completed'),
+      customerId: selectedCustomer?.id || undefined,
+      promoCode: appliedPromo?.code || undefined,
+      promoTitle: appliedPromo?.title || undefined,
+      promoDiscount: promoDiscountAmount,
+      bogoGetProductId: appliedPromo?.bogoGetProductId || undefined,
+      loyaltyPointsRedeemed: effectivePointsToRedeem,
+      loyaltyDiscount: loyaltyDiscountAmount,
+      loyaltyPointsEarned: projectedLoyaltyPointsEarned,
     };
 
     try {
@@ -294,6 +467,8 @@ export default function CartPanel() {
             const saleDataToComplete = res.sale || { ...fullSaleData, id: billId, timestamp: Date.now() };
             const completedSale = { ...saleDataToComplete, syncStatus: 'COMPLETED' as const };
             completeSale(completedSale, billId);
+            setAppliedPromo(null);
+            setLoyaltyPointsToRedeem(0);
             if (selectedTable) {
               if (opts.keepTableOccupied) {
                 occupyTable(
@@ -336,6 +511,10 @@ export default function CartPanel() {
                 paymentMethod: finalMethod,
               });
             }
+            return;
+          } else if (res && !res.success) {
+            alert(res.error || 'Sale could not be recorded.');
+            setIsProcessing(false);
             return;
           }
         } catch (localErr) {
@@ -805,7 +984,7 @@ export default function CartPanel() {
       {/* Cart Top Header */}
       <div className="border-b border-zinc-800 px-3 py-2 bg-zinc-900/50">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <h2 className="text-sm font-black text-white">Current Order</h2>
             <span
               className="rounded-full px-1.5 py-0.5 text-[9px] font-bold border"
@@ -817,6 +996,17 @@ export default function CartPanel() {
             >
               {cartSafe.reduce((acc, i) => acc + i.quantity, 0)} items
             </span>
+
+            {/* Offers Button beside Current Order */}
+            <button
+              type="button"
+              onClick={() => setIsOffersModalOpen(true)}
+              className="rounded-lg bg-gradient-to-r from-amber-500/20 to-rose-500/20 hover:from-amber-500/30 hover:to-rose-500/30 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-300 transition flex items-center gap-1 cursor-pointer shrink-0 shadow-sm active:scale-95"
+              title="Browse available offers & coupons"
+            >
+              <Sparkles className="h-3 w-3 text-amber-400" />
+              <span>Offers{activePromotions.length > 0 ? ` (${activePromotions.length})` : ''}</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -888,6 +1078,80 @@ className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border 
         </div>
       </div>
 
+      {/* Promo Code Applied Badge & Loyalty Points Bar */}
+      {(appliedPromo || (selectedCustomer && loyaltySettings?.isEnabled)) && (
+        <div className="border-t border-zinc-800/80 bg-zinc-950/80 px-2 py-1.5 space-y-1.5">
+          {/* Promo Code Applied Badge */}
+          {appliedPromo && (
+            <div className="flex items-center justify-between rounded-lg bg-emerald-950/50 border border-emerald-800/60 px-2 py-1 text-xs">
+              <div className="flex items-center gap-1.5 text-emerald-300">
+                <Tag className="h-3 w-3" />
+                <span className="font-bold text-[11px] font-mono">{appliedPromo.code}</span>
+                <span className="text-[10px] text-emerald-400 font-mono">(-₹{promoDiscountAmount.toFixed(2)})</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemovePromo}
+                className="text-zinc-400 hover:text-white p-0.5 rounded cursor-pointer"
+                title="Remove coupon"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
+        {/* Customer Loyalty Points Redemption & Earning Banner */}
+        {selectedCustomer && loyaltySettings?.isEnabled && (
+          <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 px-2 py-1 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Award className="h-3 w-3 text-amber-400" />
+                <span className="text-[10px] font-bold text-amber-200">
+                  {customerTier} · {customerPoints} pts (≈ ₹{(customerPoints * (loyaltySettings.amountPerPoint || 1)).toFixed(0)})
+                </span>
+              </div>
+              {projectedLoyaltyPointsEarned > 0 && (
+                <span className="text-[9px] font-mono font-bold text-emerald-400">
+                  +{projectedLoyaltyPointsEarned} pts
+                </span>
+              )}
+            </div>
+
+            {customerPoints >= (loyaltySettings.minPointsToRedeem || 0) && maxRedeemablePoints > 0 && (
+              <div className="mt-1 pt-1 border-t border-amber-900/30 flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">
+                  Redeem (max {maxRedeemablePoints}):
+                </span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={maxRedeemablePoints}
+                    value={loyaltyPointsToRedeem === 0 ? '' : loyaltyPointsToRedeem}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const val = Math.max(0, Math.min(maxRedeemablePoints, Number(e.target.value) || 0));
+                      setLoyaltyPointsToRedeem(val);
+                    }}
+                    className="w-12 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-[10px] font-mono text-amber-300 text-right focus:border-amber-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoyaltyPointsToRedeem(loyaltyPointsToRedeem > 0 ? 0 : maxRedeemablePoints);
+                    }}
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition cursor-pointer"
+                  >
+                    {loyaltyPointsToRedeem > 0 ? 'Clear' : 'Max'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+
       {/* Calculation & Checkout Footer */}
       <div className="border-t border-zinc-800 bg-zinc-900/80 p-2">
         {/* Totals Breakdown */}
@@ -906,7 +1170,7 @@ className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border 
               setTempIsPercentage(isDiscountPercentage);
               setIsDiscountModalOpen(true);
             }}
-            title="Click to edit discount"
+            title="Click to edit manual discount"
           >
             <span className="flex items-center gap-1">
               <span>Discounts</span>
@@ -915,6 +1179,20 @@ className="flex h-7 min-h-7 items-center justify-center gap-1 rounded-lg border 
               -₹{totalDiscountAmount.toFixed(2)}
             </span>
           </div>
+
+          {promoDiscountAmount > 0 && appliedPromo && (
+            <div className="flex justify-between text-emerald-400 text-[10px] px-1">
+              <span>Coupon ({appliedPromo.code})</span>
+              <span className="font-mono font-bold">-₹{promoDiscountAmount.toFixed(2)}</span>
+            </div>
+          )}
+
+          {loyaltyDiscountAmount > 0 && (
+            <div className="flex justify-between text-amber-400 text-[10px] px-1">
+              <span>Loyalty Points ({effectivePointsToRedeem} pts)</span>
+              <span className="font-mono font-bold">-₹{loyaltyDiscountAmount.toFixed(2)}</span>
+            </div>
+          )}
 
           <div className="flex justify-between text-zinc-400">
             <span>Tax (CGST + SGST)</span>
@@ -1113,7 +1391,12 @@ className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-
               </button>
               <button
                 onClick={() => {
-                  setDiscount(parseFloat(tempDiscount) || 0, tempIsPercentage);
+                  const val = parseFloat(tempDiscount) || 0;
+                  if (!allowPromoStacking && appliedPromo && val > 0) {
+                    alert(`Cannot apply manual discount while promo code "${appliedPromo.code}" is active. Please remove the promo code first, or enable Promo Stacking in company settings.`);
+                    return;
+                  }
+                  setDiscount(val, tempIsPercentage);
                   setIsDiscountModalOpen(false);
                 }}
                 className="flex-[2] rounded-xl bg-theme-bar border border-theme py-2.5 text-xs font-black text-white hover:opacity-95 shadow-theme-glow transition cursor-pointer"
@@ -1333,6 +1616,186 @@ className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-
                 className="flex-1 rounded-xl bg-theme-bar border border-theme py-2.5 text-xs font-black text-white shadow-theme-glow transition cursor-pointer active:scale-95"
               >
                 Print Receipt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Available Coupons & Promotions Modal */}
+      {isOffersModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-in zoom-in-95 duration-150 text-white flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Available Offers & Coupons</h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Cart Subtotal: <span className="font-mono font-bold text-white">₹{subtotal.toFixed(2)}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOffersModalOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Promo Code Input inside Modal */}
+            <div className="mt-3 border-b border-zinc-800/80 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Tag className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Enter coupon / promo code..."
+                    value={promoInput}
+                    onChange={(e) => {
+                      setPromoInput(e.target.value.toUpperCase());
+                      setPromoError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleApplyPromo();
+                      }
+                    }}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-8 pr-3 py-2 text-xs font-mono text-white placeholder:text-zinc-500 uppercase focus:border-theme focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPromo()}
+                  disabled={!promoInput.trim() || isValidatingPromo || cartSafe.length === 0}
+                  className="rounded-xl bg-theme-bar border border-theme shadow-theme-glow px-4 py-2 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40 cursor-pointer"
+                >
+                  {isValidatingPromo ? 'Checking...' : 'Apply'}
+                </button>
+              </div>
+              {promoError && (
+                <span className="text-[11px] text-rose-400 font-medium block mt-1.5 px-1">
+                  {promoError}
+                </span>
+              )}
+            </div>
+
+            {/* Promotions List */}
+            <div className="mt-4 flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {activePromotions.length === 0 ? (
+                <div className="py-8 text-center text-zinc-500 text-xs">
+                  No promotional offers are currently active.
+                </div>
+              ) : (
+                activePromotions.map((promo) => {
+                  const minReq = promo.minCartValue || 0;
+                  const isUnlocked = subtotal >= minReq;
+                  const shortfall = Math.max(0, minReq - subtotal);
+                  const isAlreadyApplied = appliedPromo?.code === promo.code;
+
+                  return (
+                    <div
+                      key={promo.id}
+                      className={`rounded-2xl border p-3.5 transition-all ${
+                        isAlreadyApplied
+                          ? 'border-emerald-500/60 bg-emerald-950/20'
+                          : isUnlocked
+                          ? 'border-zinc-700 bg-zinc-950/80 hover:border-amber-500/60'
+                          : 'border-zinc-800/80 bg-zinc-950/40 opacity-75'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-black text-white tracking-wider bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-md">
+                              {promo.code}
+                            </span>
+                            <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                              {promo.promoType === 'bogo'
+                                ? 'Buy 1 Get 1 Free'
+                                : promo.promoType === 'percentage'
+                                ? `${promo.discountValue}% OFF`
+                                : promo.promoType === 'flat_amount'
+                                ? `₹${promo.discountValue} FLAT OFF`
+                                : 'Special Offer'}
+                            </span>
+                            {promo.isHappyHour && (
+                              <span className="rounded-full bg-cyan-500/20 border border-cyan-500/40 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                                ⚡ Happy Hour
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="text-xs font-bold text-zinc-200">{promo.title}</h4>
+                          {promo.description && (
+                            <p className="text-[11px] text-zinc-400">{promo.description}</p>
+                          )}
+
+                          {/* Minimum Cart Value Requirement */}
+                          <div className="pt-1 flex items-center gap-2 text-[11px]">
+                            {minReq > 0 ? (
+                              <span
+                                className={`font-medium ${
+                                  isUnlocked ? 'text-emerald-400' : 'text-amber-400'
+                                }`}
+                              >
+                                {isUnlocked ? (
+                                  `✓ Min cart ₹${minReq} reached`
+                                ) : (
+                                  `🔒 Min cart ₹${minReq} (Add ₹${shortfall.toFixed(2)} more)`
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500">No minimum cart requirement</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action Button */}
+                        <div className="shrink-0 flex flex-col items-end justify-center">
+                          {isAlreadyApplied ? (
+                            <span className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                              Applied ✓
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!isUnlocked || isValidatingPromo || cartSafe.length === 0}
+                              onClick={() => handleApplyPromo(promo.code)}
+                              className={`rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 cursor-pointer ${
+                                isUnlocked && cartSafe.length > 0
+                                  ? 'bg-theme-bar border border-theme text-white shadow-theme-glow hover:opacity-95'
+                                  : 'border border-zinc-800 bg-zinc-800/50 text-zinc-500 cursor-not-allowed opacity-60'
+                              }`}
+                            >
+                              {isValidatingPromo ? 'Applying...' : 'Apply'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-4 flex items-center justify-between border-t border-zinc-800 pt-3 text-[11px] text-zinc-400">
+              <span>
+                {activePromotions.length} offer{activePromotions.length === 1 ? '' : 's'} available
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsOffersModalOpen(false)}
+                className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>

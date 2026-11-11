@@ -2,7 +2,8 @@
 import { Product } from "@/lib/mock-data"
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { useTerminalDesignStore } from "@/store/useTerminalDesignStore"
-import { Layers } from "lucide-react"
+import { Layers, Tag } from "lucide-react"
+import { getProductPromotionTag } from "@/lib/promotion-helper"
 
 interface ProductCardProps {
   product: Product;
@@ -11,6 +12,7 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onSelectProduct }: ProductCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart)
+  const promotions = useTerminalStore((state) => state.promotions)
   const design = useTerminalDesignStore()
   
   if (!product) return null;
@@ -18,6 +20,7 @@ export default function ProductCard({ product, onSelectProduct }: ProductCardPro
   const currency = design.currencySymbol || '₹';
   const accentColor = design.accentColor || 'var(--theme-accent, #DB2777)';
   const hasAddons = Boolean(product.addonGroupIds && product.addonGroupIds.length > 0);
+  const promoTag = getProductPromotionTag(product, promotions);
 
   const handleAdd = () => {
     if (onSelectProduct) {
@@ -53,15 +56,32 @@ export default function ProductCard({ product, onSelectProduct }: ProductCardPro
                 Add-ons
               </span>
             )}
+            {promoTag && (
+              <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                <Tag className="h-2.5 w-2.5 text-amber-400" />
+                {promoTag.tag}
+              </span>
+            )}
           </div>
           <span className="text-xs text-zinc-500 font-mono mt-0.5">SKU: {product.sku || 'N/A'}</span>
         </div>
       </div>
       
       <div className="col-span-2 text-right">
-        <span className="text-lg font-black" style={{ color: accentColor }}>
-          {currency}{Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
-        </span>
+        {promoTag?.promotionalPrice !== undefined && promoTag.promotionalPrice !== product.price ? (
+          <div className="flex flex-col items-end">
+            <span className="text-xs text-zinc-500 line-through font-mono">
+              {currency}{Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
+            </span>
+            <span className="text-lg font-black text-emerald-400">
+              {currency}{Number(promoTag.promotionalPrice).toFixed(promoTag.promotionalPrice % 1 === 0 ? 0 : 2)}
+            </span>
+          </div>
+        ) : (
+          <span className="text-lg font-black" style={{ color: accentColor }}>
+            {currency}{Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
+          </span>
+        )}
       </div>
       
       <div className="col-span-3 flex justify-end">

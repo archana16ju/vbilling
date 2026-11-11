@@ -23,9 +23,10 @@ import {
   Phone,
   FileText,
   IndianRupee,
-  ShoppingCart
+  ShoppingCart,
+  History
 } from "lucide-react"
-import { RawMaterial, Product, ProductUnit, Supplier, PurchaseOrder, PurchaseOrderItem } from "@/types/product"
+import { RawMaterial, Product, ProductUnit, Supplier, PurchaseOrder, PurchaseOrderItem, StockTransaction } from "@/types/product"
 import {
   getRawMaterials,
   createRawMaterial,
@@ -38,10 +39,19 @@ import {
   getPurchaseOrders,
   createPurchaseOrder,
   updatePurchaseOrder,
-  deletePurchaseOrder
+  deletePurchaseOrder,
+  getStockTransactions,
+  recordManualStockAdjustment,
+  recordStockDelivery,
+  approvePurchaseOrder,
+  rejectPurchaseOrder
 } from "@/lib/actions/inventory"
 import { getProducts, updateProduct, getCategories } from "@/lib/actions/db"
 import { Category } from "@/lib/mock-data"
+import BatchesTab from "@/components/stocks/BatchesTab"
+import { ProductBatch } from "@/types/batches"
+import { getProductBatches } from "@/lib/actions/batches"
+import BatchModal from "@/components/stocks/BatchModal"
 
 const UNITS: { id: ProductUnit; label: string }[] = [
   { id: "kg", label: "kg · Kilogram" },
@@ -58,14 +68,33 @@ const UNITS: { id: ProductUnit; label: string }[] = [
   { id: "pkt", label: "pkt · Packet" },
 ]
 
+function getDaysLeft(expiryDate?: string | null): number | null {
+  if (!expiryDate) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const exp = new Date(expiryDate)
+  exp.setHours(0, 0, 0, 0)
+  if (isNaN(exp.getTime())) return null
+  return Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+}
+
 export default function StocksPage() {
-  const [activeTab, setActiveTab] = useState<'raw-materials' | 'to-buy' | 'orders' | 'products'>('raw-materials')
+  const [activeTab, setActiveTab] = useState<'raw-materials' | 'to-buy' | 'orders' | 'products' | 'batches' | 'history'>('raw-materials')
   const [materials, setMaterials] = useState<RawMaterial[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
+  const [batches, setBatches] = useState<ProductBatch[]>([])
+  const [transactions, setTransactions] = useState<StockTransaction[]>([])
+  const [txTypeFilter, setTxTypeFilter] = useState<string>('all')
+  const [txSearchQuery, setTxSearchQuery] = useState<string>('')
   const [loading, setLoading] = useState(true)
+
+  // Batch Modal State
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false)
+  const [batchModalItem, setBatchModalItem] = useState<{ type: 'product' | 'raw_material'; item: any } | null>(null)
+  const [editingBatch, setEditingBatch] = useState<ProductBatch | null>(null)
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('')
@@ -97,6 +126,14 @@ export default function StocksPage() {
   const [orderTotal, setOrderTotal] = useState('')
   const [orderPaid, setOrderPaid] = useState('')
   const [orderState, setOrderState] = useState<'Part delivered' | 'Delivered' | 'Pending'>('Part delivered')
+  const [orderItemsList, setOrderItemsList] = useState<{
+    rawMaterialId?: string
+    name: string
+    orderedQty: number
+    unit: string
+    rate: number
+  }[]>([])
+  const [selectedAddItemRawId, setSelectedAddItemRawId] = useState('')
 
   // Order Detail Modal State (Matching User Reference Images)
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
@@ -123,6 +160,9 @@ export default function StocksPage() {
   const [formCategory, setFormCategory] = useState<string>('')
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [formSupplier, setFormSupplier] = useState<string>('')
+  const [formSupplierId, setFormSupplierId] = useState<string>('')
+  const [formTargetStock, setFormTargetStock] = useState<string>('999')
+  const [formCostPerUnit, setFormCostPerUnit] = useState<string>('')
   const [formShelfLife, setFormShelfLife] = useState<string>('')
   const [formCurrentStock, setFormCurrentStock] = useState<string>('0')
   const [saving, setSaving] = useState(false)
@@ -130,22 +170,52 @@ export default function StocksPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [mats, prods, cats, sups, ords] = await Promise.all([
+      const [mats, prods, cats, sups, ords, btchs, txs] = await Promise.all([
         getRawMaterials().catch(() => []),
         getProducts().catch(() => []),
         getCategories().catch(() => []),
         getSuppliers().catch(() => []),
         getPurchaseOrders().catch(() => []),
+        getProductBatches().catch(() => []),
+        getStockTransactions().catch(() => []),
       ])
       setMaterials(mats || [])
       setProducts(prods || [])
       setCategories(cats || [])
       setSuppliers(sups || [])
       setOrders(ords || [])
+      setBatches(btchs || [])
+      setTransactions(txs || [])
     } finally {
       setLoading(false)
     }
   }
+
+  // Map batches by product ID
+  const productBatchesMap = useMemo(() => {
+    const map = new Map<string, ProductBatch[]>()
+    for (const b of batches) {
+      if (b.itemType === 'product') {
+        const list = map.get(b.itemId) || []
+        list.push(b)
+        map.set(b.itemId, list)
+      }
+    }
+    return map
+  }, [batches])
+
+  // Map batches by raw material ID
+  const materialBatchesMap = useMemo(() => {
+    const map = new Map<string, ProductBatch[]>()
+    for (const b of batches) {
+      if (b.itemType === 'raw_material') {
+        const list = map.get(b.itemId) || []
+        list.push(b)
+        map.set(b.itemId, list)
+      }
+    }
+    return map
+  }, [batches])
 
   useEffect(() => {
     loadData()
@@ -182,11 +252,14 @@ export default function StocksPage() {
       setFormName(mat.name || '')
       setFormUnit(mat.unit || 'kg')
       setFormReorderPoint(String(mat.minimumStock ?? 1))
+      setFormTargetStock(String(mat.targetStock ?? 999))
+      setFormCostPerUnit(mat.costPerUnit != null ? String(mat.costPerUnit) : '')
       setFormPurchaseUnit(mat.purchaseUnit || 'same')
       setFormConversionFactor(String(mat.conversionFactor ?? 1))
       setFormCategory(mat.category || '')
       setIsCustomCategory(Boolean(mat.category && !categoryOptions.includes(mat.category)))
-      setFormSupplier(mat.supplierName || (suppliers[0]?.name || ''))
+      setFormSupplier(mat.supplierName || '')
+      setFormSupplierId(mat.supplierId || '')
       setFormShelfLife(mat.shelfLifeDays ? String(mat.shelfLifeDays) : '')
       setFormCurrentStock(String(mat.currentStock ?? 0))
     } else {
@@ -194,11 +267,14 @@ export default function StocksPage() {
       setFormName('')
       setFormUnit('kg')
       setFormReorderPoint('1')
+      setFormTargetStock('999')
+      setFormCostPerUnit('')
       setFormPurchaseUnit('same')
       setFormConversionFactor('1')
       setFormCategory(categoryOptions[0] || '')
       setIsCustomCategory(false)
-      setFormSupplier(suppliers[0]?.name || '')
+      setFormSupplier('')
+      setFormSupplierId('')
       setFormShelfLife('')
       setFormCurrentStock('0')
     }
@@ -216,10 +292,13 @@ export default function StocksPage() {
         name: formName.trim(),
         unit: formUnit as ProductUnit,
         minimumStock: Number(formReorderPoint) || 0,
+        targetStock: formTargetStock ? Number(formTargetStock) : 999,
+        costPerUnit: formCostPerUnit ? Number(formCostPerUnit) : undefined,
         purchaseUnit: formPurchaseUnit === 'same' ? undefined : formPurchaseUnit,
         conversionFactor: Number(formConversionFactor) || 1,
         category: formCategory.trim() || undefined,
         supplierName: formSupplier.trim() || undefined,
+        supplierId: formSupplierId || undefined,
         shelfLifeDays: formShelfLife ? Number(formShelfLife) : undefined,
         currentStock: Number(formCurrentStock) || 0,
         isActive: true,
@@ -232,6 +311,7 @@ export default function StocksPage() {
       }
 
       setIsRawModalOpen(false)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
       await loadData()
     } finally {
       setSaving(false)
@@ -247,6 +327,7 @@ export default function StocksPage() {
     try {
       await deleteRawMaterial(editingMaterial.id)
       setIsRawModalOpen(false)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
       await loadData()
     } finally {
       setSaving(false)
@@ -273,6 +354,14 @@ export default function StocksPage() {
       const current = Number(adjustingItem.item.currentStock) || 0
       const newStock = Math.max(0, current + delta)
       await updateRawMaterial(adjustingItem.item.id, { currentStock: newStock })
+      await recordManualStockAdjustment(
+        adjustingItem.item.id,
+        adjustingItem.item.name,
+        current,
+        delta,
+        newStock,
+        `Manual Adjustment: ${adjustReason}`
+      )
     } else {
       const current = Number(adjustingItem.item.stock) || 0
       const newStock = Math.max(0, current + delta)
@@ -280,6 +369,7 @@ export default function StocksPage() {
     }
 
     setIsAdjustModalOpen(false)
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
     await loadData()
   }
 
@@ -354,14 +444,82 @@ export default function StocksPage() {
   }
 
   // Place Order Modal
-  const handleOpenOrderModal = (supplierId?: string) => {
+  const handleOpenOrderModal = (supplierId?: string, initialRawMaterial?: RawMaterial) => {
     const defaultSup = suppliers.find(s => s.id === supplierId) || suppliers[0]
     setOrderPoNumber(getNextPoNumber())
     setOrderSupplierId(defaultSup?.id || '')
-    setOrderTotal('')
     setOrderPaid('')
     setOrderState('Part delivered')
+    setSelectedAddItemRawId('')
+
+    let initialDrafts: {
+      rawMaterialId?: string
+      name: string
+      orderedQty: number
+      unit: string
+      rate: number
+    }[] = []
+
+    if (initialRawMaterial) {
+      initialDrafts = [{
+        rawMaterialId: initialRawMaterial.id,
+        name: initialRawMaterial.name,
+        orderedQty: Math.max(1, Math.ceil((initialRawMaterial.minimumStock || 10) - (initialRawMaterial.currentStock || 0))),
+        unit: initialRawMaterial.unit || 'kg',
+        rate: initialRawMaterial.costPerUnit || 100,
+      }]
+    } else if (defaultSup) {
+      // Auto-suggest raw materials that have this supplier as preferred
+      const supMats = materials.filter(m => (m.supplierName || (m as any).preferredSupplier || '').toLowerCase() === defaultSup.name.toLowerCase())
+      if (supMats.length > 0) {
+        initialDrafts = supMats.map(m => ({
+          rawMaterialId: m.id,
+          name: m.name,
+          orderedQty: Math.max(1, Math.ceil((m.minimumStock || 10) - (m.currentStock || 0))),
+          unit: m.unit || 'kg',
+          rate: m.costPerUnit || 100,
+        }))
+      }
+    }
+
+    setOrderItemsList(initialDrafts)
+    const sum = initialDrafts.reduce((acc, it) => acc + (Number(it.orderedQty || 0) * Number(it.rate || 0)), 0)
+    setOrderTotal(sum > 0 ? String(sum.toFixed(2)) : '')
     setIsOrderModalOpen(true)
+  }
+
+  const handleAddOrderItem = (rawMatId: string) => {
+    if (!rawMatId) return
+    const mat = materials.find(m => m.id === rawMatId)
+    if (!mat) return
+    const exists = orderItemsList.some(it => it.name.toLowerCase() === mat.name.toLowerCase())
+    if (exists) return
+    const newItem = {
+      rawMaterialId: mat.id,
+      name: mat.name,
+      orderedQty: 1,
+      unit: mat.unit || 'kg',
+      rate: mat.costPerUnit || 100,
+    }
+    const updated = [...orderItemsList, newItem]
+    setOrderItemsList(updated)
+    const sum = updated.reduce((acc, it) => acc + (Number(it.orderedQty || 0) * Number(it.rate || 0)), 0)
+    setOrderTotal(sum > 0 ? String(sum.toFixed(2)) : '')
+    setSelectedAddItemRawId('')
+  }
+
+  const handleUpdateOrderItem = (idx: number, field: 'orderedQty' | 'rate', value: number) => {
+    const updated = orderItemsList.map((it, i) => i === idx ? { ...it, [field]: value } : it)
+    setOrderItemsList(updated)
+    const sum = updated.reduce((acc, it) => acc + (Number(it.orderedQty || 0) * Number(it.rate || 0)), 0)
+    setOrderTotal(sum > 0 ? String(sum.toFixed(2)) : '')
+  }
+
+  const handleRemoveOrderItem = (idx: number) => {
+    const updated = orderItemsList.filter((_, i) => i !== idx)
+    setOrderItemsList(updated)
+    const sum = updated.reduce((acc, it) => acc + (Number(it.orderedQty || 0) * Number(it.rate || 0)), 0)
+    setOrderTotal(sum > 0 ? String(sum.toFixed(2)) : '')
   }
 
   const handleSaveOrder = async (e: React.FormEvent) => {
@@ -374,6 +532,16 @@ export default function StocksPage() {
     const owed = Math.max(0, total - paid)
     const finalPoNumber = orderPoNumber.trim() || getNextPoNumber()
 
+    // Format real itemsJson for the order
+    const formattedItems: PurchaseOrderItem[] = orderItemsList.map(it => ({
+      name: it.name,
+      orderedQty: Number(it.orderedQty) || 1,
+      unit: it.unit || '',
+      deliveredQty: 0,
+      stillOwedQty: Number(it.orderedQty) || 1,
+      rate: Number(it.rate) || 0,
+    }))
+
     setSaving(true)
     try {
       await createPurchaseOrder({
@@ -385,6 +553,7 @@ export default function StocksPage() {
         paidAmount: paid,
         owedAmount: owed,
         state: orderState,
+        itemsJson: formattedItems.length > 0 ? JSON.stringify(formattedItems) : undefined,
       })
 
       // Update supplier balance owed
@@ -395,6 +564,7 @@ export default function StocksPage() {
       }
 
       setIsOrderModalOpen(false)
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
       await loadData()
     } finally {
       setSaving(false)
@@ -471,7 +641,7 @@ export default function StocksPage() {
 
     setSavingOrderDetail(true)
     try {
-      // 1. Update stock of matching raw materials
+      // 1. Update stock of matching raw materials and record stock transaction audit log
       for (let i = 0; i < currentItems.length; i++) {
         const item = currentItems[i]
         const arrivedVal = Number(deliveryArrivedMap[i]) || 0
@@ -480,10 +650,13 @@ export default function StocksPage() {
             m => m.name.toLowerCase().trim() === item.name.toLowerCase().trim()
           )
           if (match) {
-            const currentStock = Number(match.currentStock) || 0
-            await updateRawMaterial(match.id, {
-              currentStock: currentStock + arrivedVal
-            })
+            await recordStockDelivery(
+              match.id,
+              match.name,
+              arrivedVal,
+              selectedOrder.id,
+              deliveryInvoiceNumber.trim() || undefined
+            )
           }
         }
       }
@@ -511,6 +684,7 @@ export default function StocksPage() {
       setSelectedOrder(updatedOrder)
       setOrderModalView('view')
       setDeliveryArrivedMap({})
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
       await loadData()
     } finally {
       setSavingOrderDetail(false)
@@ -591,8 +765,57 @@ export default function StocksPage() {
     }
   }
 
+  // Approve automatic reorder
+  const handleApproveOrder = async (orderId: string) => {
+    setSavingOrderDetail(true)
+    try {
+      const res = await approvePurchaseOrder(orderId)
+      if (res.success) {
+        if (res.whatsappUrl) {
+          window.open(res.whatsappUrl, '_blank')
+        }
+        if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
+        await loadData()
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, state: 'Approved' })
+        }
+      } else {
+        alert(res.error || 'Failed to approve order')
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error approving order')
+    } finally {
+      setSavingOrderDetail(false)
+    }
+  }
+
+  // Reject automatic reorder
+  const handleRejectOrder = async (orderId: string) => {
+    if (!confirm(`Are you sure you want to reject purchase order ${orderId}?`)) return
+    setSavingOrderDetail(true)
+    try {
+      const res = await rejectPurchaseOrder(orderId)
+      if (res.success) {
+        if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'))
+        await loadData()
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, state: 'Rejected' })
+        }
+      } else {
+        alert(res.error || 'Failed to reject order')
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error rejecting order')
+    } finally {
+      setSavingOrderDetail(false)
+    }
+  }
+
   // Helper for Status
-  const getStockStatus = (current: number, min: number) => {
+  const getStockStatus = (current: number, min: number, rawStatus?: string) => {
+    if (rawStatus === 'Replenished') {
+      return { label: 'Replenished', color: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30', icon: RefreshCw }
+    }
     const c = Number(current) || 0
     const m = Number(min) || 0
     if (c <= 0) {
@@ -609,14 +832,39 @@ export default function StocksPage() {
     return materials.filter(m => {
       const c = Number(m.currentStock) || 0
       const min = Number(m.minimumStock) || 0
-      return (min > 0 && c <= min) || c <= 0
+      return m.status === 'Low Stock' || (min > 0 && c <= min) || c <= 0
     })
   }, [materials])
 
-  // Total owed to suppliers
+  // Total owed to suppliers (combines pending purchase orders and supplier balances)
   const totalOwedToSuppliers = useMemo(() => {
-    return suppliers.reduce((sum, s) => sum + (Number(s.balanceOwed) || 0), 0)
-  }, [suppliers])
+    const fromOrders = orders.reduce((sum, o) => sum + (Number(o.owedAmount) || 0), 0)
+    const fromSuppliers = suppliers.reduce((sum, s) => sum + (Number(s.balanceOwed) || 0), 0)
+    return Math.max(fromOrders, fromSuppliers)
+  }, [orders, suppliers])
+
+  const supplierOwedBreakdown = useMemo(() => {
+    return suppliers.map(s => {
+      const orderOwed = orders.filter(o => o.supplierId === s.id || o.supplierName === s.name).reduce((sum, o) => sum + (Number(o.owedAmount) || 0), 0)
+      const totalOwed = Math.max(Number(s.balanceOwed) || 0, orderOwed)
+      return { ...s, totalOwed }
+    }).filter(s => s.totalOwed > 0)
+  }, [suppliers, orders])
+
+  // Filtered Stock Transactions
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx => {
+      if (txTypeFilter !== 'all' && tx.type !== txTypeFilter) return false
+      if (txSearchQuery.trim()) {
+        const q = txSearchQuery.toLowerCase()
+        const matMatch = (tx.rawMaterialName || '').toLowerCase().includes(q)
+        const refMatch = (tx.referenceId || '').toLowerCase().includes(q)
+        const reasonMatch = (tx.reason || '').toLowerCase().includes(q)
+        if (!matMatch && !refMatch && !reasonMatch) return false
+      }
+      return true
+    })
+  }, [transactions, txTypeFilter, txSearchQuery])
 
   // Metrics
   const metrics = useMemo(() => {
@@ -835,6 +1083,33 @@ export default function StocksPage() {
             {products.length}
           </span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('batches')}
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition cursor-pointer ${activeTab === 'batches'
+            ? 'border-pink-500 text-pink-400'
+            : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+        >
+          <Boxes className="h-4 w-4" />
+          <span>Batches & Expiry</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition cursor-pointer ${activeTab === 'history'
+            ? 'border-pink-500 text-pink-400'
+            : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+        >
+          <History className="h-4 w-4" />
+          <span>Stock History</span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-mono ${activeTab === 'history' ? 'bg-pink-950/80 text-pink-300 border border-pink-500/40' : 'bg-zinc-800 text-zinc-400'}`}>
+            {transactions.length}
+          </span>
+        </button>
       </div>
 
       {/* Controls Bar for Search & Filter */}
@@ -893,11 +1168,10 @@ export default function StocksPage() {
               <thead className="border-b border-zinc-800 bg-zinc-950/80 text-[11px] uppercase tracking-wider font-bold text-zinc-400">
                 <tr>
                   <th className="px-5 py-3.5">Material Name</th>
-                  <th className="px-5 py-3.5">Category</th>
                   <th className="px-5 py-3.5 text-right">Current Stock</th>
-                  <th className="px-5 py-3.5 text-right">Order More At</th>
+                  <th className="px-5 py-3.5">Linked Products</th>
+                  <th className="px-5 py-3.5">Batch Details</th>
                   <th className="px-5 py-3.5">Purchase Unit & Ratio</th>
-                  <th className="px-5 py-3.5">Usually Bought From</th>
                   <th className="px-5 py-3.5">Keeps For</th>
                   <th className="px-5 py-3.5 text-center">Status</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
@@ -906,42 +1180,139 @@ export default function StocksPage() {
               <tbody className="divide-y divide-zinc-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-zinc-400">Loading raw material stocks...</td>
+                    <td colSpan={8} className="py-12 text-center text-zinc-400">Loading raw material stocks...</td>
                   </tr>
                 ) : filteredMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-zinc-500">
+                    <td colSpan={8} className="py-12 text-center text-zinc-500">
                       No raw materials found. Click <strong>"Add Raw Material"</strong> to create your first ingredient.
                     </td>
                   </tr>
                 ) : (
                   filteredMaterials.map((mat) => {
-                    const status = getStockStatus(mat.currentStock, mat.minimumStock)
+                    const status = getStockStatus(mat.currentStock, mat.minimumStock, mat.status)
                     return (
                       <tr key={mat.id} className="hover:bg-zinc-800/40 transition-colors">
                         <td className="px-5 py-3.5 font-bold text-white">
                           {mat.name}
                         </td>
-                        <td className="px-5 py-3.5">
-                          {mat.category ? (
-                            <span className="rounded-md bg-zinc-800 border border-zinc-700/60 px-2 py-0.5 text-[11px] text-zinc-300 font-medium">
-                              {mat.category}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-600 italic">—</span>
-                          )}
-                        </td>
                         <td className="px-5 py-3.5 text-right font-mono">
                           <span className="text-sm font-bold text-pink-400">{mat.currentStock}</span>{' '}
                           <span className="text-zinc-400 font-medium">{mat.unit}</span>
                         </td>
-                        <td className="px-5 py-3.5 text-right font-mono text-zinc-400">
-                          {mat.minimumStock > 0 ? (
-                            <span>{mat.minimumStock} {mat.unit}</span>
+
+                        {/* Linked Products (Used In) */}
+                        <td className="px-5 py-3.5 text-xs">
+                          {mat.linkedProducts && mat.linkedProducts.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-[180px]">
+                              {mat.linkedProducts.slice(0, 2).map((lp) => (
+                                <span
+                                  key={lp.productId}
+                                  className="inline-flex items-center gap-1 rounded-md bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 text-[11px] text-zinc-200"
+                                  title={`${lp.productName || 'Product'}: ${lp.quantity} ${lp.unit}`}
+                                >
+                                  <span className="font-semibold truncate max-w-[80px]">{lp.productName || 'Product'}</span>
+                                  <span className="text-pink-300 font-mono text-[10px]">({lp.quantity} {lp.unit})</span>
+                                </span>
+                              ))}
+                              {mat.linkedProducts.length > 2 && (
+                                <span className="text-[10px] text-zinc-500 font-medium self-center">
+                                  +{mat.linkedProducts.length - 2} more
+                                </span>
+                              )}
+                            </div>
                           ) : (
-                            <span className="text-zinc-600 italic">No alert</span>
+                            <span className="text-zinc-600 italic">Not linked</span>
                           )}
                         </td>
+
+                        {/* Batch Details Column */}
+                        <td className="px-5 py-3.5 text-xs">
+                          {(() => {
+                            const itemBatches = materialBatchesMap.get(mat.id) || [];
+                            if (itemBatches.length === 0) {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-zinc-600 italic">No batches</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setBatchModalItem({ type: 'raw_material', item: mat });
+                                      setEditingBatch(null);
+                                      setIsBatchModalOpen(true);
+                                    }}
+                                    className="text-[10px] font-bold text-pink-400 hover:text-pink-300 underline cursor-pointer"
+                                  >
+                                    + Batch
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="space-y-1">
+                                {itemBatches.slice(0, 2).map((b) => {
+                                  const daysLeft = getDaysLeft(b.expiryDate);
+                                  return (
+                                    <div
+                                      key={b.id}
+                                      onClick={() => {
+                                        setBatchModalItem({ type: 'raw_material', item: mat });
+                                        setEditingBatch(b);
+                                        setIsBatchModalOpen(true);
+                                      }}
+                                      className="w-fit min-w-[155px] max-w-[195px] rounded-lg bg-zinc-950/80 border border-zinc-800 hover:border-pink-500/50 p-1.5 cursor-pointer transition text-xs shadow-sm"
+                                      title="Click to view/edit batch details"
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="font-mono font-bold text-white text-[11px] truncate">{b.batchNumber}</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                          b.status === 'active' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                          b.status === 'near_expiry' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                                          b.status === 'expired' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                                          'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                        }`}>
+                                          {b.status}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2 text-[10px] mt-1 pt-1 border-t border-zinc-800/60">
+                                        <span className="text-zinc-400">
+                                          Stock: <strong className="text-pink-300 font-mono font-bold">{b.currentQuantity}</strong>
+                                          {b.minStockLevel ? <span className="text-zinc-500 ml-1">· min {b.minStockLevel}</span> : null}
+                                        </span>
+                                        {b.expiryDate && (
+                                          <div className="text-right shrink-0 leading-tight">
+                                            <div className="text-zinc-400 font-mono text-[9px]">{b.expiryDate}</div>
+                                            {daysLeft !== null && (
+                                              <div
+                                                className={`text-[9px] font-bold ${
+                                                  daysLeft < 0
+                                                    ? 'text-rose-400'
+                                                    : daysLeft <= 30
+                                                    ? 'text-amber-400'
+                                                    : 'text-emerald-400'
+                                                }`}
+                                              >
+                                                {daysLeft < 0
+                                                  ? `Expired ${Math.abs(daysLeft)}d ago`
+                                                  : daysLeft === 0
+                                                  ? 'Expires today'
+                                                  : `${daysLeft} days left`}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {itemBatches.length > 2 && (
+                                  <div className="text-[10px] text-zinc-500">+{itemBatches.length - 2} more batches</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+
                         <td className="px-5 py-3.5 text-zinc-400">
                           {mat.purchaseUnit ? (
                             <span className="font-mono text-xs">
@@ -951,25 +1322,39 @@ export default function StocksPage() {
                             <span className="text-zinc-600 text-xs">Same as counted in</span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 text-zinc-300">
-                          {mat.supplierName ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-sky-950/60 border border-sky-800/50 px-2 py-0.5 text-xs text-sky-400 font-medium">
-                              <Building className="h-3 w-3 text-sky-400" />
-                              {mat.supplierName}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-600 italic">—</span>
-                          )}
-                        </td>
                         <td className="px-5 py-3.5 text-zinc-400">
                           {mat.shelfLifeDays ? (
-                            <span className="inline-flex items-center gap-1 text-xs">
-                              <Calendar className="h-3 w-3 text-zinc-500" />
-                              {mat.shelfLifeDays} days
-                            </span>
-                          ) : (
-                            <span className="text-zinc-600 italic">—</span>
-                          )}
+                            <div>
+                              <span className="inline-flex items-center gap-1 text-xs text-zinc-200 font-medium">
+                                <Calendar className="h-3 w-3 text-pink-400" />
+                                {mat.shelfLifeDays} days
+                              </span>
+                              <div className="text-[10px] text-zinc-500">shelf life</div>
+                            </div>
+                          ) : (() => {
+                            const batchesWithExp = (materialBatchesMap.get(mat.id) || [])
+                              .filter((b) => b.expiryDate && b.status !== 'exhausted')
+                              .map((b) => ({ ...b, days: getDaysLeft(b.expiryDate) }))
+                              .filter((b) => b.days !== null)
+                              .sort((a, b) => (a.days as number) - (b.days as number));
+
+                            const nearest = batchesWithExp[0];
+                            if (nearest && nearest.days !== null) {
+                              const d = nearest.days;
+                              return (
+                                <div>
+                                  <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                                    d < 0 ? 'text-rose-400' : d <= 30 ? 'text-amber-400' : 'text-emerald-400'
+                                  }`}>
+                                    <Calendar className="h-3 w-3" />
+                                    {d < 0 ? `Expired ${Math.abs(d)}d ago` : d === 0 ? 'Expires today' : `${d} days left`}
+                                  </span>
+                                  <div className="text-[10px] text-zinc-500 font-mono">from batch</div>
+                                </div>
+                              );
+                            }
+                            return <span className="text-zinc-600 italic">—</span>;
+                          })()}
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${status.color}`}>
@@ -979,6 +1364,18 @@ export default function StocksPage() {
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBatchModalItem({ type: 'raw_material', item: mat });
+                                setEditingBatch(null);
+                                setIsBatchModalOpen(true);
+                              }}
+                              className="rounded-lg border border-zinc-700 bg-zinc-800 p-1.5 text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                              title="Manage Batches"
+                            >
+                              <Boxes className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleOpenAdjust('raw', mat)}
@@ -1039,7 +1436,7 @@ export default function StocksPage() {
                   <th className="px-5 py-3.5">Category</th>
                   <th className="px-5 py-3.5 text-right">Current Stock</th>
                   <th className="px-5 py-3.5 text-right">Alert Threshold</th>
-                  <th className="px-5 py-3.5">Usually Bought From (Supplier)</th>
+                  <th className="px-5 py-3.5">Preferred Supplier / Commonly Purchased From</th>
                   <th className="px-5 py-3.5">Supplier Phone</th>
                   <th className="px-5 py-3.5 text-right">Action</th>
                 </tr>
@@ -1068,7 +1465,12 @@ export default function StocksPage() {
                           {item.minimumStock} {item.unit}
                         </td>
                         <td className="px-5 py-3.5 font-medium text-white">
-                          {item.supplierName || '—'}
+                          {item.supplierName ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-pink-950/40 border border-pink-500/30 px-2 py-0.5 text-xs text-pink-300 font-bold">
+                              <Building className="h-3 w-3 text-pink-400" />
+                              {item.supplierName}
+                            </span>
+                          ) : '—'}
                         </td>
                         <td className="px-5 py-3.5 font-mono text-sky-400">
                           {sup?.phone ? (
@@ -1079,13 +1481,25 @@ export default function StocksPage() {
                           ) : '—'}
                         </td>
                         <td className="px-5 py-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAdjust('raw', item)}
-                            className="rounded-xl btn-theme-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-md active:scale-95 transition cursor-pointer"
-                          >
-                            + Receive Stock
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            {item.supplierName && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOrderModal(sup?.id, item)}
+                                className="rounded-xl border border-pink-500/40 bg-pink-950/40 px-3 py-1.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 transition cursor-pointer"
+                                title={`Place purchase order with ${item.supplierName}`}
+                              >
+                                Order from {item.supplierName}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAdjust('raw', item)}
+                              className="rounded-xl btn-theme-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-md active:scale-95 transition cursor-pointer"
+                            >
+                              + Receive Stock
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1156,21 +1570,51 @@ export default function StocksPage() {
                         ₹{Number(po.owedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${po.state === 'Delivered'
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                          }`}>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${
+                          po.state === 'Delivered'
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : po.state === 'Pending Approval'
+                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 animate-pulse'
+                            : po.state === 'Approved' || po.state === 'Ordered'
+                            ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                            : po.state === 'Rejected' || po.state === 'Cancelled'
+                            ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                            : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}>
+                          {po.state === 'Pending Approval' && <span className="h-1.5 w-1.5 rounded-full bg-amber-400"></span>}
                           {po.state}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenOrderDetail(po)}
-                          className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-200 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
-                        >
-                          Open
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {po.state === 'Pending Approval' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleApproveOrder(po.id)}
+                                className="rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 text-xs font-bold transition shadow-sm cursor-pointer"
+                                title="Approve purchase order"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectOrder(po.id)}
+                                className="rounded-lg border border-rose-500/40 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 px-2.5 py-1 text-xs font-bold transition cursor-pointer"
+                                title="Reject purchase order"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOrderDetail(po)}
+                            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-200 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                          >
+                            Open
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1220,19 +1664,17 @@ export default function StocksPage() {
               Owed to Suppliers
             </h3>
             <div className="divide-y divide-zinc-800/60">
-              {suppliers.filter(s => (s.balanceOwed || 0) > 0).length === 0 ? (
+              {supplierOwedBreakdown.length === 0 ? (
                 <p className="text-xs text-zinc-500 py-2">No pending balances owed to any supplier.</p>
               ) : (
-                suppliers
-                  .filter(s => (s.balanceOwed || 0) > 0)
-                  .map(sup => (
-                    <div key={sup.id} className="flex items-center justify-between py-3 text-xs">
-                      <span className="font-bold text-white">{sup.name}</span>
-                      <span className="font-mono font-bold text-rose-400">
-                        ₹{Number(sup.balanceOwed).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  ))
+                supplierOwedBreakdown.map(sup => (
+                  <div key={sup.id} className="flex items-center justify-between py-3 text-xs">
+                    <span className="font-bold text-white">{sup.name}</span>
+                    <span className="font-mono font-bold text-rose-400">
+                      ₹{Number(sup.totalOwed).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -1250,7 +1692,9 @@ export default function StocksPage() {
                   <th className="px-5 py-3.5">SKU / Code</th>
                   <th className="px-5 py-3.5 text-right">Selling Price</th>
                   <th className="px-5 py-3.5 text-right">Current Stock</th>
+                  <th className="px-5 py-3.5 text-right">Min Stock</th>
                   <th className="px-5 py-3.5 text-center">Recipe Linked</th>
+                  <th className="px-5 py-3.5">Batch Details</th>
                   <th className="px-5 py-3.5 text-center">Status</th>
                   <th className="px-5 py-3.5 text-right">Actions</th>
                 </tr>
@@ -1258,17 +1702,18 @@ export default function StocksPage() {
               <tbody className="divide-y divide-zinc-800/60">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-zinc-500">Loading product stocks...</td>
+                    <td colSpan={9} className="py-12 text-center text-zinc-500">Loading product stocks...</td>
                   </tr>
                 ) : filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-zinc-500">
+                    <td colSpan={9} className="py-12 text-center text-zinc-500">
                       No products found.
                     </td>
                   </tr>
                 ) : (
                   filteredProducts.map((prod) => {
-                    const status = getStockStatus(prod.stock, 5)
+                    const minStock = Number(prod.minStock ?? prod.minStockLevel ?? 5)
+                    const status = getStockStatus(prod.stock, minStock)
                     const hasRecipe = prod.rawMaterials && prod.rawMaterials.length > 0
                     return (
                       <tr key={prod.id} className="hover:bg-zinc-800/40 transition-colors">
@@ -1297,6 +1742,10 @@ export default function StocksPage() {
                           <span className="text-sm font-bold text-white">{prod.stock}</span>{' '}
                           <span className="text-zinc-400">{prod.unit || 'plate'}</span>
                         </td>
+                        <td className="px-5 py-3.5 text-right font-mono text-zinc-400">
+                          <span className="font-semibold text-zinc-300">{minStock}</span>{' '}
+                          <span className="text-zinc-500 text-[11px]">{prod.unit || 'plate'}</span>
+                        </td>
                         <td className="px-5 py-3.5 text-center">
                           {hasRecipe ? (
                             <span className="rounded-full bg-sky-500/15 border border-sky-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-sky-300">
@@ -1306,6 +1755,94 @@ export default function StocksPage() {
                             <span className="text-zinc-500 text-[11px] italic">Direct Stock</span>
                           )}
                         </td>
+
+                        {/* Batch Details Column */}
+                        <td className="px-5 py-3.5 text-xs">
+                          {(() => {
+                            const itemBatches = productBatchesMap.get(prod.id) || [];
+                            if (itemBatches.length === 0) {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-zinc-600 italic">No batches</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setBatchModalItem({ type: 'product', item: prod });
+                                      setEditingBatch(null);
+                                      setIsBatchModalOpen(true);
+                                    }}
+                                    className="text-[10px] font-bold text-pink-400 hover:text-pink-300 underline cursor-pointer"
+                                  >
+                                    + Batch
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="space-y-1">
+                                {itemBatches.slice(0, 2).map((b) => {
+                                  const daysLeft = getDaysLeft(b.expiryDate);
+                                  return (
+                                    <div
+                                      key={b.id}
+                                      onClick={() => {
+                                        setBatchModalItem({ type: 'product', item: prod });
+                                        setEditingBatch(b);
+                                        setIsBatchModalOpen(true);
+                                      }}
+                                      className="w-fit min-w-[155px] max-w-[195px] rounded-lg bg-zinc-950/80 border border-zinc-800 hover:border-pink-500/50 p-1.5 cursor-pointer transition text-xs shadow-sm"
+                                      title="Click to view/edit batch details"
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="font-mono font-bold text-white text-[11px] truncate">{b.batchNumber}</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                          b.status === 'active' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                          b.status === 'near_expiry' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                                          b.status === 'expired' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                                          'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                                        }`}>
+                                          {b.status}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2 text-[10px] mt-1 pt-1 border-t border-zinc-800/60">
+                                        <span className="text-zinc-400">
+                                          Stock: <strong className="text-pink-300 font-mono font-bold">{b.currentQuantity}</strong>
+                                          {b.minStockLevel ? <span className="text-zinc-500 ml-1">· min {b.minStockLevel}</span> : null}
+                                        </span>
+                                        {b.expiryDate && (
+                                          <div className="text-right shrink-0 leading-tight">
+                                            <div className="text-zinc-400 font-mono text-[9px]">{b.expiryDate}</div>
+                                            {daysLeft !== null && (
+                                              <div
+                                                className={`text-[9px] font-bold ${
+                                                  daysLeft < 0
+                                                    ? 'text-rose-400'
+                                                    : daysLeft <= 30
+                                                    ? 'text-amber-400'
+                                                    : 'text-emerald-400'
+                                                }`}
+                                              >
+                                                {daysLeft < 0
+                                                  ? `Expired ${Math.abs(daysLeft)}d ago`
+                                                  : daysLeft === 0
+                                                  ? 'Expires today'
+                                                  : `${daysLeft} days left`}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {itemBatches.length > 2 && (
+                                  <div className="text-[10px] text-zinc-500">+{itemBatches.length - 2} more batches</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+
                         <td className="px-5 py-3.5 text-center">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${status.color}`}>
                             <status.icon className="h-3 w-3" />
@@ -1313,13 +1850,27 @@ export default function StocksPage() {
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAdjust('product', prod)}
-                            className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] font-bold text-zinc-200 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
-                          >
-                            ± Adjust Stock
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBatchModalItem({ type: 'product', item: prod });
+                                setEditingBatch(null);
+                                setIsBatchModalOpen(true);
+                              }}
+                              className="rounded-lg border border-zinc-700 bg-zinc-800 p-1.5 text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                              title="Manage Batches"
+                            >
+                              <Boxes className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAdjust('product', prod)}
+                              className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] font-bold text-zinc-200 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                            >
+                              ± Adjust Stock
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1327,6 +1878,161 @@ export default function StocksPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'batches' && (
+        <BatchesTab
+          products={products}
+          rawMaterials={materials}
+          suppliers={suppliers}
+        />
+      )}
+
+      {/* Tab 6: Stock History */}
+      {activeTab === 'history' && (
+        <div className="space-y-4">
+          {/* History Controls / Filters */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Search material or reference..."
+                  value={txSearchQuery}
+                  onChange={(e) => setTxSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+
+              <select
+                value={txTypeFilter}
+                onChange={(e) => setTxTypeFilter(e.target.value)}
+                className="px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-pink-500 cursor-pointer"
+              >
+                <option value="all">All Transaction Types</option>
+                <option value="Sale Deduction">Sale Deduction</option>
+                <option value="Auto Replenishment">Auto Replenishment</option>
+                <option value="Manual Adjustment">Manual Adjustment</option>
+                <option value="Opening Stock">Opening Stock</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-zinc-400 font-mono">
+              Showing <span className="text-white font-bold">{filteredTransactions.length}</span> transactions
+            </div>
+          </div>
+
+          {/* Transactions Table */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-zinc-300">
+                <thead className="border-b border-zinc-800 bg-zinc-950/80 text-[11px] uppercase tracking-wider font-bold text-zinc-400">
+                  <tr>
+                    <th className="px-5 py-3.5">Raw Material</th>
+                    <th className="px-5 py-3.5 text-center">Type</th>
+                    <th className="px-5 py-3.5 text-right">Previous Stock</th>
+                    <th className="px-5 py-3.5 text-right">Deducted Qty</th>
+                    <th className="px-5 py-3.5 text-right">Restored Qty</th>
+                    <th className="px-5 py-3.5 text-right">Current Stock</th>
+                    <th className="px-5 py-3.5">Date & Time</th>
+                    <th className="px-5 py-3.5">Reason / Reference</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-zinc-500">Loading stock history...</td>
+                    </tr>
+                  ) : filteredTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-zinc-500">
+                        No stock transactions found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTransactions.map((tx) => {
+                      const isDeduction = tx.type === 'Sale Deduction' || tx.quantityChanged < 0
+                      const isReplenishment = tx.type === 'Auto Replenishment'
+                      const isOpening = tx.type === 'Opening Stock'
+                      const isManual = tx.type === 'Manual Adjustment'
+
+                      const deductedQty = tx.quantityChanged < 0 ? Math.abs(tx.quantityChanged) : 0
+                      const restoredQty = tx.quantityChanged > 0 ? tx.quantityChanged : 0
+
+                      return (
+                        <tr key={tx.id} className="hover:bg-zinc-800/40 transition-colors font-mono">
+                          <td className="px-5 py-3.5 font-sans font-bold text-white flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-zinc-400" />
+                            <span>{tx.rawMaterialName || 'Raw Material'}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-center font-sans">
+                            {isReplenishment && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                <RefreshCw className="h-3 w-3 animate-spin duration-1000" /> Auto Replenishment
+                              </span>
+                            )}
+                            {isDeduction && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-rose-400">
+                                Sale Deduction
+                              </span>
+                            )}
+                            {isManual && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                                Manual Adjustment
+                              </span>
+                            )}
+                            {isOpening && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 border border-sky-500/30 px-2.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                                Opening Stock
+                              </span>
+                            )}
+                            {!isReplenishment && !isDeduction && !isManual && !isOpening && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 border border-zinc-700 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300">
+                                {tx.type}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-right text-zinc-400">
+                            {Number(tx.quantityBefore || 0).toFixed(3)}
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-bold text-rose-400">
+                            {deductedQty > 0 ? `-${deductedQty.toFixed(3)}` : '—'}
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-bold text-emerald-400">
+                            {restoredQty > 0 ? `+${restoredQty.toFixed(3)}` : '—'}
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-bold text-white">
+                            {Number(tx.quantityAfter || 0).toFixed(3)}
+                          </td>
+                          <td className="px-5 py-3.5 text-zinc-400 text-[11px] font-sans">
+                            {tx.date ? new Date(tx.date).toLocaleString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: true
+                            }) : '—'}
+                          </td>
+                          <td className="px-5 py-3.5 text-zinc-300 text-xs font-sans">
+                            <div className="flex flex-col">
+                              <span>{tx.reason || '—'}</span>
+                              {tx.referenceId && (
+                                <span className="text-[10px] font-mono text-zinc-500">Ref: {tx.referenceId}</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1388,7 +2094,7 @@ export default function StocksPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    Order More At
+                    Order More At (Min Stock)
                   </label>
                   <input
                     type="number"
@@ -1399,7 +2105,44 @@ export default function StocksPage() {
                     className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 font-mono transition"
                   />
                   <p className="mt-1 text-[11px] text-zinc-500">
-                    In {formUnit}. 0 to never flag it.
+                    In {formUnit}. Triggers low-stock alert when stock &le; this level.
+                  </p>
+                </div>
+              </div>
+
+              {/* TARGET STOCK LEVEL & ESTIMATED COST PER UNIT */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Target Stock Level (Auto-Reorder)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formTargetStock}
+                    onChange={(e) => setFormTargetStock(e.target.value)}
+                    placeholder="999"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 font-mono transition"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Stock quantity to restore up to (e.g. 999). Required = Target - Current.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                    Purchase Cost Per Unit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formCostPerUnit}
+                    onChange={(e) => setFormCostPerUnit(e.target.value)}
+                    placeholder="e.g. 120.00"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 font-mono transition"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Supplier price per {formUnit} for purchase order costing.
                   </p>
                 </div>
               </div>
@@ -1485,17 +2228,27 @@ export default function StocksPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    Usually Bought From
+                    Preferred Supplier / Commonly Purchased From
                   </label>
                   <div className="flex items-center gap-1.5">
                     <select
-                      value={formSupplier}
-                      onChange={(e) => setFormSupplier(e.target.value)}
+                      value={formSupplierId || suppliers.find(s => s.name === formSupplier)?.id || ''}
+                      onChange={(e) => {
+                        const sid = e.target.value
+                        const found = suppliers.find(s => s.id === sid)
+                        if (found) {
+                          setFormSupplierId(found.id)
+                          setFormSupplier(found.name)
+                        } else {
+                          setFormSupplierId('')
+                          setFormSupplier('')
+                        }
+                      }}
                       className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
                     >
-                      <option value="">Select Supplier...</option>
+                      <option value="">No Preferred Supplier (Select...)</option>
                       {suppliers.map(s => (
-                        <option key={s.id} value={s.name}>{s.name}</option>
+                        <option key={s.id} value={s.id}>{s.name} {s.phone ? `(${s.phone})` : ''}</option>
                       ))}
                     </select>
                     <button
@@ -1507,7 +2260,7 @@ export default function StocksPage() {
                     </button>
                   </div>
                   <p className="mt-1 text-[11px] text-zinc-500">
-                    Groups this item under them on buying list.
+                    Whenever you run low on this item, this supplier is saved as the preferred source for reordering.
                   </p>
                 </div>
               </div>
@@ -1679,120 +2432,292 @@ export default function StocksPage() {
       )}
 
       {/* Place Order Modal */}
-      {isOrderModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 shadow-2xl border border-zinc-800 text-white overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
-              <h2 className="text-lg font-black text-white">
-                Place Purchase Order
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsOrderModalOpen(false)}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      {isOrderModalOpen && (() => {
+        const currentSup = suppliers.find(s => s.id === orderSupplierId)
+        const preferredItemsForSup = currentSup
+          ? materials.filter(m => (m.supplierName || (m as any).preferredSupplier || '').toLowerCase() === currentSup.name.toLowerCase())
+          : []
 
-            <form onSubmit={handleSaveOrder} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 overflow-y-auto">
+            <div className="relative w-full max-w-2xl rounded-2xl bg-zinc-900 shadow-2xl border border-zinc-800 text-white overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-6">
+              <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4 bg-zinc-950/60">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    PO Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={orderPoNumber}
-                    onChange={(e) => setOrderPoNumber(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
-                  />
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5 text-pink-400" />
+                    Place Purchase Order
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Order raw materials from supplier and track deliveries & payments.
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={orderState}
-                    onChange={(e: any) => setOrderState(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
-                  >
-                    <option value="Part delivered">Part delivered</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                  Supplier *
-                </label>
-                <select
-                  required
-                  value={orderSupplierId}
-                  onChange={(e) => setOrderSupplierId(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
-                >
-                  <option value="">Select Supplier...</option>
-                  {suppliers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.phone || 'No phone'})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    Total Amount (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    value={orderTotal}
-                    onChange={(e) => setOrderTotal(e.target.value)}
-                    placeholder="e.g. 5386.00"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                    Amount Paid (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={orderPaid}
-                    onChange={(e) => setOrderPaid(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setIsOrderModalOpen(false)}
-                  className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-xl btn-theme-primary px-5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 transition cursor-pointer"
-                >
-                  {saving ? 'Saving...' : 'Create Purchase Order'}
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSaveOrder} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto no-scrollbar">
+                {/* PO Number, Status & Supplier Selection */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                      PO Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={orderPoNumber}
+                      onChange={(e) => setOrderPoNumber(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                      Supplier *
+                    </label>
+                    <select
+                      required
+                      value={orderSupplierId}
+                      onChange={(e) => {
+                        const newSupId = e.target.value
+                        setOrderSupplierId(newSupId)
+                        const s = suppliers.find(sup => sup.id === newSupId)
+                        if (s && orderItemsList.length === 0) {
+                          const supMats = materials.filter(m => (m.supplierName || (m as any).preferredSupplier || '').toLowerCase() === s.name.toLowerCase())
+                          if (supMats.length > 0) {
+                            const initialDrafts = supMats.map(m => ({
+                              rawMaterialId: m.id,
+                              name: m.name,
+                              orderedQty: Math.max(1, Math.ceil((m.minimumStock || 10) - (m.currentStock || 0))),
+                              unit: m.unit || 'kg',
+                              rate: m.costPerUnit || 100,
+                            }))
+                            setOrderItemsList(initialDrafts)
+                            const sum = initialDrafts.reduce((acc, it) => acc + (Number(it.orderedQty || 0) * Number(it.rate || 0)), 0)
+                            setOrderTotal(sum > 0 ? String(sum.toFixed(2)) : '')
+                          }
+                        }
+                      }}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
+                    >
+                      <option value="">Select Supplier...</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.phone || 'No phone'})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={orderState}
+                      onChange={(e: any) => setOrderState(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2 text-sm text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
+                    >
+                      <option value="Part delivered">Part delivered</option>
+                      <option value="Delivered">Delivered</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Preferred Items for this Supplier Quick Chips */}
+                {currentSup && preferredItemsForSup.length > 0 && (
+                  <div className="rounded-xl border border-pink-500/30 bg-pink-950/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-pink-300 flex items-center gap-1.5">
+                        <Building className="h-3.5 w-3.5 text-pink-400" />
+                        Commonly Purchased from {currentSup.name}:
+                      </span>
+                      <span className="text-[10px] text-zinc-400">Click to add to order</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {preferredItemsForSup.map(m => {
+                        const isAdded = orderItemsList.some(it => it.name.toLowerCase() === m.name.toLowerCase())
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => handleAddOrderItem(m.id)}
+                            disabled={isAdded}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition cursor-pointer ${
+                              isAdded
+                                ? 'border-zinc-800 bg-zinc-900/60 text-zinc-500 cursor-default'
+                                : 'border-pink-500/40 bg-zinc-900 text-pink-200 hover:bg-pink-950 hover:text-white'
+                            }`}
+                          >
+                            <Plus className="h-3 w-3" />
+                            {m.name} ({m.currentStock} {m.unit} in stock)
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Items to Order Section */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3.5 space-y-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <Package className="h-3.5 w-3.5 text-pink-400" />
+                      Items to Purchase ({orderItemsList.length})
+                    </h3>
+
+                    {/* Quick Raw Material Add Dropdown */}
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                      <select
+                        value={selectedAddItemRawId}
+                        onChange={(e) => {
+                          setSelectedAddItemRawId(e.target.value)
+                          handleAddOrderItem(e.target.value)
+                        }}
+                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-white outline-none focus:border-pink-500 flex-1 sm:w-48"
+                      >
+                        <option value="">+ Add any raw material...</option>
+                        {materials.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Order Items Table */}
+                  {orderItemsList.length === 0 ? (
+                    <div className="py-6 text-center text-zinc-500 text-xs">
+                      No items added to this order yet. Select a raw material above or click one of the commonly purchased items.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900/60">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-800 text-[10px] font-bold uppercase tracking-wider text-zinc-400 bg-zinc-950/80">
+                            <th className="py-2 px-3">Item</th>
+                            <th className="py-2 px-3 text-center w-24">Ordered Qty</th>
+                            <th className="py-2 px-3 text-center w-16">Unit</th>
+                            <th className="py-2 px-3 text-right w-24">Rate (₹)</th>
+                            <th className="py-2 px-3 text-right w-24">Total (₹)</th>
+                            <th className="py-2 px-2 text-center w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
+                          {orderItemsList.map((it, idx) => (
+                            <tr key={idx} className="hover:bg-zinc-800/30">
+                              <td className="py-2 px-3 font-bold text-white">{it.name}</td>
+                              <td className="py-2 px-3">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.001"
+                                  value={it.orderedQty}
+                                  onChange={(e) => handleUpdateOrderItem(idx, 'orderedQty', parseFloat(e.target.value) || 0)}
+                                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-center font-mono text-xs text-white outline-none focus:border-pink-500"
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center text-zinc-400 font-mono text-[11px]">{it.unit}</td>
+                              <td className="py-2 px-3">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  value={it.rate}
+                                  onChange={(e) => handleUpdateOrderItem(idx, 'rate', parseFloat(e.target.value) || 0)}
+                                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-right font-mono text-xs text-pink-300 outline-none focus:border-pink-500"
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-bold text-white">
+                                ₹{(Number(it.orderedQty || 0) * Number(it.rate || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveOrderItem(idx)}
+                                  className="text-zinc-500 hover:text-rose-400 transition cursor-pointer p-1"
+                                  title="Remove item"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Totals & Payments */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                      Total Order Amount (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={orderTotal}
+                      onChange={(e) => setOrderTotal(e.target.value)}
+                      placeholder="e.g. 5000.00"
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                      Amount Paid Upfront (₹)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={orderPaid}
+                      onChange={(e) => setOrderPaid(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3.5 py-2.5 text-sm font-mono text-white outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Balance preview */}
+                <div className="flex items-center justify-between text-xs bg-zinc-950/80 rounded-xl px-4 py-2.5 border border-zinc-800">
+                  <span className="text-zinc-400">Balance Still Owed to Supplier:</span>
+                  <span className={`font-mono font-bold ${
+                    Math.max(0, Number(orderTotal || 0) - Number(orderPaid || 0)) > 0
+                      ? 'text-rose-400'
+                      : 'text-emerald-400'
+                  }`}>
+                    ₹{Math.max(0, Number(orderTotal || 0) - Number(orderPaid || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsOrderModalOpen(false)}
+                    className="rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-xl btn-theme-primary px-5 py-2 text-xs font-bold text-white shadow-lg active:scale-95 transition cursor-pointer"
+                  >
+                    {saving ? 'Saving...' : 'Create Purchase Order'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Order Detail Modal */}
       {selectedOrder && (
@@ -1901,35 +2826,69 @@ export default function StocksPage() {
 
             {/* View 1: Main Order Detail */}
             {orderModalView === 'view' && (
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-zinc-800">
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setOrderModalView('delivery')}
-                    className="rounded-xl border border-pink-500/40 bg-pink-950/40 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 transition shadow-sm cursor-pointer"
-                  >
-                    Record a delivery
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPaymentAmount(String(selectedOrder.owedAmount || 0))
-                      setOrderModalView('payment')
-                    }}
-                    className="rounded-xl border border-pink-500/40 bg-pink-950/40 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 transition shadow-sm cursor-pointer"
-                  >
-                    Record a payment
-                  </button>
-                </div>
+              <div className="space-y-3 pt-3 border-t border-zinc-800">
+                {selectedOrder.state === 'Pending Approval' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10">
+                    <div>
+                      <p className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                        <AlertCircle className="h-4 w-4" />
+                        Requires Approval Before Sending to Supplier
+                      </p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">Review the quantities and estimated cost. Approving will confirm the order.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveOrder(selectedOrder.id)}
+                        disabled={savingOrderDetail}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 text-xs shadow-md transition cursor-pointer"
+                      >
+                        Approve Order
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectOrder(selectedOrder.id)}
+                        disabled={savingOrderDetail}
+                        className="rounded-xl border border-rose-500/30 bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 font-bold px-3.5 py-2 text-xs transition cursor-pointer"
+                      >
+                        Reject Order
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                <button
-                  type="button"
-                  onClick={handleCancelOrder}
-                  disabled={savingOrderDetail}
-                  className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-900/60 transition cursor-pointer"
-                >
-                  Cancel the order
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setOrderModalView('delivery')}
+                      className="rounded-xl border border-pink-500/40 bg-pink-950/40 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 transition shadow-sm cursor-pointer"
+                    >
+                      Record a delivery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentAmount(String(selectedOrder.owedAmount || 0))
+                        setOrderModalView('payment')
+                      }}
+                      className="rounded-xl border border-pink-500/40 bg-pink-950/40 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 transition shadow-sm cursor-pointer"
+                    >
+                      Record a payment
+                    </button>
+                  </div>
+
+                  {selectedOrder.state !== 'Cancelled' && selectedOrder.state !== 'Rejected' && (
+                    <button
+                      type="button"
+                      onClick={handleCancelOrder}
+                      disabled={savingOrderDetail}
+                      className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-2.5 text-xs font-bold text-rose-400 hover:bg-rose-900/60 transition cursor-pointer"
+                    >
+                      Cancel the order
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -2176,6 +3135,19 @@ export default function StocksPage() {
           </div>
         </div>
       )}
+
+      {/* Batch Modal for Quick Management */}
+      <BatchModal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        onSaved={loadData}
+        products={products}
+        rawMaterials={materials}
+        suppliers={suppliers}
+        initialBatch={editingBatch}
+        defaultItemType={batchModalItem?.type || 'raw_material'}
+        defaultItemId={batchModalItem?.item?.id}
+      />
     </div>
   )
 }

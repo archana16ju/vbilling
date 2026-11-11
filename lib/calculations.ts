@@ -7,6 +7,13 @@ export type CartItemData = {
   notes?: string
   lineId?: string
   selectedAddOns?: SelectedAddon[]
+  batchId?: string
+  batchNumber?: string
+  expiryDate?: string
+  originalPrice?: number
+  promotionalPrice?: number
+  isFree?: boolean
+  isFreeBogo?: boolean
 }
 
 export const calculateItemAddonsUnitPrice = (item: CartItemData): number => {

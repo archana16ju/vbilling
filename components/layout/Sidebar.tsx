@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   ClipboardList,
   Layers,
-  LogOut
+  BadgePercent
 } from "lucide-react"
 import { useState, useEffect } from "react"
 
@@ -79,6 +79,7 @@ export default function Sidebar() {
     { name: "Products", href: "/products", icon: FileText, moduleKey: "products" },
     { name: "Categories", href: "/categories", icon: Tags, moduleKey: "categories" },
     { name: "Add-ons", href: "/add-ons", icon: Layers, moduleKey: "products" },
+    { name: "Promotions", href: "/promotions", icon: BadgePercent, moduleKey: "promotions" },
 
     {
       name: "Stock",
@@ -224,10 +225,22 @@ export default function Sidebar() {
         <button
           onClick={handleLogout}
           title="Logout"
-          className="group flex flex-col items-center justify-center w-full py-2 px-1 rounded-xl text-zinc-400 hover:text-rose-400 hover:bg-rose-950/40 hover:border-rose-900/50 border border-transparent transition-all duration-200 cursor-pointer"
+          className="sidebar-logout-btn group"
         >
-          <LogOut className="h-5 w-5 mb-1 transition-transform duration-200 group-hover:scale-110 group-hover:text-rose-400" />
-          <span className="text-[11px] font-medium tracking-tight text-center leading-tight group-hover:text-rose-300">
+          <svg
+            className="sidebar-logout-icon h-3.5 w-3.5 shrink-0 transition-transform duration-200"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            {/* User avatar head */}
+            <circle cx="8.5" cy="6.5" r="3.5" />
+            {/* User avatar torso */}
+            <path d="M2.5 19c0-3.3 2.7-6 6-6s6 2.7 6 6H2.5z" />
+            {/* Right-pointing triangle arrow */}
+            <polygon points="16,8.5 21.5,12 16,15.5" />
+          </svg>
+          <span className="sidebar-logout-text text-[11px] font-semibold tracking-tight leading-none">
             Logout
           </span>
         </button>

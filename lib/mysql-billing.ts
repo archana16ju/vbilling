@@ -4,7 +4,7 @@ import { ensureLocalMySqlInitialized } from './mysql-init';
 import { getAuthorizedCompanyContext } from './mysql-company';
 import { assertCompanyModuleEnabled } from './company-permissions';
 import { Product, Category, PRODUCTS, CATEGORIES } from '@/lib/mock-data';
-import { RawMaterial, StockTransaction, Supplier, PurchaseOrder } from '@/types/product';
+import { RawMaterial, StockTransaction, Supplier, PurchaseOrder, PurchaseOrderItem, LinkedProductRef, RecipeItem } from '@/types/product';
 import { Delivery, DeliveryPerson, DeliveryStatus, AssignmentStatus, AvailabilityStatus, OnlineOrderConfig } from '@/types/delivery';
 export type { Delivery, DeliveryPerson, DeliveryStatus, AssignmentStatus, AvailabilityStatus, OnlineOrderConfig };
 import { calculateRecipeDeduction } from '@/lib/actions/inventory';
@@ -14,6 +14,9 @@ import { getSession } from './auth-session';
 import { TaxItem, ChargeItem, DEFAULT_TAXES, DEFAULT_CHARGES } from '@/types/taxes-charges';
 import { WhatsAppSettings, DEFAULT_WHATSAPP_SETTINGS } from '@/types/whatsapp';
 export type { WhatsAppSettings };
+import { mysqlDeductBatchAllocation, mysqlAllocateFefo, mysqlSyncItemBatchStock } from './mysql-batches';
+import { mysqlProcessLoyaltyTransaction } from './mysql-loyalty';
+import { mysqlRecordPromotionUsage } from './mysql-promotions';
 
 // Helper to convert database row to Product
 function mapRowToProduct(row: any): Product {
@@ -41,6 +44,7 @@ function mapRowToProduct(row: any): Product {
     image: row.image || undefined,
     tax: Number(row.tax) || 0,
     discount: Number(row.discount) || 0,
+    minStockLevel: row.min_stock != null ? Number(row.min_stock) : 5,
     recipeYield: row.recipe_yield != null ? Number(row.recipe_yield) : undefined,
     recipeUnit: row.recipe_unit || undefined,
     rawMaterials,
@@ -60,12 +64,30 @@ function mapRowToProduct(row: any): Product {
         return undefined;
       }
     })(),
+    isBatchTracked: Boolean(row.is_batch_tracked),
+    supplierName: row.supplier_name || undefined,
+    preferredSupplier: row.supplier_name || undefined,
   };
   return prod as Product;
 }
 
 // Helper to convert database row to RawMaterial
 function mapRowToRawMaterial(row: any): RawMaterial {
+  let linkedProducts: LinkedProductRef[] | undefined = undefined;
+  if (row.linked_products_json) {
+    try {
+      linkedProducts = typeof row.linked_products_json === 'string'
+        ? JSON.parse(row.linked_products_json)
+        : row.linked_products_json;
+    } catch {
+      linkedProducts = undefined;
+    }
+  }
+
+  const stockVal = Number(row.stock) || 0;
+  const minStockVal = Number(row.low_stock_limit) || 0;
+  const rawStatus = row.status || (stockVal <= 0 ? 'Out of Stock' : stockVal <= minStockVal ? 'Low Stock' : 'In Stock');
+
   const mat: RawMaterial & { sku?: string } = {
     id: row.id,
     name: row.name,
@@ -74,13 +96,19 @@ function mapRowToRawMaterial(row: any): RawMaterial {
     unit: row.unit || 'kg',
     purchaseUnit: row.purchase_unit || undefined,
     conversionFactor: row.conversion_factor != null ? Number(row.conversion_factor) : 1,
-    currentStock: Number(row.stock) || 0,
-    minimumStock: Number(row.low_stock_limit) || 0,
+    currentStock: stockVal,
+    minimumStock: minStockVal,
+    targetStock: row.target_stock != null ? Number(row.target_stock) : 999,
+    supplierId: row.supplier_id || undefined,
     supplierName: row.supplier_name || undefined,
+    preferredSupplier: row.supplier_name || undefined,
     shelfLifeDays: row.shelf_life_days != null ? Number(row.shelf_life_days) : undefined,
     costPerUnit: row.cost_per_unit != null ? Number(row.cost_per_unit) : 0,
     isActive: true,
+    status: rawStatus,
+    lastReplenishedAt: row.last_replenished_at ? new Date(row.last_replenished_at).getTime() : undefined,
     lastUpdated: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    linkedProducts: Array.isArray(linkedProducts) ? linkedProducts : [],
   };
   return mat as RawMaterial;
 }
@@ -208,6 +236,13 @@ function mapRowToSale(row: any) {
     items,
     subtotal: Number(row.subtotal) || 0,
     discount: Number(row.discount) || 0,
+    promoCode: row.promo_code || undefined,
+    promoTitle: row.promo_title || undefined,
+    promoDiscount: Number(row.promo_discount) || 0,
+    manualDiscount: Number(row.manual_discount) || 0,
+    loyaltyPointsRedeemed: Number(row.loyalty_points_redeemed) || 0,
+    loyaltyDiscount: Number(row.loyalty_discount) || 0,
+    loyaltyPointsEarned: Number(row.loyalty_points_earned) || 0,
     tax: Number(row.tax) || 0,
     cgst: (Number(row.tax) || 0) / 2,
     sgst: (Number(row.tax) || 0) / 2,
@@ -246,7 +281,7 @@ export async function mysqlGetProducts(): Promise<Product[]> {
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT p.id, p.name, p.sku, p.barcode, p.price, p.stock, p.unit, p.quantity_step, p.category_id, p.company_id,
-              p.image, p.tax, p.discount, p.recipe_yield, p.recipe_unit, p.raw_materials_json, p.addon_group_ids,
+              p.image, p.tax, p.discount, p.min_stock, p.supplier_name, p.recipe_yield, p.recipe_unit, p.raw_materials_json, p.addon_group_ids, p.is_batch_tracked,
               (SELECT JSON_ARRAYAGG(
                  JSON_OBJECT(
                    'id', b.id,
@@ -295,8 +330,8 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
   await pool.query<ResultSetHeader>(
     `INSERT INTO products (
       id, company_id, name, sku, barcode, price, stock, unit, quantity_step, category_id, 
-      image, tax, discount, recipe_yield, recipe_unit, raw_materials_json, addon_group_ids
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      image, tax, discount, min_stock, supplier_name, recipe_yield, recipe_unit, raw_materials_json, addon_group_ids, is_batch_tracked
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newProduct.id,
       company.id,
@@ -311,10 +346,13 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
       newProduct.image || null,
       (newProduct as any).tax || 0,
       (newProduct as any).discount || 0,
+      (newProduct as any).minStock ?? (newProduct as any).minStockLevel ?? 5,
+      (newProduct as any).supplierName || (newProduct as any).preferredSupplier || null,
       (newProduct as any).recipeYield ?? null,
       (newProduct as any).recipeUnit || null,
       newProduct.rawMaterials ? JSON.stringify(newProduct.rawMaterials) : null,
       (newProduct as any).addonGroupIds ? JSON.stringify((newProduct as any).addonGroupIds) : null,
+      (newProduct as any).isBatchTracked ? 1 : 0,
     ]
   );
 
@@ -353,6 +391,11 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
         'CODE128'
       ]
     );
+  }
+
+  // Synchronize product raw materials to raw materials' linked products
+  if (Array.isArray(newProduct.rawMaterials) && newProduct.rawMaterials.length > 0) {
+    await mysqlSyncProductRawMaterials(newProduct.id, newProduct.name, newProduct.rawMaterials, company.id);
   }
 
   return newProduct;
@@ -416,6 +459,10 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
   if (u.image !== undefined) { setClauses.push('image = ?'); params.push(u.image); }
   if (u.tax !== undefined) { setClauses.push('tax = ?'); params.push(u.tax); }
   if (u.discount !== undefined) { setClauses.push('discount = ?'); params.push(u.discount); }
+  if ((u as any).minStock !== undefined || (u as any).minStockLevel !== undefined) {
+    setClauses.push('min_stock = ?');
+    params.push((u as any).minStock ?? (u as any).minStockLevel ?? 5);
+  }
   if (u.recipeYield !== undefined) { setClauses.push('recipe_yield = ?'); params.push(u.recipeYield); }
   if (u.recipeUnit !== undefined) { setClauses.push('recipe_unit = ?'); params.push(u.recipeUnit); }
   if (u.rawMaterials !== undefined) {
@@ -425,6 +472,14 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
   if (u.addonGroupIds !== undefined) {
     setClauses.push('addon_group_ids = ?');
     params.push(u.addonGroupIds ? JSON.stringify(u.addonGroupIds) : null);
+  }
+  if (u.isBatchTracked !== undefined) {
+    setClauses.push('is_batch_tracked = ?');
+    params.push(u.isBatchTracked ? 1 : 0);
+  }
+  if (u.supplierName !== undefined || u.preferredSupplier !== undefined) {
+    setClauses.push('supplier_name = ?');
+    params.push(u.supplierName || u.preferredSupplier || null);
   }
 
   if (setClauses.length === 0) return true;
@@ -436,6 +491,19 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
     `UPDATE products SET ${setClauses.join(', ')} WHERE id = ? AND company_id = ?`,
     params
   );
+
+  if (u.rawMaterials !== undefined) {
+    let pName = u.name;
+    if (!pName) {
+      const [nameRows]: any = await pool.query('SELECT name FROM products WHERE id = ?', [id]);
+      pName = nameRows[0]?.name || 'Product';
+    }
+    await mysqlSyncProductRawMaterials(id, pName, u.rawMaterials, company.id);
+  }
+
+  if (u.stock !== undefined) {
+    await mysqlSyncItemBatchStock(id, 'product', Number(u.stock), company.id);
+  }
 
   return result.affectedRows > 0;
 }
@@ -451,6 +519,8 @@ export async function mysqlDeleteProduct(id: string): Promise<boolean> {
     'DELETE FROM product_barcodes WHERE product_id = ? AND company_id = ?',
     [id, company.id]
   );
+
+  await mysqlSyncProductRawMaterials(id, '', [], company.id);
 
   const [result] = await pool.query<ResultSetHeader>(
     'DELETE FROM products WHERE id = ? AND company_id = ?',
@@ -540,6 +610,133 @@ export async function mysqlDeleteCategory(id: string): Promise<boolean> {
   return result.affectedRows > 0;
 }
 
+// --- RAW MATERIALS & RECIPE TWO-WAY SYNC HELPERS ---
+
+export async function mysqlSyncProductRawMaterials(
+  productId: string,
+  productName: string,
+  rawMaterials: RecipeItem[] | undefined,
+  companyId: string
+): Promise<void> {
+  try {
+    const pool = getMysqlPool();
+    const [rmRows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, name, linked_products_json FROM raw_materials WHERE company_id = ?`,
+      [companyId]
+    );
+
+    const items = Array.isArray(rawMaterials) ? rawMaterials : [];
+    const desiredRmMap = new Map<string, RecipeItem>();
+    for (const item of items) {
+      if (item.rawMaterialId) {
+        desiredRmMap.set(item.rawMaterialId, item);
+      }
+    }
+
+    for (const rm of rmRows) {
+      let linked: LinkedProductRef[] = [];
+      if (rm.linked_products_json) {
+        try {
+          linked = typeof rm.linked_products_json === 'string'
+            ? JSON.parse(rm.linked_products_json)
+            : (rm.linked_products_json || []);
+        } catch {
+          linked = [];
+        }
+      }
+      if (!Array.isArray(linked)) linked = [];
+
+      const hadProd = linked.some(l => l.productId === productId);
+      const shouldHave = desiredRmMap.has(rm.id);
+
+      if (shouldHave) {
+        const item = desiredRmMap.get(rm.id)!;
+        const filtered = linked.filter(l => l.productId !== productId);
+        filtered.push({
+          productId,
+          productName: productName || 'Product',
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit,
+        });
+        await pool.query(
+          `UPDATE raw_materials SET linked_products_json = ? WHERE id = ? AND company_id = ?`,
+          [JSON.stringify(filtered), rm.id, companyId]
+        );
+      } else if (hadProd) {
+        const filtered = linked.filter(l => l.productId !== productId);
+        await pool.query(
+          `UPDATE raw_materials SET linked_products_json = ? WHERE id = ? AND company_id = ?`,
+          [filtered.length > 0 ? JSON.stringify(filtered) : null, rm.id, companyId]
+        );
+      }
+    }
+  } catch (err: any) {
+    console.error('mysqlSyncProductRawMaterials error:', err.message);
+  }
+}
+
+export async function mysqlSyncRawMaterialLinkedProducts(
+  rawMaterialId: string,
+  rawMaterialName: string,
+  linkedProducts: LinkedProductRef[] | undefined,
+  companyId: string
+): Promise<void> {
+  try {
+    const pool = getMysqlPool();
+    const [currentProds] = await pool.query<RowDataPacket[]>(
+      `SELECT id, name, raw_materials_json FROM products WHERE company_id = ?`,
+      [companyId]
+    );
+
+    const lps = Array.isArray(linkedProducts) ? linkedProducts : [];
+    const desiredProductMap = new Map<string, LinkedProductRef>();
+    for (const lp of lps) {
+      if (lp.productId) {
+        desiredProductMap.set(lp.productId, lp);
+      }
+    }
+
+    for (const p of currentProds) {
+      let recipe: RecipeItem[] = [];
+      if (p.raw_materials_json) {
+        try {
+          recipe = typeof p.raw_materials_json === 'string'
+            ? JSON.parse(p.raw_materials_json)
+            : (p.raw_materials_json || []);
+        } catch {
+          recipe = [];
+        }
+      }
+      if (!Array.isArray(recipe)) recipe = [];
+
+      const hadItem = recipe.some(r => r.rawMaterialId === rawMaterialId);
+      const shouldHave = desiredProductMap.has(p.id);
+
+      if (shouldHave) {
+        const lp = desiredProductMap.get(p.id)!;
+        const filtered = recipe.filter(r => r.rawMaterialId !== rawMaterialId);
+        filtered.push({
+          rawMaterialId,
+          quantity: Number(lp.quantity) || 1,
+          unit: lp.unit,
+        });
+        await pool.query(
+          `UPDATE products SET raw_materials_json = ? WHERE id = ? AND company_id = ?`,
+          [JSON.stringify(filtered), p.id, companyId]
+        );
+      } else if (hadItem) {
+        const filtered = recipe.filter(r => r.rawMaterialId !== rawMaterialId);
+        await pool.query(
+          `UPDATE products SET raw_materials_json = ? WHERE id = ? AND company_id = ?`,
+          [filtered.length > 0 ? JSON.stringify(filtered) : null, p.id, companyId]
+        );
+      }
+    }
+  } catch (err: any) {
+    console.error('mysqlSyncRawMaterialLinkedProducts error:', err.message);
+  }
+}
+
 // --- RAW MATERIALS ---
 export async function mysqlGetRawMaterials(): Promise<RawMaterial[]> {
   await ensureLocalMySqlInitialized();
@@ -549,14 +746,58 @@ export async function mysqlGetRawMaterials(): Promise<RawMaterial[]> {
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, company_id, name, category, sku, unit, purchase_unit, conversion_factor, stock, cost_per_unit, supplier_name, shelf_life_days, low_stock_limit, created_at, updated_at 
+      `SELECT id, company_id, name, category, sku, unit, purchase_unit, conversion_factor, stock, cost_per_unit, supplier_id, supplier_name, target_stock, shelf_life_days, low_stock_limit, status, last_replenished_at, linked_products_json, created_at, updated_at 
        FROM raw_materials 
        WHERE company_id = ? 
        ORDER BY name ASC`,
       [company.id]
     );
 
-    const mapped = rows.map(mapRowToRawMaterial);
+    // Also fetch products to cross-populate live recipe links
+    const [pRows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, name, raw_materials_json FROM products WHERE company_id = ? AND raw_materials_json IS NOT NULL`,
+      [company.id]
+    );
+
+    const linkedMap = new Map<string, LinkedProductRef[]>();
+    for (const pr of pRows) {
+      try {
+        const recipe: RecipeItem[] = typeof pr.raw_materials_json === 'string'
+          ? JSON.parse(pr.raw_materials_json)
+          : (pr.raw_materials_json || []);
+        if (Array.isArray(recipe)) {
+          for (const item of recipe) {
+            if (!item.rawMaterialId) continue;
+            const existing = linkedMap.get(item.rawMaterialId) || [];
+            if (!existing.some(e => e.productId === pr.id)) {
+              existing.push({
+                productId: pr.id,
+                productName: pr.name,
+                quantity: Number(item.quantity) || 1,
+                unit: item.unit,
+              });
+              linkedMap.set(item.rawMaterialId, existing);
+            }
+          }
+        }
+      } catch (err) {}
+    }
+
+    const mapped = rows.map((r: any) => {
+      const mat = mapRowToRawMaterial(r);
+      const computedLinks = linkedMap.get(mat.id) || [];
+      const allLinks = [...(mat.linkedProducts || [])];
+      for (const cl of computedLinks) {
+        const idx = allLinks.findIndex(l => l.productId === cl.productId);
+        if (idx >= 0) {
+          allLinks[idx] = { ...allLinks[idx], ...cl };
+        } else {
+          allLinks.push(cl);
+        }
+      }
+      mat.linkedProducts = allLinks;
+      return mat;
+    });
     return mapped;
   } catch (err: any) {
     console.error('mysqlGetRawMaterials error:', err.message);
@@ -576,8 +817,8 @@ export async function mysqlCreateRawMaterial(material: Omit<RawMaterial, 'id'>):
   };
 
   await pool.query<ResultSetHeader>(
-    `INSERT INTO raw_materials (id, company_id, name, category, sku, unit, purchase_unit, conversion_factor, stock, cost_per_unit, supplier_name, shelf_life_days, low_stock_limit) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO raw_materials (id, company_id, name, category, sku, unit, purchase_unit, conversion_factor, stock, cost_per_unit, supplier_id, supplier_name, target_stock, shelf_life_days, low_stock_limit, status, last_replenished_at, linked_products_json) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newMaterial.id,
       company.id,
@@ -589,11 +830,20 @@ export async function mysqlCreateRawMaterial(material: Omit<RawMaterial, 'id'>):
       newMaterial.conversionFactor ?? 1,
       newMaterial.currentStock || 0,
       newMaterial.costPerUnit || 0,
+      newMaterial.supplierId || null,
       newMaterial.supplierName || null,
+      newMaterial.targetStock ?? 999,
       newMaterial.shelfLifeDays || null,
       newMaterial.minimumStock || 0,
+      newMaterial.status || (newMaterial.currentStock <= (newMaterial.minimumStock || 0) ? 'Low Stock' : 'In Stock'),
+      newMaterial.lastReplenishedAt ? new Date(newMaterial.lastReplenishedAt) : null,
+      newMaterial.linkedProducts && newMaterial.linkedProducts.length > 0 ? JSON.stringify(newMaterial.linkedProducts) : null,
     ]
   );
+
+  if (Array.isArray(newMaterial.linkedProducts) && newMaterial.linkedProducts.length > 0) {
+    await mysqlSyncRawMaterialLinkedProducts(newMaterial.id, newMaterial.name, newMaterial.linkedProducts, company.id);
+  }
 
   return newMaterial;
 }
@@ -615,9 +865,26 @@ export async function mysqlUpdateRawMaterial(id: string, updates: Partial<RawMat
   if (u.conversionFactor !== undefined) { setClauses.push('conversion_factor = ?'); params.push(u.conversionFactor); }
   if (u.currentStock !== undefined) { setClauses.push('stock = ?'); params.push(u.currentStock); }
   if (u.minimumStock !== undefined) { setClauses.push('low_stock_limit = ?'); params.push(u.minimumStock); }
+  if (u.targetStock !== undefined) { setClauses.push('target_stock = ?'); params.push(u.targetStock); }
+  if (u.status !== undefined) { setClauses.push('status = ?'); params.push(u.status); }
+  if (u.lastReplenishedAt !== undefined) { setClauses.push('last_replenished_at = ?'); params.push(u.lastReplenishedAt ? new Date(u.lastReplenishedAt) : null); }
+  if (u.supplierId !== undefined) { setClauses.push('supplier_id = ?'); params.push(u.supplierId); }
   if (u.supplierName !== undefined) { setClauses.push('supplier_name = ?'); params.push(u.supplierName); }
   if (u.shelfLifeDays !== undefined) { setClauses.push('shelf_life_days = ?'); params.push(u.shelfLifeDays); }
   if (u.costPerUnit !== undefined) { setClauses.push('cost_per_unit = ?'); params.push(u.costPerUnit); }
+  if (u.linkedProducts !== undefined) {
+    setClauses.push('linked_products_json = ?');
+    params.push(u.linkedProducts ? JSON.stringify(u.linkedProducts) : null);
+  }
+
+  if (u.linkedProducts !== undefined) {
+    let rmName = u.name;
+    if (!rmName) {
+      const [nameRows]: any = await pool.query('SELECT name FROM raw_materials WHERE id = ?', [id]);
+      rmName = nameRows[0]?.name || 'Raw Material';
+    }
+    await mysqlSyncRawMaterialLinkedProducts(id, rmName, u.linkedProducts, company.id);
+  }
 
   if (setClauses.length === 0) return true;
 
@@ -629,6 +896,16 @@ export async function mysqlUpdateRawMaterial(id: string, updates: Partial<RawMat
     params
   );
 
+  if (u.currentStock !== undefined) {
+    await mysqlSyncItemBatchStock(id, 'raw_material', Number(u.currentStock), company.id);
+    const minLimit = u.minimumStock !== undefined ? Number(u.minimumStock) : 1;
+    if (Number(u.currentStock) <= minLimit) {
+      try {
+        await mysqlCheckLowStockAndCreateReorders(company.id);
+      } catch {}
+    }
+  }
+
   return result.affectedRows > 0;
 }
 
@@ -637,6 +914,9 @@ export async function mysqlDeleteRawMaterial(id: string): Promise<boolean> {
   const company = await getAuthorizedCompanyContext();
   await assertCompanyModuleEnabled(company.id, 'inventory');
   const pool = getMysqlPool();
+
+  await mysqlSyncRawMaterialLinkedProducts(id, '', [], company.id);
+
   const [result] = await pool.query<ResultSetHeader>(
     'DELETE FROM raw_materials WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -882,10 +1162,122 @@ export async function mysqlProcessStockTransactions(
           tx.referenceId || null,
         ]
       );
+
+      // Sync batch stock
+      await mysqlSyncItemBatchStock(tx.rawMaterialId, 'raw_material', tx.quantityAfter, company.id, conn);
     }
+
+    try {
+      await mysqlCheckLowStockAndCreateReorders(company.id);
+    } catch {}
 
     return true;
   });
+}
+
+export async function mysqlRecordStockDelivery(
+  rawMaterialId: string,
+  rawMaterialName: string,
+  arrivedQty: number,
+  orderId: string,
+  invoiceNumber?: string
+): Promise<boolean> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  await assertCompanyModuleEnabled(company.id, 'inventory');
+
+  return await withMySqlTransaction(async (conn) => {
+    const [rows]: any = await conn.query(
+      'SELECT id, name, stock FROM raw_materials WHERE id = ? AND company_id = ? FOR UPDATE',
+      [rawMaterialId, company.id]
+    );
+    if (!rows || rows.length === 0) return false;
+
+    const rm = rows[0];
+    const prevStock = Number(rm.stock) || 0;
+    const newStock = prevStock + arrivedQty;
+    const date = Date.now();
+    const txId = 'tx_del_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+
+    await conn.query(
+      `UPDATE raw_materials SET 
+        stock = ?, 
+        status = 'In Stock', 
+        updated_at = NOW() 
+       WHERE id = ? AND company_id = ?`,
+      [newStock, rawMaterialId, company.id]
+    );
+
+    const reason = `PO ${orderId} Delivery Received${invoiceNumber ? ` (Inv #${invoiceNumber})` : ''}`;
+    await conn.query(
+      `INSERT INTO stock_transactions (
+        id, company_id, raw_material_id, raw_material_name, type, quantity_before, quantity_changed, 
+        quantity_after, date, reason, reference_id, created_at
+      ) VALUES (?, ?, ?, ?, 'Stock Added', ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        txId,
+        company.id,
+        rawMaterialId,
+        rawMaterialName || rm.name,
+        prevStock,
+        arrivedQty,
+        newStock,
+        date,
+        reason,
+        orderId,
+      ]
+    );
+
+    // Sync batch stock
+    await mysqlSyncItemBatchStock(rawMaterialId, 'raw_material', newStock, company.id, conn);
+
+    return true;
+  });
+}
+
+export async function mysqlGetStockTransactions(rawMaterialId?: string): Promise<StockTransaction[]> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  await assertCompanyModuleEnabled(company.id, 'inventory');
+  const pool = getMysqlPool();
+
+  try {
+    let query = `
+      SELECT st.id, st.company_id, st.raw_material_id, 
+             COALESCE(st.raw_material_name, rm.name, 'Unknown') as raw_material_name,
+             st.type, st.quantity_before, st.quantity_changed, st.quantity_after,
+             st.date, st.reason, st.reference_id, st.created_at
+      FROM stock_transactions st
+      LEFT JOIN raw_materials rm ON st.raw_material_id = rm.id AND rm.company_id = st.company_id
+      WHERE st.company_id = ?
+    `;
+    const params: any[] = [company.id];
+
+    if (rawMaterialId) {
+      query += ' AND st.raw_material_id = ?';
+      params.push(rawMaterialId);
+    }
+
+    query += ' ORDER BY st.date DESC, st.created_at DESC LIMIT 500';
+
+    const [rows]: any = await pool.query(query, params);
+    return rows.map((r: any) => ({
+      id: r.id,
+      companyId: r.company_id,
+      rawMaterialId: r.raw_material_id,
+      rawMaterialName: r.raw_material_name,
+      type: r.type,
+      quantityBefore: Number(r.quantity_before) || 0,
+      quantityChanged: Number(r.quantity_changed) || 0,
+      quantityAfter: Number(r.quantity_after) || 0,
+      date: Number(r.date) || (r.created_at ? new Date(r.created_at).getTime() : Date.now()),
+      reason: r.reason || '',
+      referenceId: r.reference_id || '',
+    }));
+  } catch (err: any) {
+    console.error('mysqlGetStockTransactions error:', err.message);
+    return [];
+  }
 }
 
 // --- BILLING / SALES ---
@@ -973,7 +1365,8 @@ export async function mysqlUpdateSalePayment(
 
 export async function mysqlRefundSale(
   billId: string,
-  reason?: string
+  reason?: string,
+  batchAction: 'restock' | 'quarantine' = 'restock'
 ): Promise<{ success: boolean; error?: string }> {
   await ensureLocalMySqlInitialized();
   const company = await getAuthorizedCompanyContext();
@@ -1012,6 +1405,110 @@ export async function mysqlRefundSale(
           [payId, company.id, saleDbId, s.payment_method || 'Cash', s.total, billId, reason || 'Refund issued']
         );
       }
+    }
+
+    // Batch reversal / quarantine handling
+    try {
+      const [bTxs]: any = await pool.query(
+        `SELECT * FROM batch_transactions 
+         WHERE company_id = ? AND sale_id = ? AND transaction_type = 'sale_deduction'`,
+        [company.id, billId]
+      );
+      if (bTxs && bTxs.length > 0) {
+        for (const tx of bTxs) {
+          const qty = Math.abs(Number(tx.quantity));
+          if (batchAction === 'restock') {
+            await pool.query(
+              `UPDATE product_batches 
+               SET current_quantity = current_quantity + ?,
+                   status = CASE WHEN status = 'exhausted' THEN 'active' ELSE status END
+               WHERE id = ? AND company_id = ?`,
+              [qty, tx.batch_id, company.id]
+            );
+            const rId = `btx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            await pool.query(
+              `INSERT INTO batch_transactions (id, company_id, batch_id, sale_id, transaction_type, quantity, quantity_after, reason)
+               SELECT ?, company_id, id, ?, 'return_restock', ?, current_quantity, ?
+               FROM product_batches WHERE id = ? AND company_id = ?`,
+              [rId, billId, qty, reason || `Refund restock for bill ${billId}`, tx.batch_id, company.id]
+            );
+            // Sync product stock
+            await pool.query(
+              `UPDATE products p
+               JOIN product_batches b ON b.item_id = p.id AND b.company_id = p.company_id
+               SET p.stock = p.stock + ?
+               WHERE b.id = ? AND b.company_id = ?`,
+              [qty, tx.batch_id, company.id]
+            );
+          } else {
+            // Quarantine / Wastage
+            const qId = `btx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            await pool.query(
+              `INSERT INTO batch_transactions (id, company_id, batch_id, sale_id, transaction_type, quantity, quantity_after, reason)
+               SELECT ?, company_id, id, ?, 'quarantine', 0, current_quantity, ?
+               FROM product_batches WHERE id = ? AND company_id = ?`,
+              [qId, billId, reason || `Refund quarantine/wastage for bill ${billId}`, tx.batch_id, company.id]
+            );
+          }
+        }
+      }
+    } catch (batchRefErr) {
+      console.warn('Batch refund reversal notice:', batchRefErr);
+    }
+
+    // Loyalty points reversal / restoration
+    try {
+      const [lTxs]: any = await pool.query(
+        `SELECT * FROM loyalty_transactions WHERE company_id = ? AND sale_id = ?`,
+        [company.id, billId]
+      );
+      if (lTxs && lTxs.length > 0) {
+        for (const ltx of lTxs) {
+          if (ltx.type === 'earned' && Number(ltx.points) > 0) {
+            await mysqlProcessLoyaltyTransaction(
+              ltx.customer_id,
+              -Number(ltx.points),
+              'refund_reversal',
+              billId,
+              `Clawback earned points from refund of bill ${billId}`,
+              company.id
+            );
+          } else if (ltx.type === 'redeemed' && Number(ltx.points) < 0) {
+            await mysqlProcessLoyaltyTransaction(
+              ltx.customer_id,
+              Math.abs(Number(ltx.points)),
+              'refund_reversal',
+              billId,
+              `Restore redeemed points from refund of bill ${billId}`,
+              company.id
+            );
+          }
+        }
+      }
+    } catch (loyaltyRefErr) {
+      console.warn('Loyalty refund reversal notice:', loyaltyRefErr);
+    }
+
+    // Promotion usage rollback
+    try {
+      const [uRows]: any = await pool.query(
+        `SELECT * FROM promotion_usages WHERE company_id = ? AND sale_id = ?`,
+        [company.id, billId]
+      );
+      if (uRows && uRows.length > 0) {
+        for (const u of uRows) {
+          await pool.query(
+            `UPDATE promotions SET total_used_count = GREATEST(0, total_used_count - 1) WHERE id = ? AND company_id = ?`,
+            [u.promotion_id, company.id]
+          );
+        }
+        await pool.query(
+          `DELETE FROM promotion_usages WHERE company_id = ? AND sale_id = ?`,
+          [company.id, billId]
+        );
+      }
+    } catch (promoRefErr) {
+      console.warn('Promotion refund notice:', promoRefErr);
     }
 
     return { success: true };
@@ -1069,12 +1566,55 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
     if (productIds.length > 0) {
       const placeholders = productIds.map(() => '?').join(',');
       const [pRows] = await pool.query<RowDataPacket[]>(
-        `SELECT id, name, price, stock, tax, discount, raw_materials_json 
+        `SELECT id, name, price, stock, tax, discount, raw_materials_json, is_batch_tracked 
          FROM products 
          WHERE company_id = ? AND id IN (${placeholders})`,
         [company.id, ...productIds]
       );
       dbProducts = pRows;
+    }
+
+    // Strict Expiry & Batch validation before accepting sale (Zero Food Override Allowed)
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const item of sale.items || []) {
+      const prod = item.product || item;
+      const prodId = prod?.id || item.productId || item.id;
+      const dbP = prodId ? dbProducts.find((p) => p.id === prodId) : null;
+      const isBatchTracked = dbP ? Boolean(dbP.is_batch_tracked) : false;
+
+      if (item.batchId) {
+        const [bRows] = await pool.query<RowDataPacket[]>(
+          'SELECT batch_number, expiry_date, status, current_quantity FROM product_batches WHERE id = ? AND company_id = ?',
+          [item.batchId, company.id]
+        );
+        if (bRows && bRows.length > 0) {
+          const b = bRows[0];
+          const exp = b.expiry_date ? new Date(b.expiry_date).toISOString().split('T')[0] : '';
+          if (b.status === 'quarantined') {
+            return { success: false, error: `Batch #${b.batch_number} is quarantined. Sale prohibited.` };
+          }
+          if (exp < todayStr || b.status === 'expired') {
+            return {
+              success: false,
+              error: `Item "${dbP?.name || prod?.name || 'Item'}" has expired (Batch: #${b.batch_number}, Expiry: ${exp}). Sale strictly prohibited.`,
+            };
+          }
+        }
+      } else if (isBatchTracked && prodId) {
+        const fefo = await mysqlAllocateFefo(prodId, Number(item.quantity) || 1, 'product', company.id);
+        if (fefo.hasExpiredStock && fefo.unallocatedQuantity > 0) {
+          return {
+            success: false,
+            error: `Item "${dbP?.name || prod?.name || 'Item'}" has expired batches and no valid stock remaining. Sale strictly prohibited.`,
+          };
+        }
+        if (fefo.unallocatedQuantity > 0) {
+          return {
+            success: false,
+            error: `Insufficient batch stock for "${dbP?.name || prod?.name || 'Item'}". Required: ${item.quantity || 1}, Available: ${fefo.allocated.reduce((sum, a) => sum + a.quantity, 0)}.`,
+          };
+        }
+      }
     }
 
     let calculatedSubtotal = 0;
@@ -1129,7 +1669,12 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
       globalDiscountAmount = sale.discountValue || 0;
     }
 
-    const calculatedTotal = calculatedSubtotal - calculatedItemDiscounts - globalDiscountAmount + calculatedTax;
+    const promoDiscountAmount = Number(sale.promoDiscount) || 0;
+    const loyaltyDiscountAmount = Number(sale.loyaltyDiscount) || 0;
+    const manualDiscountAmount = Number(sale.manualDiscount) || globalDiscountAmount;
+    const totalDiscounts = calculatedItemDiscounts + manualDiscountAmount + promoDiscountAmount + loyaltyDiscountAmount;
+
+    const calculatedTotal = Math.max(0, calculatedSubtotal - totalDiscounts + calculatedTax);
     const calculatedCgst = calculatedTax / 2;
     const calculatedSgst = calculatedTax / 2;
     const roundOff = typeof sale.roundOff === 'number' ? sale.roundOff : 0;
@@ -1147,7 +1692,15 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
       companyId: company.id,
       items: validatedItems,
       subtotal: calculatedSubtotal,
-      discount: calculatedItemDiscounts + globalDiscountAmount,
+      discount: totalDiscounts,
+      manualDiscount: manualDiscountAmount,
+      promoCode: sale.promoCode || undefined,
+      promoTitle: sale.promoTitle || undefined,
+      promoDiscount: promoDiscountAmount,
+      loyaltyPointsRedeemed: sale.loyaltyPointsRedeemed || 0,
+      loyaltyDiscount: loyaltyDiscountAmount,
+      loyaltyPointsEarned: sale.loyaltyPointsEarned || 0,
+      bogoGetProductId: sale.bogoGetProductId || undefined,
       tax: calculatedTax,
       cgst: calculatedCgst,
       sgst: calculatedSgst,
@@ -1212,8 +1765,9 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
       await conn.query(
         `INSERT INTO sales (
           id, company_id, bill_number, items, subtotal, discount, tax, round_off, total, 
-          payment_method, payment_status, customer_name, customer_phone, table_id, table_name, waiter_id, waiter_name, serving_status, order_type, order_source, online_order_id, order_note, created_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))`,
+          payment_method, payment_status, customer_name, customer_phone, table_id, table_name, waiter_id, waiter_name, serving_status, order_type, order_source, online_order_id, order_note, created_by,
+          promo_code, promo_title, promo_discount, manual_discount, loyalty_points_redeemed, loyalty_discount, loyalty_points_earned, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))`,
         [
           finalSaleDbId,
           company.id,
@@ -1238,6 +1792,13 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
           finalSale.onlineOrderId || null,
           finalSale.orderNote || null,
           finalSale.createdBy || null,
+          finalSale.promoCode || null,
+          finalSale.promoTitle || null,
+          finalSale.promoDiscount || 0,
+          finalSale.manualDiscount || 0,
+          finalSale.loyaltyPointsRedeemed || 0,
+          finalSale.loyaltyDiscount || 0,
+          finalSale.loyaltyPointsEarned || 0,
           finalSale.timestamp,
         ]
       );
@@ -1288,6 +1849,10 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
             'UPDATE products SET stock = stock - ? WHERE id = ? AND company_id = ?',
             [item.quantity || 1, prodId, company.id]
           );
+          const [pStockRows]: any = await conn.query('SELECT stock FROM products WHERE id = ? AND company_id = ?', [prodId, company.id]);
+          if (pStockRows && pStockRows.length > 0) {
+            await mysqlSyncItemBatchStock(prodId, 'product', Number(pStockRows[0].stock), company.id, conn);
+          }
         }
 
         // Deduct add-on stock only when stock tracking is enabled
@@ -1302,19 +1867,21 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
         }
       }
 
-      // 3. Raw materials recipe deduction if any
+      // 3. Raw materials recipe deduction with Automatic Stock Restoration
       const [allRawMaterialsRows] = await conn.query<RowDataPacket[]>(
-        'SELECT id, name, sku, unit, stock, cost_per_unit, low_stock_limit, created_at, updated_at FROM raw_materials WHERE company_id = ?',
+        'SELECT id, name, sku, unit, stock, cost_per_unit, low_stock_limit, status, created_at, updated_at FROM raw_materials WHERE company_id = ?',
         [company.id]
       );
       const allRawMaterials = allRawMaterialsRows.map(mapRowToRawMaterial);
+
+      // Aggregate deductions per raw material for this entire sale
+      const aggregatedDeductions = new Map<string, number>();
 
       for (const item of finalSale.items) {
         const prodId = item.product?.id || item.productId || item.id;
         if (!prodId) continue;
         const dbP = dbProducts.find((p) => p.id === prodId);
         const productToUse = dbP || item.product;
-
         if (!productToUse) continue;
 
         let rawMaterialsList = productToUse.rawMaterials;
@@ -1329,26 +1896,72 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
         if (rawMaterialsList && rawMaterialsList.length > 0) {
           const deductions = await calculateRecipeDeduction(rawMaterialsList, item.quantity, allRawMaterials);
           for (const d of deductions) {
-            await conn.query(
-              'UPDATE raw_materials SET stock = stock - ? WHERE id = ? AND company_id = ?',
-              [d.quantityToDeduct, d.materialId, company.id]
-            );
+            const current = aggregatedDeductions.get(d.materialId) || 0;
+            aggregatedDeductions.set(d.materialId, current + d.quantityToDeduct);
+          }
+        }
+      }
 
-            await conn.query(
-              `INSERT INTO stock_transactions (
-                id, company_id, raw_material_id, type, quantity_before, quantity_changed, 
-                quantity_after, date, reason, reference_id, created_at
-              ) VALUES (?, ?, ?, 'Stock Deduction', 0, ?, 0, ?, ?, ?, NOW())`,
-              [
-                'tx' + Math.random().toString(36).substr(2, 9),
-                company.id,
-                d.materialId,
-                -d.quantityToDeduct,
-                finalSale.timestamp,
-                `Sale ${finalBillNumber}`,
-                finalBillNumber,
-              ]
-            );
+      // Apply deductions and auto-replenish if threshold reached
+      for (const [materialId, totalDeduct] of aggregatedDeductions.entries()) {
+        // Lock raw material row for atomic update & duplicate prevention
+        const [lockedRows]: any = await conn.query(
+          'SELECT id, name, stock, low_stock_limit FROM raw_materials WHERE id = ? AND company_id = ? FOR UPDATE',
+          [materialId, company.id]
+        );
+
+        if (!lockedRows || lockedRows.length === 0) continue;
+        const rmRow = lockedRows[0];
+        const rmName = rmRow.name || 'Raw Material';
+        const prevStock = Number(rmRow.stock) || 0;
+        const lowLimit = Number(rmRow.low_stock_limit) || 0;
+        const newStock = Math.max(0, parseFloat((prevStock - totalDeduct).toFixed(3)));
+
+        // Update deducted stock
+        await conn.query(
+          'UPDATE raw_materials SET stock = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+          [newStock, materialId, company.id]
+        );
+
+        // Sync batch stock for this raw material
+        await mysqlSyncItemBatchStock(materialId, 'raw_material', newStock, company.id, conn);
+
+        // Record Sale Deduction Transaction
+        const deductTxId = 'tx_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+        await conn.query(
+          `INSERT INTO stock_transactions (
+            id, company_id, raw_material_id, raw_material_name, type, quantity_before, quantity_changed, 
+            quantity_after, date, reason, reference_id, created_at
+          ) VALUES (?, ?, ?, ?, 'Sale Deduction', ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            deductTxId,
+            company.id,
+            materialId,
+            rmName,
+            prevStock,
+            -totalDeduct,
+            newStock,
+            finalSale.timestamp || Date.now(),
+            `Sale ${finalBillNumber}`,
+            finalBillNumber,
+          ]
+        );
+
+        // Low-Stock Detection:
+        // When available stock reaches or falls below its minimum stock threshold, flag Low Stock
+        if (newStock <= lowLimit) {
+          await conn.query(
+            `UPDATE raw_materials SET 
+              status = 'Low Stock', 
+              updated_at = NOW() 
+             WHERE id = ? AND company_id = ?`,
+            [materialId, company.id]
+          );
+
+          try {
+            await mysqlCheckLowStockAndCreateReorders(company.id);
+          } catch (reorderErr) {
+            console.warn('Auto reorder creation notice on sale deduction:', reorderErr);
           }
         }
       }
@@ -1392,6 +2005,81 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
         );
       } catch (payErr: any) {
         console.warn('Payment record insertion notice:', payErr.message);
+      }
+
+      // 5.1 Batch stock deductions (direct batch or FEFO)
+      try {
+        for (const item of finalSale.items) {
+          const prodId = item.product?.id || item.productId || item.id;
+          if (item.batchId) {
+            await mysqlDeductBatchAllocation(
+              [{ batchId: item.batchId, quantity: item.quantity || 1 }],
+              finalBillNumber,
+              company.id
+            );
+          } else if (prodId) {
+            const fefoRes = await mysqlAllocateFefo(prodId, item.quantity || 1, 'product', company.id);
+            if (fefoRes.allocated.length > 0) {
+              await mysqlDeductBatchAllocation(
+                fefoRes.allocated.map((a: any) => ({ batchId: a.batchId, quantity: a.quantity })),
+                finalBillNumber,
+                company.id
+              );
+            }
+          }
+        }
+      } catch (batchErr: any) {
+        console.warn('Batch deduction notice:', batchErr.message);
+      }
+
+      // 5.2 Promotion usage recording
+      try {
+        if (finalSale.promoCode) {
+          const [pRows]: any = await conn.query(
+            'SELECT id FROM promotions WHERE company_id = ? AND code = ? LIMIT 1',
+            [company.id, finalSale.promoCode.trim().toUpperCase()]
+          );
+          if (pRows && pRows.length > 0) {
+            await mysqlRecordPromotionUsage(
+              pRows[0].id,
+              finalSale.promoCode,
+              finalBillNumber,
+              finalSale.promoDiscount || 0,
+              finalSale.customerId || null,
+              company.id
+            );
+          }
+        }
+      } catch (promoErr: any) {
+        console.warn('Promotion usage notice:', promoErr.message);
+      }
+
+      // 5.3 Customer Loyalty points redemption & accrual
+      try {
+        if (finalSale.customerId) {
+          if (finalSale.loyaltyPointsRedeemed && finalSale.loyaltyPointsRedeemed > 0) {
+            await mysqlProcessLoyaltyTransaction(
+              finalSale.customerId,
+              -finalSale.loyaltyPointsRedeemed,
+              'redeemed',
+              finalBillNumber,
+              `Redeemed on bill ${finalBillNumber}`,
+              company.id
+            );
+          }
+          if (finalSale.loyaltyPointsEarned && finalSale.loyaltyPointsEarned > 0) {
+            await mysqlProcessLoyaltyTransaction(
+              finalSale.customerId,
+              finalSale.loyaltyPointsEarned,
+              'earned',
+              finalBillNumber,
+              `Earned from bill ${finalBillNumber}`,
+              company.id
+            );
+          }
+        }
+      } catch (loyaltyErr: any) {
+        console.warn('Loyalty transaction notice:', loyaltyErr.message);
       }
 
       // 6. Delivery record & automatic delivery person assignment (Strictly when orderType is 'Delivery')
@@ -1606,6 +2294,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
       await assertCompanyModuleEnabled(company.id, 'sales');
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
+                s.promo_code, s.promo_title, s.promo_discount, s.manual_discount, s.loyalty_points_redeemed, s.loyalty_discount, s.loyalty_points_earned,
                 s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
                 u.role AS creator_role, u.name AS creator_name,
                 c.name AS company_name,
@@ -1630,6 +2319,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
       await assertCompanyModuleEnabled(company.id, 'sales');
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
+                s.promo_code, s.promo_title, s.promo_discount, s.manual_discount, s.loyalty_points_redeemed, s.loyalty_discount, s.loyalty_points_earned,
                 s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
                 u.role AS creator_role, u.name AS creator_name,
                 c.name AS company_name,
@@ -1653,6 +2343,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
     const targetCompId = filterCompanyId || cookieStore.get("auth_company_id")?.value;
     let query = `
       SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
+             s.promo_code, s.promo_title, s.promo_discount, s.manual_discount, s.loyalty_points_redeemed, s.loyalty_discount, s.loyalty_points_earned,
              s.payment_method, s.payment_status, s.customer_name, s.customer_phone, s.order_type, s.order_source, s.online_order_id, s.order_note, s.created_by, s.created_at,
              u.role AS creator_role, u.name AS creator_name,
              c.name AS company_name,
@@ -1707,6 +2398,10 @@ export interface Customer {
   address?: string;
   gstin?: string;
   createdAt: number;
+  loyaltyPointsBalance?: number;
+  loyaltyTier?: 'Silver' | 'Gold' | 'Platinum';
+  totalPointsEarned?: number;
+  totalPointsRedeemed?: number;
 }
 
 export async function mysqlGetCustomers(): Promise<Customer[]> {
@@ -1726,6 +2421,10 @@ export async function mysqlGetCustomers(): Promise<Customer[]> {
     address: r.address || undefined,
     gstin: r.gstin || undefined,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+    loyaltyPointsBalance: Number(r.loyalty_points_balance) || 0,
+    loyaltyTier: r.loyalty_tier || 'Silver',
+    totalPointsEarned: Number(r.total_points_earned) || 0,
+    totalPointsRedeemed: Number(r.total_points_redeemed) || 0,
   }));
 }
 
@@ -1875,6 +2574,10 @@ export async function mysqlGetCustomersWithStats(): Promise<CustomerWithStats[]>
       address: r.address || undefined,
       gstin: r.gstin || undefined,
       createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+      loyaltyPointsBalance: Number(r.loyalty_points_balance) || 0,
+      loyaltyTier: r.loyalty_tier || 'Silver',
+      totalPointsEarned: Number(r.total_points_earned) || 0,
+      totalPointsRedeemed: Number(r.total_points_redeemed) || 0,
       visits,
       lastVisit: stat.lastVisit,
       totalSpent: Number(totalSpent.toFixed(2)),
@@ -3558,3 +4261,433 @@ export async function mysqlCheckBarcodeUnique(
 
   return { isUnique: true };
 }
+
+// --- AUTOMATIC REORDERING, PURCHASE ORDERS & REPLENISHMENT ---
+
+export async function mysqlCheckLowStockAndCreateReorders(companyIdParam?: string): Promise<{
+  createdOrders: PurchaseOrder[];
+}> {
+  await ensureLocalMySqlInitialized();
+  const company = companyIdParam ? { id: companyIdParam } : await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  try {
+    // 1. Fetch raw materials at or below minimum threshold
+    const [lowRows]: any = await pool.query(
+      `SELECT id, company_id, name, unit, stock, low_stock_limit, target_stock, cost_per_unit, supplier_id, supplier_name 
+       FROM raw_materials 
+       WHERE company_id = ? AND CAST(stock AS DECIMAL(12,3)) <= CAST(low_stock_limit AS DECIMAL(12,3))`,
+      [company.id]
+    );
+
+    if (!lowRows || lowRows.length === 0) {
+      return { createdOrders: [] };
+    }
+
+    // 2. Fetch existing active purchase orders to prevent duplicate purchase orders for the same low-stock event
+    const [activeOrders]: any = await pool.query(
+      `SELECT id, state, items_json FROM purchase_orders 
+       WHERE company_id = ? AND state IN ('Pending Approval', 'Approved', 'Pending', 'Ordered')`,
+      [company.id]
+    );
+
+    const activeMaterialIds = new Set<string>();
+    const activeMaterialNames = new Set<string>();
+    for (const po of activeOrders) {
+      if (po.items_json) {
+        try {
+          const items = typeof po.items_json === 'string' ? JSON.parse(po.items_json) : po.items_json;
+          if (Array.isArray(items)) {
+            for (const it of items) {
+              if (it.id) activeMaterialIds.add(it.id);
+              if (it.name) activeMaterialNames.add(it.name.toLowerCase().trim());
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // 3. Suppliers list for linking
+    const [suppliers]: any = await pool.query(
+      `SELECT id, name, phone, email FROM suppliers WHERE company_id = ?`,
+      [company.id]
+    );
+
+    const createdOrders: PurchaseOrder[] = [];
+
+    for (const rm of lowRows) {
+      if (activeMaterialIds.has(rm.id) || activeMaterialNames.has(rm.name.toLowerCase().trim())) {
+        continue; // Prevent duplicate purchase orders for the same low-stock event
+      }
+
+      const curStock = Number(rm.stock) || 0;
+      const minStock = Number(rm.low_stock_limit) || 0;
+      const tgtStock = rm.target_stock != null ? Number(rm.target_stock) : 999;
+      const reqQty = parseFloat(Math.max(1, tgtStock - curStock).toFixed(3));
+
+      // Match linked supplier
+      let sup = suppliers.find((s: any) => (rm.supplier_id && s.id === rm.supplier_id) || (rm.supplier_name && s.name.toLowerCase().trim() === rm.supplier_name.toLowerCase().trim()));
+      if (!sup && suppliers.length > 0) {
+        sup = suppliers[0];
+      }
+
+      const supplierId = sup?.id || rm.supplier_id || 'unassigned_supplier';
+      const supplierName = sup?.name || rm.supplier_name || 'General Supplier';
+      const unitCost = Number(rm.cost_per_unit) || 0;
+      const totalAmount = parseFloat((reqQty * unitCost).toFixed(2));
+
+      const itemPayload: PurchaseOrderItem = {
+        id: rm.id,
+        name: rm.name,
+        orderedQty: reqQty,
+        unit: rm.unit || 'kg',
+        deliveredQty: 0,
+        stillOwedQty: reqQty,
+        rate: unitCost,
+      };
+
+      const newOrder = await mysqlCreatePurchaseOrder({
+        id: '',
+        supplierId,
+        supplierName,
+        orderDate: new Date().toISOString().split('T')[0],
+        totalAmount,
+        paidAmount: 0,
+        owedAmount: totalAmount,
+        state: 'Pending Approval',
+        itemsJson: JSON.stringify([itemPayload]),
+        notes: `Auto low-stock replenishment: current stock ${curStock} ${rm.unit}, min threshold ${minStock} ${rm.unit}, target ${tgtStock} ${rm.unit}.`,
+      });
+
+      createdOrders.push(newOrder);
+      activeMaterialIds.add(rm.id);
+      activeMaterialNames.add(rm.name.toLowerCase().trim());
+    }
+
+    return { createdOrders };
+  } catch (err: any) {
+    console.error('mysqlCheckLowStockAndCreateReorders error:', err.message);
+    return { createdOrders: [] };
+  }
+}
+
+export async function mysqlApprovePurchaseOrder(orderId: string): Promise<{
+  success: boolean;
+  order?: PurchaseOrder;
+  supplierContact?: { name: string; phone?: string; email?: string };
+  messageText?: string;
+  whatsappUrl?: string;
+  emailUrl?: string;
+  error?: string;
+}> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  const [rows]: any = await pool.query(
+    'SELECT * FROM purchase_orders WHERE id = ? AND company_id = ?',
+    [orderId, company.id]
+  );
+  if (!rows || rows.length === 0) {
+    return { success: false, error: 'Purchase order not found.' };
+  }
+  const po = rows[0];
+
+  await pool.query(
+    `UPDATE purchase_orders SET state = 'Approved' WHERE id = ? AND company_id = ?`,
+    [orderId, company.id]
+  );
+
+  // Find supplier contact
+  const [supRows]: any = await pool.query(
+    'SELECT * FROM suppliers WHERE id = ? AND company_id = ?',
+    [po.supplier_id, company.id]
+  );
+  const sup = supRows && supRows.length > 0 ? supRows[0] : null;
+
+  // Format supplier message for WhatsApp / Email
+  let itemsSummary = '';
+  try {
+    const items = typeof po.items_json === 'string' ? JSON.parse(po.items_json) : po.items_json;
+    if (Array.isArray(items)) {
+      itemsSummary = items.map((it: any) => `• ${it.name}: ${it.orderedQty} ${it.unit || ''} @ ₹${Number(it.rate || 0).toFixed(2)}`).join('\n');
+    }
+  } catch {}
+
+  const messageText = `*PURCHASE ORDER: ${po.id}*\n` +
+    `Hello ${sup?.name || po.supplier_name},\n` +
+    `Please confirm our purchase order for the following items:\n` +
+    (itemsSummary ? `${itemsSummary}\n` : '') +
+    `*Total Estimated Amount: ₹${Number(po.total_amount).toFixed(2)}*\n` +
+    `Date: ${new Date(po.order_date).toLocaleDateString('en-IN')}\n\n` +
+    `Please dispatch to our store at your earliest convenience. Thank you!`;
+
+  const rawPhone = sup?.phone || '';
+  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+  const whatsappUrl = cleanPhone
+    ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(messageText)}`
+    : undefined;
+  const emailUrl = sup?.email
+    ? `mailto:${sup.email}?subject=${encodeURIComponent(`Purchase Order ${po.id}`)}&body=${encodeURIComponent(messageText)}`
+    : undefined;
+
+  return {
+    success: true,
+    order: {
+      id: po.id,
+      supplierId: po.supplier_id,
+      supplierName: po.supplier_name,
+      orderDate: po.order_date ? new Date(po.order_date).toISOString().split('T')[0] : '',
+      totalAmount: Number(po.total_amount) || 0,
+      paidAmount: Number(po.paid_amount) || 0,
+      owedAmount: Number(po.owed_amount) || 0,
+      state: 'Approved',
+      itemsJson: po.items_json,
+    },
+    supplierContact: sup ? { name: sup.name, phone: sup.phone, email: sup.email } : { name: po.supplier_name },
+    messageText,
+    whatsappUrl,
+    emailUrl,
+  };
+}
+
+export async function mysqlRejectPurchaseOrder(orderId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  await pool.query(
+    `UPDATE purchase_orders SET state = 'Rejected' WHERE id = ? AND company_id = ?`,
+    [orderId, company.id]
+  );
+  return { success: true };
+}
+
+// --- REPLENISHMENT NOTIFICATIONS & AUDIT ---
+export async function mysqlGetReplenishmentNotifications(): Promise<{
+  success: boolean;
+  pendingApprovals: any[];
+  replenishments: any[];
+  lowStockItems: any[];
+}> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  try {
+    // Automatically check low stock and create pending approval purchase orders
+    await mysqlCheckLowStockAndCreateReorders(company.id);
+
+    // Fetch Pending Approval purchase orders
+    const [pendingRows]: any = await pool.query(
+      `SELECT po.id, po.company_id, po.supplier_id, po.supplier_name, po.order_date, 
+              po.total_amount, po.paid_amount, po.owed_amount, po.state, po.items_json, po.created_at,
+              s.phone as supplier_phone, s.email as supplier_email
+       FROM purchase_orders po
+       LEFT JOIN suppliers s ON po.supplier_id = s.id AND s.company_id = po.company_id
+       WHERE po.company_id = ? AND po.state IN ('Pending Approval', 'Pending')
+       ORDER BY po.created_at DESC`,
+      [company.id]
+    );
+
+    // Fetch raw materials map for live stock & min threshold
+    const [rmRows]: any = await pool.query(
+      `SELECT id, name, unit, stock, low_stock_limit, target_stock, cost_per_unit FROM raw_materials WHERE company_id = ?`,
+      [company.id]
+    );
+    const rmMap = new Map<string, any>();
+    for (const r of rmRows) {
+      rmMap.set(r.id, r);
+      rmMap.set(r.name.toLowerCase().trim(), r);
+    }
+
+    const pendingApprovals = (pendingRows || []).map((po: any) => {
+      let items: any[] = [];
+      try {
+        items = typeof po.items_json === 'string' ? JSON.parse(po.items_json) : (po.items_json || []);
+      } catch {}
+      const firstItem = items[0] || {};
+      const rm = (firstItem.id && rmMap.get(firstItem.id)) || (firstItem.name && rmMap.get(firstItem.name.toLowerCase().trim())) || {};
+
+      return {
+        id: po.id,
+        supplierId: po.supplier_id,
+        supplierName: po.supplier_name,
+        supplierPhone: po.supplier_phone || null,
+        supplierEmail: po.supplier_email || null,
+        rawMaterialId: firstItem.id || rm.id || '',
+        rawMaterialName: firstItem.name || rm.name || 'Raw Material',
+        unit: firstItem.unit || rm.unit || 'kg',
+        currentStock: Number(rm.stock != null ? rm.stock : 0),
+        minimumStock: Number(rm.low_stock_limit != null ? rm.low_stock_limit : 0),
+        targetStock: Number(rm.target_stock != null ? rm.target_stock : 999),
+        requiredQuantity: Number(firstItem.orderedQty != null ? firstItem.orderedQty : (Number(firstItem.stillOwedQty) || 1)),
+        rate: Number(firstItem.rate || rm.cost_per_unit || 0),
+        estimatedPurchaseCost: Number(po.total_amount) || (Number(firstItem.orderedQty || 1) * Number(firstItem.rate || 0)),
+        orderDate: po.order_date ? new Date(po.order_date).toISOString().split('T')[0] : '',
+        createdAt: po.created_at ? new Date(po.created_at).toISOString() : new Date().toISOString(),
+        state: po.state,
+      };
+    });
+
+    // Recent auto-replenishment transactions
+    const [repRows]: any = await pool.query(
+      `SELECT st.id, st.company_id, st.raw_material_id, 
+              COALESCE(st.raw_material_name, rm.name, 'Raw Material') as raw_material_name,
+              rm.unit,
+              st.type, st.quantity_before, st.quantity_changed, st.quantity_after,
+              st.date, st.reason, st.reference_id, st.created_at
+       FROM stock_transactions st
+       LEFT JOIN raw_materials rm ON st.raw_material_id = rm.id AND rm.company_id = st.company_id
+       WHERE st.company_id = ? AND st.type IN ('Auto Replenishment', 'Stock Added')
+       ORDER BY st.created_at DESC, st.date DESC
+       LIMIT 30`,
+      [company.id]
+    );
+
+    // Current low stock raw materials
+    const [lowRows]: any = await pool.query(
+      `SELECT id, name, unit, stock, low_stock_limit, target_stock, supplier_name, status, last_replenished_at
+       FROM raw_materials
+       WHERE company_id = ? AND CAST(stock AS DECIMAL(12,3)) <= CAST(low_stock_limit AS DECIMAL(12,3))
+       ORDER BY CAST(stock AS DECIMAL(12,3)) ASC
+       LIMIT 20`,
+      [company.id]
+    );
+
+    // Also include low stock finished products if any
+    const [lowProdRows]: any = await pool.query(
+      `SELECT id, name, unit, stock, COALESCE(min_stock, 5) as low_stock_limit, 999 as target_stock, supplier_name
+       FROM products
+       WHERE company_id = ? AND CAST(stock AS DECIMAL(12,3)) <= CAST(COALESCE(min_stock, 5) AS DECIMAL(12,3))
+       ORDER BY CAST(stock AS DECIMAL(12,3)) ASC
+       LIMIT 20`,
+      [company.id]
+    );
+
+    const formattedLowMaterials = (lowRows || []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      unit: r.unit || 'kg',
+      stock: Number(r.stock) || 0,
+      lowStockLimit: Number(r.low_stock_limit) || 0,
+      targetStock: Number(r.target_stock) || 999,
+      supplierName: r.supplier_name || 'Unassigned',
+      status: r.status,
+      lastReplenishedAt: r.last_replenished_at,
+    }));
+
+    const formattedLowProducts = (lowProdRows || []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      unit: p.unit || 'pcs',
+      stock: Number(p.stock) || 0,
+      lowStockLimit: Number(p.low_stock_limit) || 5,
+      targetStock: 999,
+      supplierName: p.supplier_name || 'In-House Production',
+      status: Number(p.stock) <= 0 ? 'Out of Stock' : 'Low Stock',
+      lastReplenishedAt: null,
+    }));
+
+    return {
+      success: true,
+      pendingApprovals,
+      replenishments: (repRows || []).map((r: any) => ({
+        id: r.id,
+        rawMaterialId: r.raw_material_id,
+        rawMaterialName: r.raw_material_name,
+        unit: r.unit || 'kg',
+        quantityBefore: Number(r.quantity_before) || 0,
+        quantityRestored: Number(r.quantity_changed) || 0,
+        targetStock: Number(r.quantity_after) || 999,
+        reason: r.reason || '',
+        referenceId: r.reference_id || '',
+        createdAt: r.created_at || (r.date ? new Date(Number(r.date)).toISOString() : new Date().toISOString()),
+        date: Number(r.date) || Date.now(),
+      })),
+      lowStockItems: [...formattedLowMaterials, ...formattedLowProducts],
+    };
+  } catch (err: any) {
+    console.error('mysqlGetReplenishmentNotifications error:', err.message);
+    return { success: false, pendingApprovals: [], replenishments: [], lowStockItems: [] };
+  }
+}
+
+export async function mysqlTriggerTestReplenishment(rawMaterialId?: string): Promise<{
+  success: boolean;
+  message: string;
+  replenishedCount?: number;
+}> {
+  await ensureLocalMySqlInitialized();
+  const company = await getAuthorizedCompanyContext();
+  const pool = getMysqlPool();
+
+  try {
+    let query = 'SELECT id, name, stock, low_stock_limit, unit FROM raw_materials WHERE company_id = ?';
+    const params: any[] = [company.id];
+
+    if (rawMaterialId) {
+      query += ' AND id = ?';
+      params.push(rawMaterialId);
+    } else {
+      query += ' AND CAST(stock AS DECIMAL(12,3)) < 999';
+    }
+
+    const [rows]: any = await pool.query(query, params);
+    if (!rows || rows.length === 0) {
+      return { success: true, message: 'All raw materials are already at target stock 999.000.', replenishedCount: 0 };
+    }
+
+    let count = 0;
+    for (const rm of rows) {
+      const currentStock = Number(rm.stock) || 0;
+      const targetStock = 999.000;
+      const replenishQty = parseFloat((targetStock - currentStock).toFixed(3));
+      if (replenishQty <= 0) continue;
+
+      await pool.query(
+        `UPDATE raw_materials SET 
+          stock = ?, 
+          status = 'Replenished', 
+          last_replenished_at = NOW(), 
+          updated_at = NOW() 
+         WHERE id = ? AND company_id = ?`,
+        [targetStock, rm.id, company.id]
+      );
+
+      // Sync batch stock
+      await mysqlSyncItemBatchStock(rm.id, 'raw_material', targetStock, company.id);
+
+      const replenishTxId = 'tx_rep_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+      await pool.query(
+        `INSERT INTO stock_transactions (
+          id, company_id, raw_material_id, raw_material_name, type, quantity_before, quantity_changed, 
+          quantity_after, date, reason, reference_id, created_at
+        ) VALUES (?, ?, ?, ?, 'Auto Replenishment', ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          replenishTxId,
+          company.id,
+          rm.id,
+          rm.name,
+          currentStock,
+          replenishQty,
+          targetStock,
+          Date.now(),
+          `Auto Replenishment (Target 999 from ${currentStock}, Min: ${rm.low_stock_limit})`,
+          'SYSTEM-RESTORE',
+        ]
+      );
+      count++;
+    }
+
+    return { 
+      success: true, 
+      message: `Auto-replenished ${count} raw material(s) back to 999.000 stock!`, 
+      replenishedCount: count 
+    };
+  } catch (err: any) {
+    console.error('mysqlTriggerTestReplenishment error:', err.message);
+    return { success: false, message: err.message };
+  }
+}
+

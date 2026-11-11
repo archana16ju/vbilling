@@ -5,6 +5,7 @@ import { Product } from '@/lib/mock-data';
 import { useTerminalStore } from '@/store/useTerminalStore';
 import { useTerminalDesignStore } from '@/store/useTerminalDesignStore';
 import { getProductImageUrl } from '@/lib/product-image-helper';
+import { getProductPromotionTag } from '@/lib/promotion-helper';
 
 interface ProductGridCardProps {
   product: Product;
@@ -23,6 +24,8 @@ export default function ProductGridCard({
 }: ProductGridCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart);
   const cart = useTerminalStore((state) => state.cart);
+  const promotions = useTerminalStore((state) => state.promotions);
+  const promoTag = getProductPromotionTag(product, promotions);
   
   const design = useTerminalDesignStore();
   const [localActive, setLocalActive] = useState(false);
@@ -157,6 +160,17 @@ export default function ProductGridCard({
         }}
       />
 
+      {/* Promotion Tag Badge */}
+      {promoTag && (
+        <div 
+          className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-rose-500 backdrop-blur-xs px-2.5 py-0.5 text-[10px] sm:text-[11px] font-black text-white shadow-lg border border-amber-300/40"
+          style={{ color: '#ffffff' }}
+          title={`${promoTag.title}${promoTag.minCartValue ? ` · Min Cart: ₹${promoTag.minCartValue}` : ''}`}
+        >
+          <span className="preserve-white drop-shadow-xs" style={{ color: '#ffffff' }}>{promoTag.tag}</span>
+        </div>
+      )}
+
       {/* Cart Quantity Indicator (Top Left or Right) */}
       {design.showCartBadge && cartQty > 0 && (
         <div 
@@ -216,13 +230,27 @@ export default function ProductGridCard({
         }
         className={`absolute ${getPricePositionClass()} z-10 rounded-lg px-2.5 py-1 text-sm sm:text-base font-bold tracking-tight transition-transform duration-150 group-hover:scale-105 ${getPriceBadgeClass()}`}
       >
-        <span
-          className={design.priceStyle === 'white' ? 'text-zinc-950 font-black' : 'text-white preserve-white font-bold'}
-          style={{ color: design.priceStyle === 'white' ? '#0f172a' : '#ffffff' }}
-        >
-          {currency}
-          {Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
-        </span>
+        {promoTag?.promotionalPrice !== undefined && promoTag.promotionalPrice !== product.price ? (
+          <span className="flex items-center gap-1.5">
+            <span className="line-through opacity-70 text-xs">
+              {currency}{Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
+            </span>
+            <span
+              className={design.priceStyle === 'white' ? 'text-zinc-950 font-black' : 'text-white preserve-white font-bold'}
+              style={{ color: design.priceStyle === 'white' ? '#0f172a' : '#ffffff' }}
+            >
+              {currency}{Number(promoTag.promotionalPrice).toFixed(promoTag.promotionalPrice % 1 === 0 ? 0 : 2)}
+            </span>
+          </span>
+        ) : (
+          <span
+            className={design.priceStyle === 'white' ? 'text-zinc-950 font-black' : 'text-white preserve-white font-bold'}
+            style={{ color: design.priceStyle === 'white' ? '#0f172a' : '#ffffff' }}
+          >
+            {currency}
+            {Number(product.price || 0).toFixed(product.price % 1 === 0 ? 0 : 2)}
+          </span>
+        )}
       </div>
     </div>
   );

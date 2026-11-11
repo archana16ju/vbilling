@@ -19,10 +19,29 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
   const updateQuantity = useTerminalStore((state) => state.updateQuantity)
   const removeFromCart = useTerminalStore((state) => state.removeFromCart)
   const updateItemNotes = useTerminalStore((state) => state.updateItemNotes)
+  const updateItemPrice = useTerminalStore((state) => state.updateItemPrice)
+  const resetItemPrice = useTerminalStore((state) => state.resetItemPrice)
   
   const [inputValue, setInputValue] = useState(quantity.toString())
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [noteText, setNoteText] = useState(item.notes || '')
+  
+  const origPrice = item.originalPrice !== undefined ? item.originalPrice : product.price;
+  const isCustomized = item.originalPrice !== undefined && item.originalPrice !== product.price;
+  const [priceInput, setPriceInput] = useState(product.price.toString());
+
+  useEffect(() => {
+    setPriceInput(product.price.toString());
+  }, [product.price]);
+
+  const handlePriceBlur = () => {
+    const val = parseFloat(priceInput);
+    if (!isNaN(val) && val >= 0) {
+      updateItemPrice(itemIdentifier, val);
+    } else {
+      setPriceInput(product.price.toString());
+    }
+  };
 
   useEffect(() => {
     setInputValue((item.quantity ?? 1).toString())
@@ -75,6 +94,36 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
               )}
               <h4 className="text-xs font-bold text-white">{product.name}</h4>
             </div>
+
+            {/* Batch & Expiry Tag */}
+            {item.batchNumber && (
+              <div className="mt-0.5 flex items-center gap-1">
+                <span className="font-mono text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-300 px-1.5 py-0.2 rounded">
+                  Batch: #{item.batchNumber}
+                </span>
+                {item.expiryDate && (() => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const exp = new Date(item.expiryDate);
+                  exp.setHours(0, 0, 0, 0);
+                  const diff = Math.ceil((exp.getTime() - today.getTime()) / 86400000);
+                  if (diff < 0) {
+                    return (
+                      <span className="text-[10px] bg-rose-950/80 border border-rose-700 text-rose-300 font-bold px-1 rounded">
+                        Expired
+                      </span>
+                    );
+                  } else if (diff <= 30) {
+                    return (
+                      <span className="text-[10px] bg-amber-950/80 border border-amber-700 text-amber-300 font-bold px-1 rounded">
+                        Exp in {diff}d
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
 
             {/* Selected Add-ons Display */}
             {item.selectedAddOns && item.selectedAddOns.length > 0 && (
@@ -146,6 +195,48 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
+        {/* Original Price & Promotional Price Customization - Show ONLY when price has changed via promo/coupon/custom */}
+        {isCustomized && (
+          <div className="mt-1 flex items-center justify-between text-[11px] bg-zinc-900/60 rounded px-2 py-1 border border-zinc-800/80" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-400">Orig:</span>
+              <span className="font-mono line-through text-zinc-500 text-[10px]">
+                ₹{origPrice.toFixed(2)}
+              </span>
+              <span className="font-mono font-bold text-emerald-400 text-[10px]">
+                Promo: ₹{Number(product.price).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[10px] text-zinc-400 font-medium">Promo ₹:</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                onBlur={handlePriceBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handlePriceBlur();
+                }}
+                className="w-16 rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5 text-right font-mono text-[10px] text-emerald-300 focus:border-emerald-500 focus:outline-none"
+                title="Enter custom promotional price"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  resetItemPrice(itemIdentifier);
+                  setPriceInput(origPrice.toString());
+                }}
+                className="text-[9px] text-rose-400 hover:text-rose-300 underline cursor-pointer ml-0.5"
+                title="Reset to original price"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-1 flex items-center justify-between">
           <span className="text-[11px] text-zinc-400 flex items-center gap-1">
             {product.unit || 'pc'} × ₹{product.price || 0}
@@ -154,8 +245,8 @@ export default function CartItem({ item, isSelected, onSelect }: CartItemProps) 
             )}
           </span>
           <div className="flex flex-col items-end">
-            {(product.discount || 0) > 0 && (
-              <span className="text-[10px] text-zinc-500 line-through">₹{lineSubtotal.toFixed(2)}</span>
+            {((product.discount || 0) > 0 || isCustomized) && (
+              <span className="text-[10px] text-zinc-500 line-through">₹{(origPrice * (Number(quantity) || 1)).toFixed(2)}</span>
             )}
             <span className="font-black text-xs" style={{ color: 'var(--theme-accent, #DB2777)' }}>
               ₹{(lineSubtotal - discountAmount).toFixed(2)}

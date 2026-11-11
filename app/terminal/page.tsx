@@ -7,6 +7,7 @@ import CartPanel from '@/components/terminal/CartPanel';
 import { useTerminalDesignStore, THEME_PRESETS } from '@/store/useTerminalDesignStore';
 import { useTerminalStore } from '@/store/useTerminalStore';
 import { applyThemeToDom as applyCompanyThemeToDom, DEFAULT_BLACK_CHERRY_THEME } from '@/lib/theme-config';
+import { getPromotions } from '@/lib/actions/promotions';
 
 /* Resolve the effective dark/light mode, honouring 'system' via matchMedia */
 function resolveEffectiveMode(themeMode: 'dark' | 'light' | 'system'): 'dark' | 'light' {
@@ -63,6 +64,13 @@ export default function TerminalPage() {
       }
     } catch {}
     design.fetchCompanyTerminalDesign(undefined, true);
+    getPromotions()
+      .then((promos) => {
+        if (Array.isArray(promos)) {
+          useTerminalStore.getState().setPromotions(promos);
+        }
+      })
+      .catch((err) => console.warn('Terminal getPromotions notice:', err));
   }, []);
 
   // Restore dashboard company theme when leaving terminal interface
