@@ -6,6 +6,7 @@
 
 export const ORDERED_COMPANY_TABLES: string[] = [
   "_migrations",
+  "companies",
   "users",
   "user_companies",
   "company_permissions",
@@ -49,6 +50,25 @@ export const ORDERED_COMPANY_TABLES: string[] = [
 ];
 
 export const COMPANY_TABLE_SCHEMAS: Record<string, string> = {
+  companies: `
+    CREATE TABLE IF NOT EXISTS \`companies\` (
+      \`id\` varchar(64) NOT NULL,
+      \`name\` varchar(255) NOT NULL,
+      \`code\` varchar(50) NOT NULL,
+      \`address\` text,
+      \`phone\` varchar(50) DEFAULT NULL,
+      \`email\` varchar(255) DEFAULT NULL,
+      \`gstin\` varchar(50) DEFAULT NULL,
+      \`currency\` varchar(10) DEFAULT INR,
+      \`is_active\` tinyint(1) DEFAULT 1,
+      \`created_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updated_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      \`allow_promo_stacking\` tinyint(1) DEFAULT 0,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`code\` (\`code\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `,
+
   "_migrations": "CREATE TABLE IF NOT EXISTS `_migrations` (\n  `version` int NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `applied_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`version`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "users": "CREATE TABLE IF NOT EXISTS `users` (\n  `id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `username` varchar(255) DEFAULT NULL,\n  `email` varchar(255) DEFAULT NULL,\n  `password_hash` varchar(255) DEFAULT NULL,\n  `password` varchar(255) DEFAULT NULL,\n  `role` varchar(50) NOT NULL DEFAULT 'user',\n  `company_id` varchar(64) DEFAULT NULL,\n  `company_name` varchar(255) DEFAULT NULL,\n  `shortcuts` json DEFAULT NULL,\n  `is_active` tinyint(1) NOT NULL DEFAULT '1',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_users_email` (`email`),\n  UNIQUE KEY `username` (`username`),\n  KEY `idx_users_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "user_companies": "CREATE TABLE IF NOT EXISTS `user_companies` (\n  `id` varchar(64) NOT NULL,\n  `user_id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `role` varchar(50) DEFAULT 'cashier',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_user_company` (`user_id`,`company_id`),\n  KEY `idx_user_companies_uid` (`user_id`),\n  KEY `idx_user_companies_cid` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",

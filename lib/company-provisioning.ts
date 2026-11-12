@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool, isLocalMySqlMode } from "./mysql";
+import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool } from "./mysql";
 import {
   ensureMasterDbInitialized,
   getMasterCompanyById,
@@ -48,36 +48,31 @@ export interface ProvisionCompanyResult {
  * Generates a standard, safe database name from company ID or code.
  * Example: 'COMP-0004' -> 'company_004_db', 'TESTA' -> 'company_testa_db'
  */
-export function generateCompanyDatabaseName(companyIdOrCode: string): string {
-  const str = companyIdOrCode.toLowerCase().trim();
-  if (str === 'comp-0001' || str === 'xyz' || str === 'test_a' || str === 'testa') {
-    return 'company_test_a_db';
-  }
-  if (str === 'comp-0002' || str === 'abc' || str === 'test_b' || str === 'testb') {
-    return 'company_test_b_db';
-  }
-  if (str === 'comp-0003' || str === 'vseyal' || str === 'test_c' || str === 'testc') {
-    return 'company_test_c_db';
-  }
-  if (str === 'comp_default' || str === 'main') {
-    return 'company_comp_default_db';
-  }
-
-  const match = str.match(/^comp-0*(\d+)$/i);
+export function generateCompanyDatabaseName(companyIdOrCode: string, companyName?: string): string {
+  let num = 1;
+  const match = companyIdOrCode.match(/(\d+)/);
   if (match) {
-    const padded = String(match[1]).padStart(3, "0");
-    return `company_${padded}_db`;
+    num = parseInt(match[1], 10);
+  }
+  const padded = String(num).padStart(3, "0");
+
+  let nameSlug = "";
+  if (companyName) {
+    nameSlug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  } else {
+    const clean = companyIdOrCode.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!clean.startsWith("comp") && clean !== "default") {
+      nameSlug = clean;
+    }
   }
 
-  const clean = str.replace(/[^a-z0-9]/g, "_").replace(/^_+|_+$/g, "");
-  return `company_${clean}_db`;
+  if (nameSlug) {
+    return `c${padded}_${nameSlug}_db`;
+  }
+  return `c${padded}_db`;
 }
 
 function getDirectServerConnection() {
-  if (!isLocalMySqlMode()) {
-    throw new Error("Safety violation: Direct MySQL connection is strictly restricted to local MySQL mode.");
-  }
-
   const host = process.env.MYSQL_HOST || "127.0.0.1";
   const user = process.env.MYSQL_USER || "root";
   const password = process.env.MYSQL_PASSWORD || "";
@@ -132,10 +127,6 @@ export async function checkDatabaseExistence(
 export async function provisionCompanyDatabase(
   options: ProvisionCompanyOptions
 ): Promise<ProvisionCompanyResult> {
-  if (!isLocalMySqlMode()) {
-    throw new Error("Safety violation: Company database provisioning is strictly restricted to local MySQL mode.");
-  }
-
   await ensureMasterDbInitialized();
 
   const cleanId = options.companyId.trim();
@@ -149,7 +140,7 @@ export async function provisionCompanyDatabase(
   // 1. Determine and strictly validate database name
   const databaseName = options.customDatabaseName
     ? options.customDatabaseName.trim()
-    : generateCompanyDatabaseName(cleanId);
+    : generateCompanyDatabaseName(cleanId, cleanName);
 
   if (!isValidDatabaseName(databaseName)) {
     const errorMsg = `Safety violation: Generated or requested database name '${databaseName}' is invalid. Allowed: alphanumeric and underscores (3-64 chars).`;
@@ -233,6 +224,25 @@ export async function provisionCompanyDatabase(
       await companyPool.query(ddl);
       tablesCreatedCount++;
     }
+
+    
+    // 6b. Seed company row into tenant companies table
+    await companyPool.query(
+      `INSERT INTO companies (id, name, code, address, phone, email, gstin, currency, is_active, allow_promo_stacking)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+       ON DUPLICATE KEY UPDATE name = VALUES(name), code = VALUES(code)`,
+      [
+        cleanId,
+        cleanName,
+        cleanCode,
+        options.address || null,
+        options.phone || null,
+        options.email || null,
+        options.gstin || null,
+        options.currency || "INR",
+        options.allowPromoStacking ? 1 : 0,
+      ]
+    );
 
     // 7. Initialize default company settings
     const invoicePrefix = cleanCode.substring(0, 8) || "INV";

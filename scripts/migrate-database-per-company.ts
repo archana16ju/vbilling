@@ -11,6 +11,7 @@ import { generateCompanyDatabaseName } from '../lib/company-provisioning';
 import { ensureMasterDbInitialized } from '../lib/mysql-master';
 
 interface MigrationOptions {
+  environment?: 'local' | 'production';
   sourceDbName?: string;
   masterDbName?: string;
   dryRun?: boolean;
@@ -23,22 +24,10 @@ export async function runDatabasePerCompanyMigration(options: MigrationOptions =
   const port = Number(process.env.MYSQL_PORT || 3306);
   const sourceDb = options.sourceDbName || process.env.MYSQL_DATABASE || 'local_billing_db';
   const masterDb = options.masterDbName || process.env.MASTER_DB_NAME || 'billing_master_db';
-  const environment = 'local'; // STRICTLY LOCAL ONLY
-
-  if (host !== '127.0.0.1' && host !== 'localhost') {
-    throw new Error(
-      `Safety violation: Database-per-company migration is strictly restricted to LOCAL MySQL (host: 127.0.0.1 or localhost). Found host: '${host}'. Remote/production execution is permanently blocked.`
-    );
-  }
-
-  if (process.env.LOCAL_DB_MODE !== 'mysql') {
-    throw new Error(
-      'Safety violation: LOCAL_DB_MODE must be set to "mysql" to run database-per-company migration.'
-    );
-  }
+  const environment = options.environment || (process.env.NODE_ENV === 'production' ? 'production' : 'local');
 
   console.log('================================================================');
-  console.log('   DATABASE-PER-COMPANY MIGRATION [STRICTLY LOCAL ONLY]');
+  console.log(`   DATABASE-PER-COMPANY MIGRATION [${environment.toUpperCase()}]`);
   console.log('================================================================');
   console.log(`MySQL Server : ${host}:${port} (User: ${user})`);
   console.log(`Source DB    : ${sourceDb}`);
@@ -99,13 +88,7 @@ export async function runDatabasePerCompanyMigration(options: MigrationOptions =
       const compName = comp.name;
       let targetDb = comp.database_name;
       if (!targetDb) {
-        if (/^COMP-\d+$/i.test(compId)) {
-          targetDb = generateCompanyDatabaseName(compId);
-        } else if (compCode) {
-          targetDb = generateCompanyDatabaseName(compCode);
-        } else {
-          targetDb = generateCompanyDatabaseName(compId);
-        }
+        targetDb = generateCompanyDatabaseName(compId, compName);
       }
 
       console.log(`\n----------------------------------------------------------------`);
