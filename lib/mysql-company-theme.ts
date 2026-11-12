@@ -1,4 +1,5 @@
 import { getMysqlPool, isLocalMySqlMode } from './mysql';
+import { resolveCompanyPoolAndContext } from './mysql-company';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { CompanyTheme, DEFAULT_BLACK_CHERRY_THEME } from './theme-config';
 
@@ -60,7 +61,7 @@ export async function getCompanyTheme(companyId: string): Promise<{ theme: Compa
   const defaultTheme = await getSystemDefaultTheme();
 
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT theme_config FROM company_settings WHERE company_id = ? LIMIT 1',
       [companyId]
@@ -92,7 +93,7 @@ export async function getCompanyTheme(companyId: string): Promise<{ theme: Compa
 export async function saveCompanyTheme(companyId: string, theme: CompanyTheme): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   const themeJson = JSON.stringify(theme);
   const settingsId = `cs_${companyId}`;
 
@@ -112,7 +113,7 @@ export async function saveCompanyTheme(companyId: string, theme: CompanyTheme): 
 export async function resetCompanyTheme(companyId: string): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   await pool.query(
     'UPDATE company_settings SET theme_config = NULL, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?',
     [companyId]

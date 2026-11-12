@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
+import { getAuthorizedCompanyPool } from '@/lib/mysql-company';
 import { DeliveryStatus } from '@/types/delivery';
 import {
   mysqlGetDeliveries,
@@ -48,10 +49,10 @@ export async function GET(request: Request) {
 
       if (session.role === 'delivery_staff') {
         deliveryPersonName = session.username;
-        const pool = getMysqlPool();
+        const { pool, company } = await getAuthorizedCompanyPool();
         const [dpRows]: any = await pool.query(
           `SELECT id, name FROM delivery_persons WHERE company_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(employee_id) = LOWER(?))`,
-          [session.companyId, session.username, session.username]
+          [company.id, session.username, session.username]
         );
         if (dpRows && dpRows.length > 0) {
           deliveryPersonId = dpRows[0].id;

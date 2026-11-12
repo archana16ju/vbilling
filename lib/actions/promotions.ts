@@ -268,10 +268,9 @@ export async function validatePromotion(
 
 export async function getPromoStackingSetting(): Promise<boolean> {
   if (isLocalMySqlMode()) {
-    const { getAuthorizedCompanyContext } = await import('@/lib/mysql-company');
-    const comp = await getAuthorizedCompanyContext();
-    const pool = (await import('@/lib/mysql')).getMysqlPool();
-    const [rows]: any = await pool.query('SELECT allow_promo_stacking FROM companies WHERE id = ?', [comp.id]);
+    const { getAuthorizedCompanyPool } = await import('@/lib/mysql-company');
+    const { pool, company } = await getAuthorizedCompanyPool();
+    const [rows]: any = await pool.query('SELECT allow_promo_stacking FROM companies WHERE id = ?', [company.id]);
     return rows && rows[0] ? Boolean(rows[0].allow_promo_stacking) : false;
   }
   const db = await getDb();
@@ -282,11 +281,10 @@ export async function getPromoStackingSetting(): Promise<boolean> {
 
 export async function setPromoStackingSetting(allow: boolean): Promise<boolean> {
   if (isLocalMySqlMode()) {
-    const { getAuthorizedCompanyContext, clearCompanyContextCache } = await import('@/lib/mysql-company');
-    const comp = await getAuthorizedCompanyContext();
-    const pool = (await import('@/lib/mysql')).getMysqlPool();
-    await pool.query('UPDATE companies SET allow_promo_stacking = ? WHERE id = ?', [allow ? 1 : 0, comp.id]);
-    clearCompanyContextCache(comp.id);
+    const { getAuthorizedCompanyPool, clearCompanyContextCache } = await import('@/lib/mysql-company');
+    const { pool, company } = await getAuthorizedCompanyPool();
+    await pool.query('UPDATE companies SET allow_promo_stacking = ? WHERE id = ?', [allow ? 1 : 0, company.id]);
+    clearCompanyContextCache(company.id);
     return true;
   }
   const db = await getDb();

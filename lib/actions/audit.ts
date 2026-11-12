@@ -1,8 +1,8 @@
 'use server';
 
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyContext, resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { cookies, headers } from 'next/headers';
@@ -91,7 +91,9 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<boolean> {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
+      const { pool, company } = await resolveCompanyPoolAndContext(authComp || undefined);
+      authComp = company.id;
+
       await pool.query(
         `INSERT INTO audit_logs (
           id, company_id, branch_id, user_id, terminal_id, action, entity_type, entity_id, details, ip_address, created_at

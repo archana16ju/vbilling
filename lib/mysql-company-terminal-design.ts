@@ -1,5 +1,6 @@
 import { RowDataPacket } from 'mysql2';
 import { getMysqlPool, isLocalMySqlMode } from '@/lib/mysql';
+import { resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 
 export interface PersistedTerminalDesign {
   displayStyle?: 'default' | 'image-grid' | 'compact-grid' | 'search-based';
@@ -76,7 +77,7 @@ export async function getCompanyTerminalDesign(
   }
 
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT terminal_design FROM company_settings WHERE company_id = ? LIMIT 1',
       [companyId]
@@ -114,7 +115,7 @@ export async function saveCompanyTerminalDesign(
 ): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   const designJson = JSON.stringify(design);
   const settingsId = `cs_${companyId}`;
 
@@ -134,7 +135,7 @@ export async function saveCompanyTerminalDesign(
 export async function resetCompanyTerminalDesign(companyId: string): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   await pool.query(
     'UPDATE company_settings SET terminal_design = NULL, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?',
     [companyId]

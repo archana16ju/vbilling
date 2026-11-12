@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { getDb } from '@/lib/actions/db';
 import { cookies } from 'next/headers';
 import { RowDataPacket } from 'mysql2';
@@ -67,48 +67,30 @@ export async function GET(request: Request) {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
 
-      // Resolve Company
+      // Resolve Company and Pool
       let companyId = '';
       let companyName = '';
       let companyCode = '';
       let currency = 'INR';
+      let pool = getMysqlPool();
 
-      if (session.role === 'company_admin') {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-        companyName = company.name;
-        companyCode = company.code;
-        currency = company.currency || 'INR';
-      } else if (session.role === 'super_admin') {
+      if (session.role === 'super_admin') {
         const cookieStore = await cookies();
         const cid = targetCompanyParam || cookieStore.get('auth_company_id')?.value;
-        if (cid && cid !== 'all') {
-          const [compRows] = await pool.query<RowDataPacket[]>('SELECT id, name, code, currency FROM companies WHERE id = ?', [cid]);
-          if (compRows.length > 0) {
-            companyId = compRows[0].id;
-            companyName = compRows[0].name;
-            companyCode = compRows[0].code;
-            currency = compRows[0].currency || 'INR';
-          }
-        }
-        if (!companyId) {
-          const [allComps] = await pool.query<RowDataPacket[]>('SELECT id, name, code, currency FROM companies WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1');
-          if (allComps.length > 0) {
-            companyId = allComps[0].id;
-            companyName = allComps[0].name;
-            companyCode = allComps[0].code;
-            currency = allComps[0].currency || 'INR';
-          }
-        }
+        const res = await resolveCompanyPoolAndContext(cid && cid !== 'all' ? cid : undefined);
+        pool = res.pool;
+        companyId = res.company.id;
+        companyName = res.company.name;
+        companyCode = res.company.code;
+        currency = res.company.currency || 'INR';
       } else {
-        // Cashier role: only view within assigned company
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-        companyName = company.name;
-        companyCode = company.code;
-        currency = company.currency || 'INR';
+        const res = await getAuthorizedCompanyPool();
+        pool = res.pool;
+        companyId = res.company.id;
+        companyName = res.company.name;
+        companyCode = res.company.code;
+        currency = res.company.currency || 'INR';
       }
 
       if (!companyId) {

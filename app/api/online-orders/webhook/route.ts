@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { resolveCompanyPoolAndContext } from '@/lib/mysql-company';
+import { getMasterCompanies } from '@/lib/mysql-master';
 import { mysqlImportOnlineOrder } from '@/lib/mysql-billing';
 import { RowDataPacket } from 'mysql2';
 
@@ -19,19 +21,28 @@ export async function POST(request: Request) {
     const platform = (body.platform || platformParam || 'Zomato').toLowerCase();
     const platformFormatted = platform.includes('swiggy') ? 'Swiggy' : platform.includes('zomato') ? 'Zomato' : 'Online Platform';
 
-    // 2. Identify company
-    const pool = getMysqlPool();
+    // 2. Identify company and resolve appropriate database pool
     let companyId = targetCompParam || body.companyId;
+    let pool = getMysqlPool();
 
-    if (!companyId) {
-      // Find company configured for this platform or default to primary company
-      const [configs] = await pool.query<RowDataPacket[]>(
-        'SELECT company_id, is_enabled FROM online_order_configs WHERE platform = ? AND is_enabled = 1 LIMIT 1',
-        [platform]
-      );
-      if (configs && configs.length > 0) {
-        companyId = configs[0].company_id;
-      } else {
+    if (companyId) {
+      const resolved = await resolveCompanyPoolAndContext(companyId);
+      pool = resolved.pool;
+      companyId = resolved.company.id;
+    } else {
+      try {
+        const masterComps = await getMasterCompanies();
+        const activeComps = masterComps.filter(c => c.isActive);
+        if (activeComps.length > 0) {
+          companyId = activeComps[0].id;
+          const resolved = await resolveCompanyPoolAndContext(companyId);
+          pool = resolved.pool;
+        }
+      } catch (err) {
+        // Fallback to legacy
+      }
+
+      if (!companyId) {
         const [comps] = await pool.query<RowDataPacket[]>('SELECT id FROM companies WHERE is_active = 1 ORDER BY id ASC LIMIT 1');
         if (comps && comps.length > 0) {
           companyId = comps[0].id;

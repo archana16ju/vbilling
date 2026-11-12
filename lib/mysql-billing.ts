@@ -1,7 +1,7 @@
 import { AddonItem, AddonGroup, SelectedAddon } from '@/types/addons';
 import { getMysqlPool, withMySqlTransaction } from './mysql';
 import { ensureLocalMySqlInitialized } from './mysql-init';
-import { getAuthorizedCompanyContext } from './mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext, Company } from './mysql-company';
 import { assertCompanyModuleEnabled } from './company-permissions';
 import { Product, Category, PRODUCTS, CATEGORIES } from '@/lib/mock-data';
 import { RawMaterial, StockTransaction, Supplier, PurchaseOrder, PurchaseOrderItem, LinkedProductRef, RecipeItem } from '@/types/product';
@@ -274,9 +274,9 @@ function mapRowToSale(row: any) {
 // --- PRODUCTS ---
 export async function mysqlGetProducts(): Promise<Product[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'products');
-  const pool = getMysqlPool();
+  
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -311,11 +311,11 @@ export async function mysqlGetProducts(): Promise<Product[]> {
   }
 }
 
-export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<Product> {
+export async function mysqlCreateProduct(product: Omit<Product, 'id'>, companyIdParam?: string): Promise<Product> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
   await assertCompanyModuleEnabled(company.id, 'products');
-  const pool = getMysqlPool();
+  
   const newProduct: Product = { ...product, id: 'p' + Date.now() };
 
   // Resolve primary barcode
@@ -403,9 +403,9 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>): Promise<
 
 export async function mysqlUpdateProduct(id: string, updates: Partial<Product>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'products');
-  const pool = getMysqlPool();
+  
   const setClauses: string[] = [];
   const params: any[] = [];
   const u = updates as any;
@@ -510,9 +510,9 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
 
 export async function mysqlDeleteProduct(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'products');
-  const pool = getMysqlPool();
+  
 
   // Delete product barcodes records first
   await pool.query(
@@ -530,11 +530,11 @@ export async function mysqlDeleteProduct(id: string): Promise<boolean> {
 }
 
 // --- CATEGORIES ---
-export async function mysqlGetCategories(): Promise<Category[]> {
+export async function mysqlGetCategories(companyIdParam?: string): Promise<Category[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
   await assertCompanyModuleEnabled(company.id, 'categories');
-  const pool = getMysqlPool();
+  
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -559,11 +559,11 @@ export async function mysqlGetCategories(): Promise<Category[]> {
   }
 }
 
-export async function mysqlCreateCategory(category: Omit<Category, 'id'>): Promise<Category> {
+export async function mysqlCreateCategory(category: Omit<Category, 'id'>, companyIdParam?: string): Promise<Category> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
   await assertCompanyModuleEnabled(company.id, 'categories');
-  const pool = getMysqlPool();
+  
   const newCat: Category = { ...category, id: 'c' + Date.now() };
 
   await pool.query<ResultSetHeader>(
@@ -576,9 +576,9 @@ export async function mysqlCreateCategory(category: Omit<Category, 'id'>): Promi
 
 export async function mysqlUpdateCategory(id: string, updates: Partial<Category>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'categories');
-  const pool = getMysqlPool();
+  
   const setClauses: string[] = [];
   const params: any[] = [];
 
@@ -600,9 +600,9 @@ export async function mysqlUpdateCategory(id: string, updates: Partial<Category>
 
 export async function mysqlDeleteCategory(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'categories');
-  const pool = getMysqlPool();
+  
   const [result] = await pool.query<ResultSetHeader>(
     'DELETE FROM categories WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -619,7 +619,7 @@ export async function mysqlSyncProductRawMaterials(
   companyId: string
 ): Promise<void> {
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [rmRows] = await pool.query<RowDataPacket[]>(
       `SELECT id, name, linked_products_json FROM raw_materials WHERE company_id = ?`,
       [companyId]
@@ -682,7 +682,7 @@ export async function mysqlSyncRawMaterialLinkedProducts(
   companyId: string
 ): Promise<void> {
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [currentProds] = await pool.query<RowDataPacket[]>(
       `SELECT id, name, raw_materials_json FROM products WHERE company_id = ?`,
       [companyId]
@@ -740,9 +740,9 @@ export async function mysqlSyncRawMaterialLinkedProducts(
 // --- RAW MATERIALS ---
 export async function mysqlGetRawMaterials(): Promise<RawMaterial[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
-  const pool = getMysqlPool();
+  
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -807,9 +807,9 @@ export async function mysqlGetRawMaterials(): Promise<RawMaterial[]> {
 
 export async function mysqlCreateRawMaterial(material: Omit<RawMaterial, 'id'>): Promise<RawMaterial> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
-  const pool = getMysqlPool();
+  
   const newMaterial: RawMaterial = {
     ...material,
     id: 'rm' + Date.now(),
@@ -850,9 +850,9 @@ export async function mysqlCreateRawMaterial(material: Omit<RawMaterial, 'id'>):
 
 export async function mysqlUpdateRawMaterial(id: string, updates: Partial<RawMaterial>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
-  const pool = getMysqlPool();
+  
   const setClauses: string[] = [];
   const params: any[] = [];
   const u = updates as any;
@@ -911,9 +911,9 @@ export async function mysqlUpdateRawMaterial(id: string, updates: Partial<RawMat
 
 export async function mysqlDeleteRawMaterial(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
-  const pool = getMysqlPool();
+  
 
   await mysqlSyncRawMaterialLinkedProducts(id, '', [], company.id);
 
@@ -927,8 +927,7 @@ export async function mysqlDeleteRawMaterial(id: string): Promise<boolean> {
 // --- SUPPLIERS ---
 export async function mysqlGetSuppliers(): Promise<Supplier[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT id, company_id, name, phone, email, address, balance_owed, created_at, updated_at FROM suppliers WHERE company_id = ? ORDER BY name ASC',
     [company.id]
@@ -946,8 +945,7 @@ export async function mysqlGetSuppliers(): Promise<Supplier[]> {
 
 export async function mysqlCreateSupplier(supplier: Omit<Supplier, 'id'>): Promise<Supplier> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const newSupplier: Supplier = {
     ...supplier,
     id: 'sup_' + Date.now(),
@@ -971,8 +969,7 @@ export async function mysqlCreateSupplier(supplier: Omit<Supplier, 'id'>): Promi
 
 export async function mysqlUpdateSupplier(id: string, updates: Partial<Supplier>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const setClauses: string[] = [];
   const params: any[] = [];
   if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
@@ -991,8 +988,7 @@ export async function mysqlUpdateSupplier(id: string, updates: Partial<Supplier>
 
 export async function mysqlDeleteSupplier(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const [result] = await pool.query<ResultSetHeader>(
     'DELETE FROM suppliers WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -1003,8 +999,7 @@ export async function mysqlDeleteSupplier(id: string): Promise<boolean> {
 // --- PURCHASE ORDERS ---
 export async function mysqlGetPurchaseOrders(): Promise<PurchaseOrder[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT id, company_id, supplier_id, supplier_name, order_date, total_amount, paid_amount, owed_amount, state, items_json, created_at FROM purchase_orders WHERE company_id = ? ORDER BY order_date DESC',
     [company.id]
@@ -1024,8 +1019,7 @@ export async function mysqlGetPurchaseOrders(): Promise<PurchaseOrder[]> {
 
 export async function mysqlCreatePurchaseOrder(order: PurchaseOrder): Promise<PurchaseOrder> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   let orderId = order.id?.trim();
   if (!orderId) {
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -1074,8 +1068,7 @@ export async function mysqlUpdatePurchaseOrder(
   updates: Partial<PurchaseOrder>
 ): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const setClauses: string[] = [];
   const params: any[] = [];
@@ -1113,8 +1106,7 @@ export async function mysqlUpdatePurchaseOrder(
 
 export async function mysqlDeletePurchaseOrder(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await pool.query(
     'DELETE FROM purchase_orders WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -1127,7 +1119,7 @@ export async function mysqlProcessStockTransactions(
 ): Promise<boolean> {
   if (!transactions || transactions.length === 0) return true;
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
 
   const date = Date.now();
@@ -1172,7 +1164,7 @@ export async function mysqlProcessStockTransactions(
     } catch {}
 
     return true;
-  });
+  }, pool);
 }
 
 export async function mysqlRecordStockDelivery(
@@ -1183,7 +1175,7 @@ export async function mysqlRecordStockDelivery(
   invoiceNumber?: string
 ): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
 
   return await withMySqlTransaction(async (conn) => {
@@ -1232,14 +1224,14 @@ export async function mysqlRecordStockDelivery(
     await mysqlSyncItemBatchStock(rawMaterialId, 'raw_material', newStock, company.id, conn);
 
     return true;
-  });
+  }, pool);
 }
 
 export async function mysqlGetStockTransactions(rawMaterialId?: string): Promise<StockTransaction[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'inventory');
-  const pool = getMysqlPool();
+  
 
   try {
     let query = `
@@ -1299,7 +1291,7 @@ export async function mysqlGetNextBillId(overrideCompanyId?: string): Promise<{ 
   const datePrefix = `${dd}${mm}${yy}`;
 
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const pattern = `BILL-${datePrefix}-%`;
     const [salesRows]: any = await pool.query(
       'SELECT bill_number FROM sales WHERE company_id = ? AND bill_number LIKE ?',
@@ -1336,8 +1328,7 @@ export async function mysqlUpdateSalePayment(
   changeReturned?: number
 ): Promise<{ success: boolean; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   try {
     const saleDbId = billId.startsWith('BILL-') ? `${company.id}_${billId}` : billId;
@@ -1369,8 +1360,7 @@ export async function mysqlRefundSale(
   batchAction: 'restock' | 'quarantine' = 'restock'
 ): Promise<{ success: boolean; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   try {
     const saleDbId = billId.startsWith('BILL-') ? `${company.id}_${billId}` : billId;
@@ -1518,25 +1508,14 @@ export async function mysqlRefundSale(
   }
 }
 
-export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sale?: any; error?: string }> {
+export async function mysqlRecordSale(sale: any, companyIdParam?: string): Promise<{ success: boolean; sale?: any; error?: string }> {
   await ensureLocalMySqlInitialized();
-  let company: { id: string };
-  let isApiCall = false;
+  const targetCompanyId = companyIdParam || sale.companyId;
+  const { pool, company } = await resolveCompanyPoolAndContext(targetCompanyId);
   try {
-    company = await getAuthorizedCompanyContext();
-  } catch (authErr) {
-    if (sale.companyId) {
-      company = { id: sale.companyId };
-      isApiCall = true;
-    } else {
-      throw authErr;
-    }
-  }
-  if (!isApiCall) {
     await assertCompanyModuleEnabled(company.id, 'sales');
     await assertCompanyModuleEnabled(company.id, 'bills');
-  }
-  const pool = getMysqlPool();
+  } catch {}
 
   try {
     let billNumber = sale.billNumber || sale.id;
@@ -1681,8 +1660,13 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
     const finalTotal = roundOff !== 0 ? parseFloat((calculatedTotal + roundOff).toFixed(2)) : calculatedTotal;
 
     const session = await getSession();
-    const cookieStore = await cookies();
-    const authUsername = session?.username || cookieStore.get('auth_username')?.value || cookieStore.get('auth_id')?.value;
+    let authUsername = session?.username;
+    if (!authUsername) {
+      try {
+        const cookieStore = await cookies();
+        authUsername = cookieStore.get('auth_username')?.value || cookieStore.get('auth_id')?.value;
+      } catch {}
+    }
     const rawCreatedBy = sale.createdBy || authUsername || 'Cashier';
     const saleCreatedBy = rawCreatedBy === 'admin' ? 'superadmin' : rawCreatedBy;
 
@@ -2268,7 +2252,7 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
           (finalSale as any).delivery = existingDelivery[0];
         }
       }
-    });
+    }, pool);
 
     return { success: true, sale: finalSale };
   } catch (err: any) {
@@ -2280,12 +2264,19 @@ export async function mysqlRecordSale(sale: any): Promise<{ success: boolean; sa
 export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]> {
   await ensureLocalMySqlInitialized();
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
+  let rawRole: string | undefined = session?.role;
+  let authUser = session?.username;
+  let authId = session?.userId;
+  let cookieCompanyId: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    rawRole = rawRole || cookieStore.get("auth_role")?.value;
+    authUser = authUser || cookieStore.get("auth_username")?.value;
+    authId = authId || cookieStore.get("auth_id")?.value;
+    cookieCompanyId = cookieStore.get("auth_company_id")?.value;
+  } catch {}
   const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authUser = session?.username || cookieStore.get("auth_username")?.value;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
-  const pool = getMysqlPool();
+  const { pool, company: authorizedCompany } = await resolveCompanyPoolAndContext(filterCompanyId);
 
   try {
     // 1. CASHIER: Strictly sees only the sales created by that cashier for their company
@@ -2340,7 +2331,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
     }
 
     // 3. SUPER ADMIN: Can view sales across all companies, or filter by specific company
-    const targetCompId = filterCompanyId || cookieStore.get("auth_company_id")?.value;
+    const targetCompId = filterCompanyId || cookieCompanyId;
     let query = `
       SELECT s.id, s.company_id, s.bill_number, s.items, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
              s.promo_code, s.promo_title, s.promo_discount, s.manual_discount, s.loyalty_points_redeemed, s.loyalty_discount, s.loyalty_points_earned,
@@ -2373,7 +2364,7 @@ export async function mysqlGetLiveSales(filterCompanyId?: string): Promise<any[]
 
 export async function mysqlClearAllSales(): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
   await assertCompanyModuleEnabled(company.id, 'sales');
   return await withMySqlTransaction(async (conn) => {
     await conn.query('DELETE FROM cash_register WHERE company_id = ?', [company.id]);
@@ -2385,7 +2376,7 @@ export async function mysqlClearAllSales(): Promise<boolean> {
     } catch {}
     await conn.query('DELETE FROM sales WHERE company_id = ?', [company.id]);
     return true;
-  });
+  }, pool);
 }
 
 // --- CUSTOMERS ---
@@ -2406,8 +2397,7 @@ export interface Customer {
 
 export async function mysqlGetCustomers(): Promise<Customer[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM customers WHERE company_id = ? ORDER BY name ASC',
     [company.id]
@@ -2430,8 +2420,7 @@ export async function mysqlGetCustomers(): Promise<Customer[]> {
 
 export async function mysqlCreateCustomer(data: Omit<Customer, 'id' | 'companyId' | 'createdAt'>): Promise<Customer> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const id = `cust_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   await pool.query(
     `INSERT INTO customers (id, company_id, name, phone, email, address, gstin, created_at)
@@ -2452,8 +2441,7 @@ export async function mysqlCreateCustomer(data: Omit<Customer, 'id' | 'companyId
 
 export async function mysqlUpdateCustomer(id: string, updates: Partial<Customer>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const clauses: string[] = [];
   const params: any[] = [];
   if (updates.name !== undefined) { clauses.push('name = ?'); params.push(updates.name); }
@@ -2472,8 +2460,7 @@ export async function mysqlUpdateCustomer(id: string, updates: Partial<Customer>
 
 export async function mysqlDeleteCustomer(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
   const [res]: any = await pool.query(
     'DELETE FROM customers WHERE id = ? AND company_id = ?',
     [id, company.id]
@@ -2490,8 +2477,7 @@ export interface CustomerWithStats extends Customer {
 
 export async function mysqlGetCustomersWithStats(): Promise<CustomerWithStats[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [customerRows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM customers WHERE company_id = ? ORDER BY name ASC',
@@ -2588,8 +2574,7 @@ export async function mysqlGetCustomersWithStats(): Promise<CustomerWithStats[]>
 
 export async function mysqlGetCustomerRecentOrders(customerName?: string, customerPhone?: string): Promise<any[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   if (!customerName && !customerPhone) return [];
 
@@ -2711,8 +2696,7 @@ export async function assignDeliveryToAvailablePersonInternal(
  */
 export async function mysqlGetDeliveryPersons(): Promise<DeliveryPerson[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT * FROM delivery_persons WHERE company_id = ? ORDER BY name ASC`,
@@ -2732,8 +2716,7 @@ export async function mysqlCreateDeliveryPerson(data: {
   maxActiveDeliveries?: number;
 }): Promise<DeliveryPerson> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const id = 'dp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
   const maxActive = data.maxActiveDeliveries && data.maxActiveDeliveries > 0 ? data.maxActiveDeliveries : 3;
@@ -2762,8 +2745,7 @@ export async function mysqlUpdateDeliveryPerson(
   updates: Partial<DeliveryPerson>
 ): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const setClauses: string[] = [];
   const params: any[] = [];
@@ -2810,8 +2792,7 @@ export async function mysqlUpdateDeliveryPerson(
  */
 export async function mysqlDeleteDeliveryPerson(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   // Check if they have active assigned deliveries
   const [activeDels]: any = await pool.query(
@@ -2842,8 +2823,7 @@ export async function mysqlGetDeliveries(filter?: {
   deliveryPersonName?: string;
 }): Promise<Delivery[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   let query = `
     SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
@@ -2907,8 +2887,7 @@ export async function mysqlGetDeliveries(filter?: {
  */
 export async function mysqlGetDeliveryByBillId(billId: string): Promise<Delivery | null> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
@@ -2945,7 +2924,7 @@ export async function mysqlUpdateDeliveryStatus(
   deliveryNotes?: string
 ): Promise<{ success: boolean; delivery?: Delivery; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   return await withMySqlTransaction(async (conn) => {
     const [rows]: any = await conn.query(
@@ -3046,7 +3025,7 @@ export async function mysqlUpdateDeliveryStatus(
       success: true,
       delivery: mapRowToDelivery(updatedRows[0]),
     };
-  });
+  }, pool);
 }
 
 /**
@@ -3058,7 +3037,7 @@ export async function mysqlManualAssignDelivery(
   targetPersonId: string | null
 ): Promise<{ success: boolean; delivery?: Delivery; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   return await withMySqlTransaction(async (conn) => {
     const [rows]: any = await conn.query(
@@ -3157,7 +3136,7 @@ export async function mysqlManualAssignDelivery(
       success: true,
       delivery: mapRowToDelivery(updatedRows[0]),
     };
-  });
+  }, pool);
 }
 
 /**
@@ -3170,7 +3149,7 @@ export async function mysqlUpdateDeliveryLocation(
   longitude: number
 ): Promise<{ success: boolean; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
+  const { pool } = await getAuthorizedCompanyPool();
 
   try {
     const [result]: any = await pool.query(
@@ -3190,36 +3169,7 @@ export async function mysqlUpdateDeliveryLocation(
   }
 }
 
-/**
- * Public customer tracking lookup by secure tracking_token.
- * Returns safe details without exposing sensitive staff or internal IDs.
- */
-export async function mysqlGetDeliveryByTrackingToken(token: string): Promise<any | null> {
-  await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
-            d.customer_name, d.customer_phone, d.delivery_address,
-            d.delivery_status, d.assignment_status, d.order_time,
-            d.assigned_at, d.picked_up_at, d.delivered_at, d.delivery_notes, d.status_history,
-            d.latitude, d.longitude, d.location_updated_at,
-            dp.name AS delivery_person_name, dp.phone AS delivery_person_phone,
-            c.name AS company_name, c.phone AS company_phone, c.address AS company_address,
-            s.items AS sale_items, s.total AS sale_total, s.tax AS sale_tax, s.discount AS sale_discount, 
-            s.payment_method AS sale_payment_method, s.payment_status AS sale_payment_status
-     FROM deliveries d
-     LEFT JOIN companies c ON d.company_id = c.id
-     LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
-     LEFT JOIN sales s ON s.company_id = d.company_id AND s.bill_number = d.bill_id
-     WHERE d.tracking_token = ?
-     LIMIT 1`,
-    [token]
-  );
-
-  if (!rows || rows.length === 0) return null;
-  const row = rows[0];
-
+function formatDeliveryTrackingRow(row: any) {
   let statusHistory = [];
   if (row.status_history) {
     try {
@@ -3283,13 +3233,61 @@ export async function mysqlGetDeliveryByTrackingToken(token: string): Promise<an
 }
 
 /**
+ * Public customer tracking lookup by secure tracking_token.
+ * Returns safe details without exposing sensitive staff or internal IDs.
+ */
+export async function mysqlGetDeliveryByTrackingToken(token: string): Promise<any | null> {
+  await ensureLocalMySqlInitialized();
+  const deliveryQuery = `SELECT d.id, d.company_id, d.bill_id, d.order_source, d.online_order_id, d.tracking_token,
+            d.customer_name, d.customer_phone, d.delivery_address,
+            d.delivery_status, d.assignment_status, d.order_time,
+            d.assigned_at, d.picked_up_at, d.delivered_at, d.delivery_notes, d.status_history,
+            d.latitude, d.longitude, d.location_updated_at,
+            dp.name AS delivery_person_name, dp.phone AS delivery_person_phone,
+            c.name AS company_name, c.phone AS company_phone, c.address AS company_address,
+            s.items AS sale_items, s.total AS sale_total, s.tax AS sale_tax, s.discount AS sale_discount, 
+            s.payment_method AS sale_payment_method, s.payment_status AS sale_payment_status
+     FROM deliveries d
+     LEFT JOIN companies c ON d.company_id = c.id
+     LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
+     LEFT JOIN sales s ON s.company_id = d.company_id AND s.bill_number = d.bill_id
+     WHERE d.tracking_token = ?
+     LIMIT 1`;
+
+  try {
+    const { ensureMasterDbInitialized, getMasterCompanies } = await import('./mysql-master');
+    const { getCompanyPool } = await import('./mysql');
+    await ensureMasterDbInitialized();
+    const comps = await getMasterCompanies();
+
+    for (const comp of comps) {
+      if (!comp.isActive || !comp.databaseName) continue;
+      try {
+        const pool = getCompanyPool(comp.databaseName);
+        const [rows] = await pool.query<RowDataPacket[]>(deliveryQuery, [token]);
+        if (rows && rows.length > 0) {
+          return formatDeliveryTrackingRow(rows[0]);
+        }
+      } catch {}
+    }
+  } catch {}
+
+  // Fallback to legacy local_billing_db
+  const legacyPool = getMysqlPool();
+  const [rows] = await legacyPool.query<RowDataPacket[]>(deliveryQuery, [token]);
+  if (rows && rows.length > 0) {
+    return formatDeliveryTrackingRow(rows[0]);
+  }
+  return null;
+}
+
+/**
  * Fetch online ordering platform configurations for the authorized company.
  * Automatically ensures default Zomato and Swiggy config entries exist.
  */
 export async function mysqlGetOnlineOrderConfigs(): Promise<OnlineOrderConfig[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   // Ensure default rows exist
   await pool.query(
@@ -3323,8 +3321,7 @@ export async function mysqlSaveOnlineOrderConfig(data: {
   connectionStatus?: 'connected' | 'disconnected' | 'error';
 }): Promise<OnlineOrderConfig> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const id = `ooc_${company.id}_${data.platform}`;
   const displayName = data.displayName || (data.platform === 'zomato' ? 'Zomato' : data.platform === 'swiggy' ? 'Swiggy' : data.platform);
@@ -3395,13 +3392,8 @@ export async function mysqlImportOnlineOrder(payload: {
   paymentStatus?: string;
 }): Promise<{ success: boolean; sale?: any; delivery?: any; message?: string }> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-
-  let targetCompanyId = payload.companyId;
-  if (!targetCompanyId) {
-    const compContext = await getAuthorizedCompanyContext();
-    targetCompanyId = compContext.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(payload.companyId);
+  const targetCompanyId = compContext.id;
 
   // 1. Idempotency Check: if this platform order was already imported for this company, return existing
   const [existingOrder] = await pool.query<RowDataPacket[]>(
@@ -3490,16 +3482,8 @@ export async function mysqlImportOnlineOrder(payload: {
  */
 export async function mysqlGetTaxesAndCharges(companyId?: string): Promise<{ taxes: TaxItem[]; charges: ChargeItem[] }> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    try {
-      const comp = await getAuthorizedCompanyContext();
-      targetCompanyId = comp.id;
-    } catch {
-      targetCompanyId = 'COMP-0001';
-    }
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   try {
     const [taxRows] = await pool.query<RowDataPacket[]>(
@@ -3585,12 +3569,8 @@ export async function mysqlGetTaxesAndCharges(companyId?: string): Promise<{ tax
 
 export async function mysqlSaveTax(tax: { id?: string; name: string; rate: number; appliesTo?: string; isActive?: boolean }, companyId?: string): Promise<TaxItem> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   const id = tax.id || `tax_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const rate = Number(tax.rate) || 0;
@@ -3621,12 +3601,8 @@ export async function mysqlSaveTax(tax: { id?: string; name: string; rate: numbe
 
 export async function mysqlToggleTax(id: string, isActive: boolean, companyId?: string): Promise<void> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   await pool.query(
     'UPDATE taxes SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
@@ -3636,24 +3612,16 @@ export async function mysqlToggleTax(id: string, isActive: boolean, companyId?: 
 
 export async function mysqlDeleteTax(id: string, companyId?: string): Promise<void> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   await pool.query('DELETE FROM taxes WHERE id = ? AND company_id = ?', [id, targetCompanyId]);
 }
 
 export async function mysqlSaveCharge(charge: { id?: string; name: string; type: 'percentage' | 'fixed'; value: number; appliesTo?: string[]; isActive?: boolean }, companyId?: string): Promise<ChargeItem> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   const id = charge.id || `charge_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const value = Number(charge.value) || 0;
@@ -3688,12 +3656,8 @@ export async function mysqlSaveCharge(charge: { id?: string; name: string; type:
 
 export async function mysqlToggleCharge(id: string, isActive: boolean, companyId?: string): Promise<void> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   await pool.query(
     'UPDATE charges SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
@@ -3703,12 +3667,8 @@ export async function mysqlToggleCharge(id: string, isActive: boolean, companyId
 
 export async function mysqlDeleteCharge(id: string, companyId?: string): Promise<void> {
   await ensureLocalMySqlInitialized();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  const targetCompanyId = compContext.id;
 
   await pool.query('DELETE FROM charges WHERE id = ? AND company_id = ?', [id, targetCompanyId]);
 }
@@ -3716,8 +3676,8 @@ export async function mysqlDeleteCharge(id: string, companyId?: string): Promise
 /**
  * WhatsApp Settings Management
  */
-export async function mysqlEnsureWhatsAppSettingsTable(): Promise<void> {
-  const pool = getMysqlPool();
+export async function mysqlEnsureWhatsAppSettingsTable(targetPool?: any): Promise<void> {
+  const pool = targetPool || getMysqlPool();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_settings (
       company_id VARCHAR(64) PRIMARY KEY,
@@ -3773,17 +3733,9 @@ export async function mysqlEnsureWhatsAppSettingsTable(): Promise<void> {
 
 export async function mysqlGetWhatsAppSettings(companyId?: string): Promise<WhatsAppSettings> {
   await ensureLocalMySqlInitialized();
-  await mysqlEnsureWhatsAppSettingsTable();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId;
-  if (!targetCompanyId) {
-    try {
-      const comp = await getAuthorizedCompanyContext();
-      targetCompanyId = comp.id;
-    } catch {
-      targetCompanyId = 'COMP-0001';
-    }
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId);
+  await mysqlEnsureWhatsAppSettingsTable(pool);
+  const targetCompanyId = compContext.id;
 
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -3845,13 +3797,9 @@ export async function mysqlSaveWhatsAppSettings(
   companyId?: string
 ): Promise<WhatsAppSettings> {
   await ensureLocalMySqlInitialized();
-  await mysqlEnsureWhatsAppSettingsTable();
-  const pool = getMysqlPool();
-  let targetCompanyId = companyId || settings.companyId;
-  if (!targetCompanyId) {
-    const comp = await getAuthorizedCompanyContext();
-    targetCompanyId = comp.id;
-  }
+  const { pool, company: compContext } = await resolveCompanyPoolAndContext(companyId || settings.companyId);
+  await mysqlEnsureWhatsAppSettingsTable(pool);
+  const targetCompanyId = compContext.id;
 
   const merged: WhatsAppSettings = {
     ...DEFAULT_WHATSAPP_SETTINGS,
@@ -3953,8 +3901,8 @@ export async function mysqlSaveWhatsAppSettings(
 
 export async function mysqlGetAddonItems(companyId?: string): Promise<AddonItem[]> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT id, company_id, name, image, price, category, tax, track_stock, stock, is_active, created_at, updated_at
      FROM addon_items
@@ -3980,8 +3928,8 @@ export async function mysqlGetAddonItems(companyId?: string): Promise<AddonItem[
 
 export async function mysqlCreateAddonItem(data: Omit<AddonItem, 'id'>, companyId?: string): Promise<AddonItem> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   const id = 'add_' + cId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
   await pool.query<ResultSetHeader>(
     `INSERT INTO addon_items (id, company_id, name, image, price, category, tax, track_stock, stock, is_active)
@@ -4010,8 +3958,8 @@ export async function mysqlCreateAddonItem(data: Omit<AddonItem, 'id'>, companyI
 
 export async function mysqlUpdateAddonItem(id: string, updates: Partial<AddonItem>, companyId?: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   const setClauses: string[] = [];
   const params: any[] = [];
 
@@ -4035,8 +3983,8 @@ export async function mysqlUpdateAddonItem(id: string, updates: Partial<AddonIte
 
 export async function mysqlDeleteAddonItem(id: string, companyId?: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   await pool.query('DELETE FROM addon_group_items WHERE addon_id = ? AND company_id = ?', [id, cId]);
   const [res] = await pool.query<ResultSetHeader>(
     'DELETE FROM addon_items WHERE id = ? AND company_id = ?',
@@ -4047,8 +3995,8 @@ export async function mysqlDeleteAddonItem(id: string, companyId?: string): Prom
 
 export async function mysqlGetAddonGroups(companyId?: string): Promise<AddonGroup[]> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
 
   const [groupRows] = await pool.query<RowDataPacket[]>(
     `SELECT id, company_id, name, min_selection, max_selection, is_required, selection_type, is_active, created_at, updated_at
@@ -4111,8 +4059,8 @@ export async function mysqlGetAddonGroups(companyId?: string): Promise<AddonGrou
 
 export async function mysqlCreateAddonGroup(data: Omit<AddonGroup, 'id'>, companyId?: string): Promise<AddonGroup> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   const id = 'grp_' + cId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
 
   await pool.query<ResultSetHeader>(
@@ -4155,8 +4103,8 @@ export async function mysqlCreateAddonGroup(data: Omit<AddonGroup, 'id'>, compan
 
 export async function mysqlUpdateAddonGroup(id: string, updates: Partial<AddonGroup>, companyId?: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   const setClauses: string[] = [];
   const params: any[] = [];
 
@@ -4192,8 +4140,8 @@ export async function mysqlUpdateAddonGroup(id: string, updates: Partial<AddonGr
 
 export async function mysqlDeleteAddonGroup(id: string, companyId?: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const cId = companyId || (await getAuthorizedCompanyContext()).id;
-  const pool = getMysqlPool();
+  const { pool, company: compCtx } = await resolveCompanyPoolAndContext(companyId);
+  const cId = compCtx.id;
   await pool.query('DELETE FROM addon_group_items WHERE group_id = ? AND company_id = ?', [id, cId]);
   const [res] = await pool.query<ResultSetHeader>(
     'DELETE FROM addon_groups WHERE id = ? AND company_id = ?',
@@ -4206,8 +4154,7 @@ export async function mysqlDeleteAddonGroup(id: string, companyId?: string): Pro
 
 export async function mysqlGetNextInternalBarcode(companyId?: string): Promise<string> {
   await ensureLocalMySqlInitialized();
-  const company = companyId ? { id: companyId } : await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyId);
 
   // Atomically increment and get the next internal sequence number (starting from 100001)
   await pool.query(
@@ -4232,8 +4179,7 @@ export async function mysqlCheckBarcodeUnique(
   excludeProductId?: string
 ): Promise<{ isUnique: boolean; conflictProduct?: { id: string; name: string } }> {
   await ensureLocalMySqlInitialized();
-  const company = companyId ? { id: companyId } : await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyId);
   const cleanBarcode = (barcode || '').trim();
   if (!cleanBarcode) return { isUnique: true };
 
@@ -4268,8 +4214,7 @@ export async function mysqlCheckLowStockAndCreateReorders(companyIdParam?: strin
   createdOrders: PurchaseOrder[];
 }> {
   await ensureLocalMySqlInitialized();
-  const company = companyIdParam ? { id: companyIdParam } : await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
 
   try {
     // 1. Fetch raw materials at or below minimum threshold
@@ -4381,8 +4326,7 @@ export async function mysqlApprovePurchaseOrder(orderId: string): Promise<{
   error?: string;
 }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [rows]: any = await pool.query(
     'SELECT * FROM purchase_orders WHERE id = ? AND company_id = ?',
@@ -4453,8 +4397,7 @@ export async function mysqlApprovePurchaseOrder(orderId: string): Promise<{
 
 export async function mysqlRejectPurchaseOrder(orderId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   await pool.query(
     `UPDATE purchase_orders SET state = 'Rejected' WHERE id = ? AND company_id = ?`,
@@ -4471,8 +4414,7 @@ export async function mysqlGetReplenishmentNotifications(): Promise<{
   lowStockItems: any[];
 }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   try {
     // Automatically check low stock and create pending approval purchase orders
@@ -4619,8 +4561,7 @@ export async function mysqlTriggerTestReplenishment(rawMaterialId?: string): Pro
   replenishedCount?: number;
 }> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   try {
     let query = 'SELECT id, name, stock, low_stock_limit, unit FROM raw_materials WHERE company_id = ?';

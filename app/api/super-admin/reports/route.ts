@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
 import { getSession } from '@/lib/auth-session';
+import { resolveCompanyPoolAndContext, getAllCompanies } from '@/lib/mysql-company';
 import { RowDataPacket } from 'mysql2';
 import { resolveAnalyticsDateRanges } from '@/lib/super-admin-analytics';
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     }
 
     await ensureLocalMySqlInitialized();
-    const pool = getMysqlPool();
+    let pool = getMysqlPool();
 
     const { searchParams } = new URL(request.url);
     const reportKey = searchParams.get('reportKey') || 'overall_sales';
@@ -42,12 +43,40 @@ export async function GET(request: Request) {
     const dateRange = resolveAnalyticsDateRanges(presetParam, customStartParam, customEndParam);
     const isAllCompanies = companyIdParam === 'all' || !companyIdParam;
 
+    if (!isAllCompanies) {
+      try {
+        const resolved = await resolveCompanyPoolAndContext(companyIdParam);
+        pool = resolved.pool;
+      } catch (err) {
+        console.warn(`Could not resolve dedicated pool for company ${companyIdParam}, using default pool`, err);
+      }
+    }
+
     // Fetch Companies map for resolving names
-    const [allCompanies] = await pool.query<RowDataPacket[]>(
-      'SELECT id, name, code, is_active, currency, created_at FROM companies'
-    );
+    let allCompanies: any[] = [];
+    try {
+      const masterCompanies = await getAllCompanies();
+      if (masterCompanies && masterCompanies.length > 0) {
+        allCompanies = masterCompanies.map(c => ({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          is_active: c.isActive ? 1 : 0,
+          currency: c.currency || 'INR',
+          created_at: new Date(c.createdAt || Date.now())
+        }));
+      }
+    } catch {}
+
+    if (allCompanies.length === 0) {
+      const [legacyComps] = await getMysqlPool().query<RowDataPacket[]>(
+        'SELECT id, name, code, is_active, currency, created_at FROM companies'
+      );
+      allCompanies = legacyComps;
+    }
+
     const companyMap = new Map<string, { id: string; name: string; code: string; currency: string }>();
-    allCompanies.forEach((c) => companyMap.set(c.id, { id: c.id, name: c.name, code: c.code, currency: c.currency || 'INR' }));
+    allCompanies.forEach((c: any) => companyMap.set(c.id, { id: c.id, name: c.name, code: c.code, currency: c.currency || 'INR' }));
 
     const targetCompanyName = isAllCompanies
       ? 'All Companies'

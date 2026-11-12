@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { RowDataPacket } from 'mysql2';
 
 export async function GET(request: Request) {
@@ -47,18 +47,7 @@ export async function GET(request: Request) {
       });
     }
 
-    let company: any;
-    const pool = getMysqlPool();
-    try {
-      company = await getAuthorizedCompanyContext();
-    } catch {
-      const [comps]: any = await pool.query('SELECT * FROM companies WHERE is_active = 1 ORDER BY id ASC LIMIT 1');
-      if (comps && comps.length > 0) {
-        company = comps[0];
-      } else {
-        return NextResponse.json({ orders: [] });
-      }
-    }
+    const { pool, company } = await resolveCompanyPoolAndContext();
 
     // Query recent online orders from deliveries and sales
     const [rows] = await pool.query<RowDataPacket[]>(

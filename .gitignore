@@ -49,3 +49,14 @@ dist/
 # Local database files
 *.db
 *.sqlite
+*.sql
+*.dump
+
+# Application data, backups and exports
+data/
+/data/
+backups/
+
+# Scratch & temporary migration inspection files
+scratch/
+

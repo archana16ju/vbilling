@@ -1,8 +1,8 @@
 'use server';
 
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { recordAuditLog } from '@/lib/actions/audit';
@@ -47,9 +47,8 @@ export async function getStaffList(targetCompanyId?: string): Promise<{ success:
   try {
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
-      const companyId = targetCompanyId || company.id;
+      const { pool, company } = await resolveCompanyPoolAndContext(targetCompanyId);
+      const companyId = company.id;
 
       // Auto-sync real company staff users (Manager, Cashier, Chef, Waiter) into the staff table
       try {
@@ -236,9 +235,8 @@ export async function createStaffMember(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
-      const companyId = params.targetCompanyId || company.id;
+      const { pool, company } = await resolveCompanyPoolAndContext(params.targetCompanyId);
+      const companyId = company.id;
 
       let createdUserId = params.userId || null;
       const cleanUsername = params.username && params.username.trim()
@@ -337,8 +335,7 @@ export async function deleteStaffMember(staffId: string): Promise<{ success: boo
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       await pool.query('DELETE FROM staff WHERE id = ? AND company_id = ?', [staffId, company.id]);
 
@@ -382,8 +379,7 @@ export async function updateStaffSalary(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       await pool.query(
         `UPDATE staff
@@ -451,8 +447,7 @@ export async function getStaffAttendanceToday(dateStr: string): Promise<{ succes
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       // Get all staff
       const [staffRows] = await pool.query<RowDataPacket[]>(
@@ -555,8 +550,7 @@ export async function markStaffAttendance(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       // Find staff details
       const [staffRows] = await pool.query<RowDataPacket[]>(
@@ -699,8 +693,7 @@ export async function getMonthSheetData(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       const [attRows] = await pool.query<RowDataPacket[]>(
         `SELECT staff_id, user_id, date, status, mark_code
@@ -865,8 +858,7 @@ export async function clearMonthAttendance(year: number, month: number): Promise
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       await pool.query(
         'DELETE FROM attendance WHERE company_id = ? AND date BETWEEN ? AND ?',
@@ -904,8 +896,7 @@ export async function getStaffAttendanceReportData(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       const [attRows] = await pool.query<RowDataPacket[]>(
         `SELECT staff_id, user_id, status, mark_code, working_hours
@@ -1073,8 +1064,7 @@ export async function recordPayrollExpense(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       await pool.query(
         `INSERT INTO expenses (
@@ -1148,17 +1138,8 @@ export async function getCompanyWaiters(targetCompanyId?: string): Promise<{
   try {
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      let companyId = targetCompanyId;
-      if (!companyId) {
-        try {
-          const company = await getAuthorizedCompanyContext();
-          companyId = company.id;
-        } catch {
-          const cookieStore = await cookies();
-          companyId = cookieStore.get('auth_company_id')?.value;
-        }
-      }
+      const { pool, company } = await resolveCompanyPoolAndContext(targetCompanyId);
+      const companyId = company.id;
 
       if (!companyId) {
         return { success: true, waiters: [] };
@@ -1378,8 +1359,7 @@ export async function createStaffShift(params: {
     if (!params.shiftDate) return { success: false, error: 'Shift date is required.' };
     if (!params.startTime || !params.endTime) return { success: false, error: 'Shift start and end times are required.' };
 
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
 
     // 1. Fetch staff member row to check existing shifts and prevent overlapping
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -1505,8 +1485,7 @@ export async function updateStaffShift(params: {
       return { success: false, error: 'Only Company Admin and Super Admin can edit shifts.' };
     }
 
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
 
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT id, name, role, shifts FROM staff WHERE id = ? AND company_id = ?',
@@ -1592,8 +1571,7 @@ export async function deleteStaffShift(shiftId: string): Promise<{ success: bool
       return { success: false, error: 'Only Company Admin and Super Admin can delete shifts.' };
     }
 
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
 
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT id, shifts FROM staff WHERE company_id = ?',
@@ -1633,8 +1611,7 @@ export async function recordShiftCheckIn(
   timestamp?: string
 ): Promise<{ success: boolean; attendanceStatus?: ShiftAttendanceStatus; checkInTime?: string; clockInTime?: string; shiftId?: string; staffId?: string; error?: string }> {
   try {
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
     const nowIso = timestamp || new Date().toISOString();
 
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -1702,8 +1679,7 @@ export async function recordShiftCheckOut(
   timestamp?: string
 ): Promise<{ success: boolean; totalWorkingHours?: number; checkOutTime?: string; clockOutTime?: string; shiftId?: string; staffId?: string; error?: string }> {
   try {
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
     const nowIso = timestamp || new Date().toISOString();
 
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -1804,8 +1780,7 @@ export async function getShiftAlerts(): Promise<{
       };
     }
 
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
 
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT id, name, role, user_id, username, shifts FROM staff WHERE company_id = ?',

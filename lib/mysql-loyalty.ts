@@ -1,6 +1,6 @@
 import { getMysqlPool } from './mysql';
 import { ensureLocalMySqlInitialized } from './mysql-init';
-import { getAuthorizedCompanyContext } from './mysql-company';
+import { getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from './mysql-company';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { LoyaltySettings, DEFAULT_LOYALTY_SETTINGS, LoyaltyTransaction, LoyaltyTier } from '@/types/loyalty';
 
@@ -26,12 +26,8 @@ function mapRowToLoyaltySettings(row: any): LoyaltySettings {
 
 export async function mysqlGetLoyaltySettings(companyIdParam?: string): Promise<LoyaltySettings> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM loyalty_settings WHERE company_id = ? LIMIT 1',
@@ -50,10 +46,9 @@ export async function mysqlGetLoyaltySettings(companyIdParam?: string): Promise<
   return mapRowToLoyaltySettings(rows[0]);
 }
 
-export async function mysqlSaveLoyaltySettings(settings: Partial<LoyaltySettings>): Promise<LoyaltySettings> {
+export async function mysqlSaveLoyaltySettings(settings: Partial<LoyaltySettings>, companyIdParam?: string): Promise<LoyaltySettings> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam || settings.companyId);
 
   const merged = {
     ...DEFAULT_LOYALTY_SETTINGS,
@@ -108,8 +103,7 @@ export async function mysqlSaveLoyaltySettings(settings: Partial<LoyaltySettings
 
 export async function mysqlGetCustomerLoyaltyHistory(customerId: string): Promise<LoyaltyTransaction[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT lt.*, c.name as customer_name, c.phone as customer_phone
@@ -157,12 +151,8 @@ export async function mysqlProcessLoyaltyTransaction(
   companyIdParam?: string
 ): Promise<{ success: boolean; newBalance: number; tier: LoyaltyTier }> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const settings = await mysqlGetLoyaltySettings(companyId);
   if (!settings.isEnabled && type === 'earned') {

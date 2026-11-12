@@ -1,12 +1,21 @@
 'use server';
 
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { cookies } from 'next/headers';
 import { RowDataPacket } from 'mysql2';
+
+async function getSafeCookie(name: string): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    return cookieStore.get(name)?.value;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface DineInOrder {
   id: string;
@@ -54,21 +63,13 @@ export async function createOrUpdateDineInOrder(params: {
 }): Promise<{ success: boolean; orderId?: string; error?: string }> {
   try {
     const session = await getSession();
-    const cookieStore = await cookies();
-    const currentUserName = session?.username || cookieStore.get('auth_username')?.value || 'Cashier';
+    const cookieUser = await getSafeCookie('auth_username');
+    const currentUserName = session?.username || cookieUser || 'Cashier';
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      let companyId = params.targetCompanyId;
-      if (!companyId) {
-        try {
-          const company = await getAuthorizedCompanyContext();
-          companyId = company.id;
-        } catch {
-          companyId = cookieStore.get('auth_company_id')?.value || 'comp_default';
-        }
-      }
+      const { pool, company } = await resolveCompanyPoolAndContext(params.targetCompanyId);
+      const companyId = company.id;
 
       const orderId = params.id || `dio_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const kitchenStatus = params.kitchenStatus || 'PREPARING';
@@ -118,7 +119,8 @@ export async function createOrUpdateDineInOrder(params: {
 
     // Mongo Fallback
     const db = await getDb();
-    const companyId = params.targetCompanyId || cookieStore.get('auth_company_id')?.value || 'comp_default';
+    const cookieCompId = await getSafeCookie('auth_company_id');
+    const companyId = params.targetCompanyId || cookieCompId || 'comp_default';
     const orderId = params.id || `dio_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
     await db.collection('dine_in_orders').updateOne(
@@ -165,26 +167,13 @@ export async function getDineInOrders(filters?: {
 }): Promise<{ success: boolean; orders: DineInOrder[]; error?: string }> {
   try {
     const session = await getSession();
-    const cookieStore = await cookies();
+    const cookieCompanyId = await getSafeCookie('auth_company_id');
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-
-      let companyId: string | undefined = session?.companyId;
-      if (!companyId || session?.role === 'super_admin') {
-        const reqCompanyId = cookieStore.get('auth_company_id')?.value;
-        if (reqCompanyId) {
-          companyId = reqCompanyId;
-        } else {
-          try {
-            const company = await getAuthorizedCompanyContext();
-            companyId = company.id;
-          } catch {
-            companyId = cookieStore.get('auth_company_id')?.value;
-          }
-        }
-      }
+      const reqCompanyId = session?.role === 'super_admin' ? cookieCompanyId : undefined;
+      const { pool, company } = await resolveCompanyPoolAndContext(reqCompanyId);
+      const companyId = company.id;
 
       if (!companyId) {
         return { success: true, orders: [] };
@@ -280,7 +269,8 @@ export async function getDineInOrders(filters?: {
 
     // Mongo Fallback
     const db = await getDb();
-    const companyId = cookieStore.get('auth_company_id')?.value || 'comp_default';
+    const cookieCompId = await getSafeCookie('auth_company_id');
+    const companyId = cookieCompId || 'comp_default';
     const query: any = { companyId };
 
     if (session?.role === 'waiter' && !filters?.allTables) {
@@ -331,32 +321,23 @@ export async function updateDineInServingStatus(
   try {
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const cookieStore = await cookies();
-      let companyId: string | undefined;
-      try {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-      } catch {
-        companyId = cookieStore.get('auth_company_id')?.value;
-      }
+      const { pool, company } = await getAuthorizedCompanyPool();
+      const companyId = company.id;
 
       await pool.query(
         `UPDATE dine_in_orders 
          SET serving_status = ?, updated_at = NOW() 
          WHERE (id = ? OR kot_id = ? OR order_number = ?)
-           ${companyId ? 'AND company_id = ?' : ''}`,
-        companyId ? [servingStatus, orderId, orderId, orderId, companyId] : [servingStatus, orderId, orderId, orderId]
+           AND company_id = ?`,
+        [servingStatus, orderId, orderId, orderId, companyId]
       );
 
       // If there's an associated sale in sales table, update its serving_status too
-      if (companyId) {
-        await pool.query(
-          `UPDATE sales SET serving_status = ? 
-           WHERE company_id = ? AND (bill_number = ? OR id = ?)`,
-          [servingStatus, companyId, orderId, orderId]
-        );
-      }
+      await pool.query(
+        `UPDATE sales SET serving_status = ? 
+         WHERE company_id = ? AND (bill_number = ? OR id = ?)`,
+        [servingStatus, companyId, orderId, orderId]
+      );
 
       return { success: true };
     }
@@ -382,25 +363,13 @@ export async function assignDineInWaiter(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await getSession();
-    const cookieStore = await cookies();
+    const cookieCompanyId = await getSafeCookie('auth_company_id');
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      let companyId: string | undefined = session?.companyId;
-      if (!companyId || session?.role === 'super_admin') {
-        const reqCompanyId = cookieStore.get('auth_company_id')?.value;
-        if (reqCompanyId) {
-          companyId = reqCompanyId;
-        } else {
-          try {
-            const company = await getAuthorizedCompanyContext();
-            companyId = company.id;
-          } catch {
-            companyId = cookieStore.get('auth_company_id')?.value;
-          }
-        }
-      }
+      const reqCompanyId = session?.role === 'super_admin' ? cookieCompanyId : undefined;
+      const { pool, company } = await resolveCompanyPoolAndContext(reqCompanyId);
+      const companyId = company.id;
 
       const conditions: string[] = [];
       const params: any[] = [waiterId || null, waiterName || null];
@@ -473,22 +442,15 @@ export async function updateDineInKitchenStatus(
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const cookieStore = await cookies();
-      let companyId: string | undefined;
-      try {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-      } catch {
-        companyId = cookieStore.get('auth_company_id')?.value;
-      }
+      const { pool, company } = await getAuthorizedCompanyPool();
+      const companyId = company.id;
 
       await pool.query(
         `UPDATE dine_in_orders 
          SET kitchen_status = ? ${servingStatusUpdate}, updated_at = NOW() 
          WHERE (kot_id = ? OR order_number = ? OR id = ?)
-           ${companyId ? 'AND company_id = ?' : ''}`,
-        companyId ? [kitchenStatus, kotIdOrOrderId, kotIdOrOrderId, kotIdOrOrderId, companyId] : [kitchenStatus, kotIdOrOrderId, kotIdOrOrderId, kotIdOrOrderId]
+           AND company_id = ?`,
+        [kitchenStatus, kotIdOrOrderId, kotIdOrOrderId, kotIdOrOrderId, companyId]
       );
 
       return { success: true };
@@ -519,33 +481,24 @@ export async function releaseDineInTable(
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const cookieStore = await cookies();
-      let companyId: string | undefined;
-      try {
-        const company = await getAuthorizedCompanyContext();
-        companyId = company.id;
-      } catch {
-        companyId = cookieStore.get('auth_company_id')?.value;
-      }
+      const { pool, company } = await getAuthorizedCompanyPool();
+      const companyId = company.id;
 
       await pool.query(
         `UPDATE dine_in_orders 
          SET serving_status = 'Completed', updated_at = NOW() 
          WHERE (table_id = ? OR table_name = ? OR table_name = ? OR table_name = ?)
            AND serving_status NOT IN ('Completed', 'Cancelled')
-           ${companyId ? 'AND company_id = ?' : ''}`,
-        companyId
-          ? [tableId || '', tableName || '', `Table ${tableName || ''}`, cleanTbl, companyId]
-          : [tableId || '', tableName || '', `Table ${tableName || ''}`, cleanTbl]
+           AND company_id = ?`,
+        [tableId || '', tableName || '', `Table ${tableName || ''}`, cleanTbl, companyId]
       );
 
       return { success: true };
     }
 
     const db = await getDb();
-    const cookieStore = await cookies();
-    const companyId = cookieStore.get('auth_company_id')?.value || 'comp_default';
+    const cookieCompanyId = await getSafeCookie('auth_company_id');
+    const companyId = cookieCompanyId || 'comp_default';
 
     await db.collection('dine_in_orders').updateMany(
       {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
 import { isLocalMySqlMode } from '@/lib/mysql';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { resolveCompanyPoolAndContext } from '@/lib/mysql-company';
 import { mysqlImportOnlineOrder, mysqlGetProducts } from '@/lib/mysql-billing';
 
 export async function POST(request: Request) {
@@ -15,19 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Available only in local MySQL mode' }, { status: 400 });
     }
 
-    let company: any;
-    try {
-      company = await getAuthorizedCompanyContext();
-    } catch {
-      const { getMysqlPool } = await import('@/lib/mysql');
-      const pool = getMysqlPool();
-      const [comps]: any = await pool.query('SELECT * FROM companies WHERE is_active = 1 ORDER BY id ASC LIMIT 1');
-      if (comps && comps.length > 0) {
-        company = comps[0];
-      } else {
-        throw new Error('No active company found');
-      }
-    }
+    const { pool, company } = await resolveCompanyPoolAndContext();
     const data = await request.json().catch(() => ({}));
 
     const platform = data.platform === 'Swiggy' ? 'Swiggy' : 'Zomato';

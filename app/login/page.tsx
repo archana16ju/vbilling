@@ -4,6 +4,8 @@ import { useState } from 'react'
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [companyCode, setCompanyCode] = useState('')
+  const [showCompanyCode, setShowCompanyCode] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -14,6 +16,7 @@ export default function LoginPage() {
 
     const cleanUser = username.trim()
     const cleanPass = password.trim()
+    const cleanCode = companyCode.trim().toUpperCase()
 
     if (!cleanUser || !cleanPass) {
       setError('Please enter both username and password.')
@@ -25,7 +28,11 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUser, password: cleanPass })
+        body: JSON.stringify({
+          username: cleanUser,
+          password: cleanPass,
+          companyCode: cleanCode || undefined,
+        })
       })
       const data = await res.json()
 
@@ -52,6 +59,9 @@ export default function LoginPage() {
         const dest = data.redirectUrl || (data.role === 'cashier' ? '/terminal' : data.role === 'delivery_staff' ? '/delivery' : data.role === 'super_admin' ? '/super-admin' : '/dashboard')
         window.location.href = dest
       } else {
+        if (data.ambiguous) {
+          setShowCompanyCode(true)
+        }
         setError(data.error || 'Invalid credentials.')
       }
     } catch (err: any) {
@@ -116,6 +126,34 @@ export default function LoginPage() {
               name="password"
             />
           </div>
+
+          {(showCompanyCode || companyCode) ? (
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-300">Company Code</label>
+                <span className="text-[10px] text-amber-400 font-semibold">Required for duplicate username</span>
+              </div>
+              <input 
+                type="text" 
+                value={companyCode}
+                onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
+                className="w-full px-4 py-2.5 border border-amber-600/70 rounded-xl focus:border-amber-400 bg-zinc-950 text-white placeholder-zinc-500 outline-none text-sm transition uppercase"
+                placeholder="e.g. TESTA or COMP-0001"
+                name="companyCode"
+                autoFocus
+              />
+            </div>
+          ) : (
+            <div className="text-right -mt-2">
+              <button
+                type="button"
+                onClick={() => setShowCompanyCode(true)}
+                className="text-[11px] text-zinc-400 hover:text-white transition underline"
+              >
+                Sign in with Company Code
+              </button>
+            </div>
+          )}
 
           <button 
             type="submit" 

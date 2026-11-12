@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
 import { getSession } from '@/lib/auth-session';
+import { resolveCompanyPoolAndContext, getAllCompanies } from '@/lib/mysql-company';
 import { RowDataPacket } from 'mysql2';
 
 import { resolveAnalyticsDateRanges } from '@/lib/super-admin-analytics';
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     }
 
     await ensureLocalMySqlInitialized();
-    const pool = getMysqlPool();
+    let pool = getMysqlPool();
 
     const { searchParams } = new URL(request.url);
     const companyIdParam = searchParams.get('companyId') || 'all';
@@ -51,6 +52,15 @@ export async function GET(request: Request) {
     const dateRange = resolveAnalyticsDateRanges(presetParam, customStartParam, customEndParam);
 
     const isAllCompanies = companyIdParam === 'all' || !companyIdParam;
+
+    if (!isAllCompanies) {
+      try {
+        const resolved = await resolveCompanyPoolAndContext(companyIdParam);
+        pool = resolved.pool;
+      } catch (err) {
+        console.warn(`Could not resolve dedicated pool for company ${companyIdParam}, using default pool`, err);
+      }
+    }
 
     // Base filters
     const companySalesCurrentFilter = isAllCompanies
@@ -66,13 +76,31 @@ export async function GET(request: Request) {
       : [companyIdParam, dateRange.previousStartSql, dateRange.previousEndSql];
 
     // 1. Fetch Registered Companies List
-    const [allCompanies] = await pool.query<RowDataPacket[]>(
-      'SELECT id, name, code, is_active, currency, created_at FROM companies ORDER BY name ASC'
-    );
+    let allCompanies: any[] = [];
+    try {
+      const masterCompanies = await getAllCompanies();
+      if (masterCompanies && masterCompanies.length > 0) {
+        allCompanies = masterCompanies.map(c => ({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          is_active: c.isActive ? 1 : 0,
+          currency: c.currency || 'INR',
+          created_at: new Date(c.createdAt || Date.now())
+        }));
+      }
+    } catch {}
+
+    if (allCompanies.length === 0) {
+      const [legacyComps] = await getMysqlPool().query<RowDataPacket[]>(
+        'SELECT id, name, code, is_active, currency, created_at FROM companies ORDER BY name ASC'
+      );
+      allCompanies = legacyComps;
+    }
 
     const totalCompaniesCount = allCompanies.length;
-    const activeCompaniesCount = allCompanies.filter((c) => c.is_active === 1).length;
-    const inactiveCompaniesCount = allCompanies.filter((c) => c.is_active === 0).length;
+    const activeCompaniesCount = allCompanies.filter((c: any) => c.is_active === 1).length;
+    const inactiveCompaniesCount = allCompanies.filter((c: any) => c.is_active === 0).length;
 
     // 2. Fetch Users Breakdown
     const userCompanyClause = isAllCompanies ? '' : 'WHERE u.company_id = ? OR uc.company_id = ?';

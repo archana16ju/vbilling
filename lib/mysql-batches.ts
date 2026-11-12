@@ -1,6 +1,6 @@
 import { getMysqlPool, withMySqlTransaction } from './mysql';
 import { ensureLocalMySqlInitialized } from './mysql-init';
-import { getAuthorizedCompanyContext } from './mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from './mysql-company';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { ProductBatch, BatchTransaction, BatchAllocationResult, BatchStatus } from '@/types/batches';
 
@@ -31,8 +31,7 @@ function mapRowToBatch(row: any): ProductBatch {
 
 export async function mysqlGetProductBatches(itemId?: string, itemType?: 'product' | 'raw_material'): Promise<ProductBatch[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   let sql = `
     SELECT b.*, 
@@ -83,8 +82,7 @@ export async function mysqlGetProductBatches(itemId?: string, itemType?: 'produc
 
 export async function mysqlCreateProductBatch(data: Omit<ProductBatch, 'id' | 'companyId' | 'createdAt' | 'updatedAt' | 'status'> & { status?: BatchStatus }): Promise<ProductBatch> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const id = `bat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const initialQty = Number(data.initialQuantity) || 0;
@@ -162,8 +160,7 @@ export async function mysqlCreateProductBatch(data: Omit<ProductBatch, 'id' | 'c
 
 export async function mysqlUpdateProductBatch(id: string, updates: Partial<ProductBatch>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const clauses: string[] = [];
   const params: any[] = [];
@@ -213,8 +210,7 @@ export async function mysqlUpdateProductBatch(id: string, updates: Partial<Produ
 
 export async function mysqlDeleteProductBatch(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const [bRows] = await pool.query<RowDataPacket[]>('SELECT item_id, item_type FROM product_batches WHERE id = ? AND company_id = ?', [id, company.id]);
 
@@ -245,8 +241,7 @@ export async function mysqlDeleteProductBatch(id: string): Promise<boolean> {
 
 export async function mysqlGetBatchTransactions(batchId?: string): Promise<BatchTransaction[]> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   let sql = `
     SELECT bt.*, pb.batch_number, pb.item_id,
@@ -296,12 +291,8 @@ export async function mysqlAllocateFefo(
   companyIdParam?: string
 ): Promise<BatchAllocationResult> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const nowStr = new Date().toISOString().split('T')[0];
   const in30Days = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
@@ -361,12 +352,8 @@ export async function mysqlDeductBatchAllocation(
   companyIdParam?: string
 ): Promise<void> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   for (const a of allocations) {
     const [bRows] = await pool.query<RowDataPacket[]>(
@@ -411,7 +398,7 @@ export async function mysqlSyncItemBatchStock(
   companyId: string,
   conn?: any
 ): Promise<void> {
-  const db = conn || getMysqlPool();
+  const db = conn || (companyId ? (await resolveCompanyPoolAndContext(companyId)).pool : getMysqlPool());
   const safeStock = Math.max(0, Number(newStock) || 0);
 
   // Find batches for this item

@@ -1,4 +1,5 @@
 import { getMysqlPool, isLocalMySqlMode } from './mysql';
+import { resolveCompanyPoolAndContext } from './mysql-company';
 import { RowDataPacket } from 'mysql2';
 import {
   StoredShortcutConfig,
@@ -66,7 +67,7 @@ export async function getCompanyShortcuts(
   }
 
   try {
-    const pool = getMysqlPool();
+    const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [rows] = await pool.query<RowDataPacket[]>(
       'SELECT shortcuts_config FROM company_settings WHERE company_id = ? LIMIT 1',
       [companyId]
@@ -101,7 +102,7 @@ export async function saveCompanyShortcuts(
 ): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   const configJson = JSON.stringify(config);
   const settingsId = `cs_${companyId}`;
 
@@ -121,7 +122,7 @@ export async function saveCompanyShortcuts(
 export async function resetCompanyShortcuts(companyId: string): Promise<boolean> {
   if (!isLocalMySqlMode() || !companyId) return false;
 
-  const pool = getMysqlPool();
+  const { pool } = await resolveCompanyPoolAndContext(companyId);
   await pool.query(
     'UPDATE company_settings SET shortcuts_config = NULL, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?',
     [companyId]

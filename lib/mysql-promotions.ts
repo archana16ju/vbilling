@@ -1,6 +1,6 @@
 import { getMysqlPool } from './mysql';
 import { ensureLocalMySqlInitialized } from './mysql-init';
-import { getAuthorizedCompanyContext } from './mysql-company';
+import { getAuthorizedCompanyPool, resolveCompanyPoolAndContext } from './mysql-company';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { Promotion, PromotionUsage, PromotionValidationResult, PromotionType, PromotionScope } from '@/types/promotions';
 
@@ -61,19 +61,8 @@ function mapRowToPromotion(row: any): Promotion {
 
 export async function mysqlGetPromotions(companyIdParam?: string): Promise<Promotion[]> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    try {
-      const company = await getAuthorizedCompanyContext();
-      companyId = company.id;
-    } catch {
-      // Fallback to active company if context resolution fails
-      const pool = getMysqlPool();
-      const [comps]: any = await pool.query("SELECT id FROM companies WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1");
-      companyId = comps[0]?.id || 'COMP-0001';
-    }
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM promotions WHERE company_id = ? ORDER BY is_active DESC, created_at DESC',
@@ -85,8 +74,7 @@ export async function mysqlGetPromotions(companyIdParam?: string): Promise<Promo
 
 export async function mysqlCreatePromotion(data: Omit<Promotion, 'id' | 'companyId' | 'totalUsedCount' | 'createdAt' | 'updatedAt'>): Promise<Promotion> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const id = `promo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const code = data.code.trim().toUpperCase();
@@ -140,8 +128,7 @@ export async function mysqlCreatePromotion(data: Omit<Promotion, 'id' | 'company
 
 export async function mysqlUpdatePromotion(id: string, updates: Partial<Promotion>): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   const clauses: string[] = [];
   const params: any[] = [];
@@ -182,8 +169,7 @@ export async function mysqlUpdatePromotion(id: string, updates: Partial<Promotio
 
 export async function mysqlDeletePromotion(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
-  const company = await getAuthorizedCompanyContext();
-  const pool = getMysqlPool();
+  const { pool, company } = await getAuthorizedCompanyPool();
 
   await pool.query('DELETE FROM promotion_usages WHERE promotion_id = ? AND company_id = ?', [id, company.id]);
   const [res] = await pool.query<ResultSetHeader>('DELETE FROM promotions WHERE id = ? AND company_id = ?', [id, company.id]);
@@ -201,12 +187,8 @@ export async function mysqlValidatePromotion(
   companyIdParam?: string
 ): Promise<PromotionValidationResult> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM promotions WHERE company_id = ? AND code = ? AND is_active = 1 LIMIT 1',
@@ -416,12 +398,8 @@ export async function mysqlRecordPromotionUsage(
   companyIdParam?: string
 ): Promise<void> {
   await ensureLocalMySqlInitialized();
-  let companyId = companyIdParam;
-  if (!companyId) {
-    const comp = await getAuthorizedCompanyContext();
-    companyId = comp.id;
-  }
-  const pool = getMysqlPool();
+  const { pool, company } = await resolveCompanyPoolAndContext(companyIdParam);
+  const companyId = company.id;
 
   const id = `pu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 

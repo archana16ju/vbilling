@@ -1,4 +1,5 @@
 import { getMysqlPool, isLocalMySqlMode } from './mysql';
+import { resolveCompanyPoolAndContext } from './mysql-company';
 import { ensureLocalMySqlInitialized } from './mysql-init';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { getSession } from './auth-session';
@@ -316,7 +317,13 @@ export async function getCompanyPermissions(companyId: string): Promise<CompanyP
 
   await ensureLocalMySqlInitialized();
 
-  const pool = getMysqlPool();
+  let pool = getMysqlPool();
+  try {
+    const resolved = await resolveCompanyPoolAndContext(companyId);
+    pool = resolved.pool;
+  } catch (err) {
+    // fallback to legacy pool
+  }
   const [rows] = await pool.query<RowDataPacket[]>(
     'SELECT * FROM company_permissions WHERE company_id = ?',
     [companyId]
@@ -357,7 +364,13 @@ export async function updateCompanyPermissions(
   if (!isLocalMySqlMode()) return false;
   await ensureLocalMySqlInitialized();
 
-  const pool = getMysqlPool();
+  let pool = getMysqlPool();
+  try {
+    const resolved = await resolveCompanyPoolAndContext(companyId);
+    pool = resolved.pool;
+  } catch (err) {
+    // fallback to legacy pool
+  }
   const id = `cp_${companyId}`;
 
   const current = await getCompanyPermissions(companyId);
@@ -544,7 +557,13 @@ export async function assertCompanyModuleEnabled(companyId: string, moduleName: 
   if (session.role === 'company_admin') {
     if (session.companyId && session.companyId !== companyId) {
       if (isLocalMySqlMode()) {
-        const pool = getMysqlPool();
+        let pool = getMysqlPool();
+        try {
+          const resolved = await resolveCompanyPoolAndContext(companyId, session);
+          pool = resolved.pool;
+        } catch (err) {
+          // fallback
+        }
         const [rows]: any = await pool.query(
           "SELECT id FROM user_companies WHERE user_id = ? AND company_id = ? UNION SELECT id FROM users WHERE id = ? AND company_id = ?",
           [session.userId, companyId, session.userId, companyId]

@@ -1,13 +1,16 @@
 import { cookies } from "next/headers";
-import { getMysqlPool, withMySqlTransaction, isLocalMySqlMode } from "./mysql";
+import mysql from "mysql2/promise";
+import { getMysqlPool, withMySqlTransaction, isLocalMySqlMode, getMasterPool, getCompanyPool } from "./mysql";
 import { ensureLocalMySqlInitialized } from "./mysql-init";
+import { ensureMasterDbInitialized } from "./mysql-master";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
-import { getSession } from "./auth-session";
+import { getSession, SessionData } from "./auth-session";
 
 export interface Company {
   id: string;
   name: string;
   code: string;
+  databaseName?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -37,6 +40,7 @@ function mapRowToCompany(row: any): Company {
     id: row.id,
     name: row.name,
     code: row.code,
+    databaseName: row.database_name || row.databaseName || undefined,
     address: row.address || undefined,
     phone: row.phone || undefined,
     email: row.email || undefined,
@@ -63,36 +67,17 @@ export function clearCompanyContextCache(targetId?: string) {
 }
 
 /**
- * Server-side authorization check:
- * Resolves and validates the active company for the logged-in user.
- * NEVER trusts an unverified company ID from the client!
+ * Legacy resolution fallback against 'local_billing_db' for unmigrated companies.
  */
-export async function getAuthorizedCompanyContext(): Promise<Company> {
-  if (!isLocalMySqlMode()) {
-    throw new Error("getAuthorizedCompanyContext is strictly available in local MySQL mode.");
-  }
-
-  const cookieStore = await cookies();
-  const session = await getSession();
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const requestedCompanyId = cookieStore.get("auth_company_id")?.value;
-
-  if (!authRole) {
-    throw new Error("Unauthorized: User is not authenticated.");
-  }
-
-  const cacheKey = `${authRole}:${authId || 'no_id'}:${requestedCompanyId || 'default'}`;
-  const cached = companyContextCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.company;
-  }
-
+async function getLegacyAuthorizedCompanyContext(
+  authRole: string,
+  authId: string | undefined,
+  requestedCompanyId: string | undefined,
+  cacheKey: string
+): Promise<Company> {
   await ensureLocalMySqlInitialized();
   const pool = getMysqlPool();
 
-  // 1. SUPER_ADMIN USER: Can view any company context
   if (authRole === "super_admin") {
     if (requestedCompanyId) {
       const [rows] = await pool.query<RowDataPacket[]>(
@@ -112,64 +97,32 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
 
     if (allActive && allActive.length > 0) {
       const defaultCompany = mapRowToCompany(allActive[0]);
-      try {
-        cookieStore.set("auth_company_id", defaultCompany.id, { path: "/" });
-      } catch {}
       companyContextCache.set(cacheKey, { company: defaultCompany, expiresAt: Date.now() + 5000 });
       return defaultCompany;
     }
 
-    throw new Error("No active companies found. Please create a company.");
+    throw new Error("No active companies found in legacy database.");
   }
 
-  // 2. COMPANY_ADMIN USER: Strictly isolated to their assigned company
-  if (authRole === "company_admin") {
-    if (!authId) {
-      throw new Error("Unauthorized: Active user session ID is missing.");
-    }
-
-    // First check user's direct company_id
-    const [userRows] = await pool.query<RowDataPacket[]>(
-      `SELECT c.* FROM companies c
-       INNER JOIN users u ON u.company_id = c.id
-       WHERE u.id = ? AND c.is_active = 1`,
-      [authId]
-    );
-
-    if (userRows && userRows.length > 0) {
-      const assignedComp = mapRowToCompany(userRows[0]);
-      try {
-        cookieStore.set("auth_company_id", assignedComp.id, { path: "/" });
-      } catch {}
-      companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
-      return assignedComp;
-    }
-
-    // Fallback check user_companies
-    const [assignedRows] = await pool.query<RowDataPacket[]>(
-      `SELECT c.* FROM companies c
-       INNER JOIN user_companies uc ON c.id = uc.company_id
-       WHERE uc.user_id = ? AND c.is_active = 1`,
-      [authId]
-    );
-
-    if (assignedRows && assignedRows.length > 0) {
-      const assignedComp = mapRowToCompany(assignedRows[0]);
-      try {
-        cookieStore.set("auth_company_id", assignedComp.id, { path: "/" });
-      } catch {}
-      companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
-      return assignedComp;
-    }
-
-    throw new Error(`Unauthorized: Company Admin '${authId}' is not assigned to any active company.`);
-  }
-
-  // 3. CASHIER USER: Strictly isolated to their assigned company
   if (!authId) {
     throw new Error("Unauthorized: Active user session ID is missing.");
   }
 
+  // Check direct company_id in users
+  const [userRows] = await pool.query<RowDataPacket[]>(
+    `SELECT c.* FROM companies c
+     INNER JOIN users u ON u.company_id = c.id
+     WHERE u.id = ? AND c.is_active = 1`,
+    [authId]
+  );
+
+  if (userRows && userRows.length > 0) {
+    const assignedComp = mapRowToCompany(userRows[0]);
+    companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
+    return assignedComp;
+  }
+
+  // Fallback check user_companies
   const [assignedRows] = await pool.query<RowDataPacket[]>(
     `SELECT c.* FROM companies c
      INNER JOIN user_companies uc ON c.id = uc.company_id
@@ -177,58 +130,299 @@ export async function getAuthorizedCompanyContext(): Promise<Company> {
     [authId]
   );
 
-  if (!assignedRows || assignedRows.length === 0) {
-    throw new Error(`Unauthorized: User '${authId}' is not assigned to any active company.`);
+  if (assignedRows && assignedRows.length > 0) {
+    const assignedComp = mapRowToCompany(assignedRows[0]);
+    companyContextCache.set(cacheKey, { company: assignedComp, expiresAt: Date.now() + 5000 });
+    return assignedComp;
   }
 
-  if (requestedCompanyId) {
-    const matched = assignedRows.find((r) => r.id === requestedCompanyId);
-    if (matched) {
-      const comp = mapRowToCompany(matched);
-      companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
-      return comp;
-    }
+  throw new Error(`Unauthorized: User '${authId}' is not assigned to any active company.`);
+}
+
+/**
+ * Server-side authorization check:
+ * Resolves and validates the active company for the logged-in user.
+ * NEVER trusts an unverified company ID or database name from the client!
+ * Non-super-admin users are strictly isolated to their assigned company database.
+ */
+export async function getAuthorizedCompanyContext(explicitSession?: SessionData): Promise<Company> {
+  if (!isLocalMySqlMode()) {
+    throw new Error("getAuthorizedCompanyContext is strictly available in local MySQL mode.");
   }
 
-  const authorizedCompany = mapRowToCompany(assignedRows[0]);
+  let cookieStore: any = null;
+  let cookieAuthCompanyId: string | undefined;
+  let cookieRole: string | undefined;
+  let cookieAuthId: string | undefined;
+
   try {
-    cookieStore.set("auth_company_id", authorizedCompany.id, { path: "/" });
-  } catch {}
+    cookieStore = await cookies();
+    cookieAuthCompanyId = cookieStore.get("auth_company_id")?.value;
+    cookieRole = cookieStore.get("auth_role")?.value;
+    cookieAuthId = cookieStore.get("auth_id")?.value;
+  } catch {
+    // Outside Next.js request context (e.g. background tasks or unit tests)
+  }
 
-  companyContextCache.set(cacheKey, { company: authorizedCompany, expiresAt: Date.now() + 5000 });
-  return authorizedCompany;
+  const session = explicitSession || (await getSession());
+  const authId = session?.userId || cookieAuthId;
+  const rawRole = session?.role || cookieRole;
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
+
+  if (!authRole) {
+    throw new Error("Unauthorized: User is not authenticated.");
+  }
+
+  const cacheKey = `${authRole}:${authId || "no_id"}:${cookieAuthCompanyId || "none"}:${session?.companyId || "none"}`;
+  const cached = companyContextCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.company;
+  }
+
+  await ensureMasterDbInitialized();
+  const masterPool = getMasterPool();
+
+  // 1. SUPER_ADMIN USER: Can view/switch any active company context
+  if (authRole === "super_admin") {
+    const targetId = cookieAuthCompanyId || session?.companyId;
+
+    if (targetId) {
+      const [mRows] = await masterPool.query<RowDataPacket[]>(
+        "SELECT * FROM master_companies WHERE id = ? AND is_active = 1",
+        [targetId]
+      );
+      if (mRows && mRows.length > 0) {
+        const comp = mapRowToCompany(mRows[0]);
+        companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
+        return comp;
+      }
+    }
+
+    // Default to first active company in master_companies
+    const [allActive] = await masterPool.query<RowDataPacket[]>(
+      "SELECT * FROM master_companies WHERE is_active = 1 ORDER BY created_at ASC LIMIT 1"
+    );
+
+    if (allActive && allActive.length > 0) {
+      const defaultCompany = mapRowToCompany(allActive[0]);
+      if (cookieStore) {
+        try {
+          cookieStore.set("auth_company_id", defaultCompany.id, { path: "/" });
+        } catch {}
+      }
+      companyContextCache.set(cacheKey, { company: defaultCompany, expiresAt: Date.now() + 5000 });
+      return defaultCompany;
+    }
+
+    // Fallback to legacy local_billing_db
+    return await getLegacyAuthorizedCompanyContext(authRole, authId, targetId, cacheKey);
+  }
+
+  // 2. TENANT ROLES (company_admin, cashier, manager, chef, waiter, delivery_staff):
+  // Non-super-admin users are strictly locked to their session-authenticated companyId.
+  const assignedCompanyId = session?.companyId;
+
+  if (!assignedCompanyId) {
+    // If not in session, attempt lookup in user_company_routing
+    if (authId) {
+      const [rRows] = await masterPool.query<RowDataPacket[]>(
+        "SELECT company_id FROM user_company_routing WHERE (user_id = ? OR username = ?) AND is_active = 1 LIMIT 1",
+        [authId, session?.username || ""]
+      );
+      if (rRows && rRows.length > 0) {
+        const targetId = rRows[0].company_id;
+        const [mRows] = await masterPool.query<RowDataPacket[]>(
+          "SELECT * FROM master_companies WHERE id = ? LIMIT 1",
+          [targetId]
+        );
+        if (mRows && mRows.length > 0) {
+          if (mRows[0].is_active === 0 || mRows[0].status === "inactive") {
+            throw new Error(`Unauthorized: Company '${mRows[0].name || targetId}' is inactive.`);
+          }
+          const comp = mapRowToCompany(mRows[0]);
+          companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
+          return comp;
+        }
+      }
+    }
+
+    // Fallback to legacy local_billing_db
+    return await getLegacyAuthorizedCompanyContext(authRole, authId, cookieAuthCompanyId, cacheKey);
+  }
+
+  // CRITICAL SECURITY ENFORCEMENT:
+  // If client-supplied auth_company_id cookie does not match the session's assigned companyId,
+  // this is an unauthorized cross-company access attempt! Reject immediately!
+  if (cookieAuthCompanyId && cookieAuthCompanyId !== assignedCompanyId) {
+    throw new Error(
+      `Unauthorized: Cross-company access is strictly forbidden. User '${session?.username || authId}' belonging to company '${assignedCompanyId}' cannot access company '${cookieAuthCompanyId}'.`
+    );
+  }
+
+  // Look up company in master_companies
+  const [masterRows] = await masterPool.query<RowDataPacket[]>(
+    "SELECT * FROM master_companies WHERE id = ? LIMIT 1",
+    [assignedCompanyId]
+  );
+
+  if (masterRows && masterRows.length > 0) {
+    const row = masterRows[0];
+    if (row.is_active === 0 || row.status === "inactive") {
+      throw new Error(`Unauthorized: Company '${row.name || assignedCompanyId}' is currently inactive.`);
+    }
+    const comp = mapRowToCompany(row);
+    companyContextCache.set(cacheKey, { company: comp, expiresAt: Date.now() + 5000 });
+    return comp;
+  }
+
+  // Fallback to legacy local_billing_db for unmigrated companies
+  return await getLegacyAuthorizedCompanyContext(authRole, authId, cookieAuthCompanyId, cacheKey);
+}
+
+/**
+ * Retrieves the authorized MySQL connection pool and company context for the current request.
+ * Resolves the company database securely from the server session and master database.
+ * Strictly prevents cross-company access and rejects inactive companies.
+ */
+export async function getAuthorizedCompanyPool(
+  explicitSession?: SessionData
+): Promise<{ pool: mysql.Pool; company: Company }> {
+  const company = await getAuthorizedCompanyContext(explicitSession);
+  if (company.databaseName) {
+    const pool = getCompanyPool(company.databaseName);
+    return { pool, company };
+  }
+  // Fallback to legacy single database pool if databaseName is not defined
+  return { pool: getMysqlPool(), company };
+}
+
+/**
+ * Resolves the connection pool and company record for a given company ID or current session context.
+ * If companyId is specified, looks up in master_companies, falling back to legacy companies.
+ * If companyId is not specified, uses getAuthorizedCompanyPool().
+ */
+export async function resolveCompanyPoolAndContext(
+  explicitCompanyId?: string,
+  explicitSession?: SessionData
+): Promise<{ pool: mysql.Pool; company: Company }> {
+  if (!explicitCompanyId) {
+    return await getAuthorizedCompanyPool(explicitSession);
+  }
+
+  await ensureMasterDbInitialized();
+  const masterPool = getMasterPool();
+
+  // Try master_companies
+  const [rows] = await masterPool.query<RowDataPacket[]>(
+    'SELECT * FROM master_companies WHERE (id = ? OR code = ?) AND is_active = 1 LIMIT 1',
+    [explicitCompanyId, explicitCompanyId.toUpperCase()]
+  );
+
+  if (rows && rows.length > 0) {
+    const company = mapRowToCompany(rows[0]);
+    const pool = company.databaseName ? getCompanyPool(company.databaseName) : getMysqlPool();
+    return { pool, company };
+  }
+
+  // Fallback to legacy local_billing_db
+  await ensureLocalMySqlInitialized();
+  const legacyPool = getMysqlPool();
+  const [legacyRows] = await legacyPool.query<RowDataPacket[]>(
+    'SELECT * FROM companies WHERE id = ? AND is_active = 1 LIMIT 1',
+    [explicitCompanyId]
+  );
+
+  if (legacyRows && legacyRows.length > 0) {
+    const company = mapRowToCompany(legacyRows[0]);
+    return { pool: legacyPool, company };
+  }
+
+  // If not found, fallback to authorized company context
+  return await getAuthorizedCompanyPool(explicitSession);
 }
 
 /**
  * Retrieves companies according to role:
- * Super Admin: receives all companies.
- * Company Admin / Cashier: receives ONLY their assigned company!
+ * Super Admin: receives all registered companies in master DB.
+ * Company Admin / Cashier / Staff: receives ONLY their assigned company!
  */
-export async function getAllCompanies(): Promise<Company[]> {
+export async function getAllCompanies(explicitSession?: SessionData): Promise<Company[]> {
   if (!isLocalMySqlMode()) return [];
-  await ensureLocalMySqlInitialized();
+  await ensureMasterDbInitialized();
+  const masterPool = getMasterPool();
 
-  const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
+  let session: SessionData | null = explicitSession || null;
+  let authRole: string | undefined = session?.role;
+  let authId: string | undefined = session?.userId;
 
-  const pool = getMysqlPool();
+  if (!session) {
+    try {
+      session = await getSession();
+      const cookieStore = await cookies();
+      const rawRole = session?.role || cookieStore.get("auth_role")?.value;
+      authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
+      authId = session?.userId || cookieStore.get("auth_id")?.value;
+    } catch {}
+  }
 
   if (authRole === "super_admin") {
-    const [rows] = await pool.query<RowDataPacket[]>(`
+    const [rows] = await masterPool.query<RowDataPacket[]>(`
+      SELECT mc.*,
+        (SELECT COUNT(*) FROM user_company_routing ucr WHERE ucr.company_id = mc.id AND ucr.is_active = 1) AS user_count
+      FROM master_companies mc
+      ORDER BY mc.name ASC
+    `);
+    if (rows && rows.length > 0) {
+      return rows.map(mapRowToCompany);
+    }
+
+    // Fallback to legacy
+    await ensureLocalMySqlInitialized();
+    const pool = getMysqlPool();
+    const [legacyRows] = await pool.query<RowDataPacket[]>(`
       SELECT c.*, COUNT(uc.id) AS user_count
       FROM companies c
       LEFT JOIN user_companies uc ON c.id = uc.company_id
       GROUP BY c.id
       ORDER BY c.name ASC
     `);
-    return rows.map(mapRowToCompany);
+    return legacyRows.map(mapRowToCompany);
   }
 
-  if (authRole === "company_admin") {
-    const [rows] = await pool.query<RowDataPacket[]>(`
+  if (authRole === "company_admin" || authRole === "cashier" || authRole === "manager") {
+    const userCompanyId = session?.companyId;
+    if (userCompanyId) {
+      const [rows] = await masterPool.query<RowDataPacket[]>(`
+        SELECT mc.*,
+          (SELECT COUNT(*) FROM user_company_routing ucr WHERE ucr.company_id = mc.id AND ucr.is_active = 1) AS user_count
+        FROM master_companies mc
+        WHERE mc.id = ? AND mc.is_active = 1
+        ORDER BY mc.name ASC
+      `, [userCompanyId]);
+      if (rows && rows.length > 0) {
+        return rows.map(mapRowToCompany);
+      }
+    }
+
+    if (authId) {
+      const [rows] = await masterPool.query<RowDataPacket[]>(`
+        SELECT mc.*,
+          (SELECT COUNT(*) FROM user_company_routing ucr WHERE ucr.company_id = mc.id AND ucr.is_active = 1) AS user_count
+        FROM master_companies mc
+        INNER JOIN user_company_routing ucr ON mc.id = ucr.company_id
+        WHERE ucr.user_id = ? AND mc.is_active = 1
+        GROUP BY mc.id
+        ORDER BY mc.name ASC
+      `, [authId]);
+      if (rows && rows.length > 0) {
+        return rows.map(mapRowToCompany);
+      }
+    }
+
+    // Fallback to legacy
+    await ensureLocalMySqlInitialized();
+    const pool = getMysqlPool();
+    const [legacyRows] = await pool.query<RowDataPacket[]>(`
       SELECT c.*, COUNT(uc.id) AS user_count
       FROM companies c
       LEFT JOIN user_companies uc ON c.id = uc.company_id
@@ -237,7 +431,7 @@ export async function getAllCompanies(): Promise<Company[]> {
       GROUP BY c.id
       ORDER BY c.name ASC
     `, [authId, authId]);
-    return rows.map(mapRowToCompany);
+    return legacyRows.map(mapRowToCompany);
   }
 
   return [];
@@ -259,9 +453,13 @@ export async function createCompany(data: {
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   if (authRole !== "super_admin") {
     throw new Error("Access denied: Only Super Admin privileges can create a company.");
@@ -277,9 +475,7 @@ export async function createCompany(data: {
   const pool = getMysqlPool();
 
   // Generate next sequential company ID in the format COMP-0001, COMP-0002, COMP-0003...
-  const [allCompanies] = await pool.query<RowDataPacket[]>(
-    "SELECT id FROM companies"
-  );
+  const [allCompanies] = await pool.query<RowDataPacket[]>("SELECT id FROM companies");
   let maxSeq = 0;
   for (const c of allCompanies) {
     const match = (c.id || "").match(/^COMP-(\d+)$/i);
@@ -327,11 +523,27 @@ export async function createCompany(data: {
       [`cp_${newId}`, newId]
     );
 
-    const [rows] = await conn.query<RowDataPacket[]>(
-      "SELECT * FROM companies WHERE id = ?",
-      [newId]
-    );
-    return mapRowToCompany(rows[0]);
+    const [rows] = await conn.query<RowDataPacket[]>("SELECT * FROM companies WHERE id = ?", [newId]);
+    const createdComp = mapRowToCompany(rows[0]);
+
+    // Also auto-provision in Master DB and create dedicated company database
+    try {
+      const { provisionCompanyDatabase } = await import("./company-provisioning");
+      await provisionCompanyDatabase({
+        companyId: newId,
+        companyCode: cleanCode,
+        companyName: cleanName,
+        address: data.address,
+        phone: data.phone,
+        email: data.email,
+        gstin: data.gstin,
+        currency: data.currency || "INR",
+      });
+    } catch (provErr) {
+      console.warn("Master DB provisioning warning on createCompany:", provErr);
+    }
+
+    return createdComp;
   });
 }
 
@@ -346,9 +558,13 @@ export async function updateCompany(
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   if (authRole !== "super_admin") {
     throw new Error("Access denied: Only Super Admin privileges can modify company details.");
@@ -374,6 +590,18 @@ export async function updateCompany(
     `UPDATE companies SET ${sets.join(", ")} WHERE id = ?`,
     params
   );
+
+  // Sync to Master DB if registered
+  try {
+    const masterPool = getMasterPool();
+    await masterPool.query<ResultSetHeader>(
+      `UPDATE master_companies SET ${sets.join(", ")} WHERE id = ?`,
+      params
+    );
+  } catch (mErr) {
+    // Non-fatal if company only exists in legacy DB
+  }
+
   return result.affectedRows > 0;
 }
 
@@ -385,9 +613,13 @@ export async function deleteCompany(id: string): Promise<boolean> {
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   if (authRole !== "super_admin") {
     throw new Error("Access denied: Only Super Admin privileges can delete a company.");
@@ -407,6 +639,11 @@ export async function deleteCompany(id: string): Promise<boolean> {
     await conn.query("DELETE FROM stock_transactions WHERE company_id = ?", [id]);
     await conn.query("DELETE FROM cash_register WHERE company_id = ?", [id]);
     const [result] = await conn.query<ResultSetHeader>("DELETE FROM companies WHERE id = ?", [id]);
+    try {
+      const masterPool = getMasterPool();
+      await masterPool.query("DELETE FROM user_company_routing WHERE company_id = ?", [id]);
+      await masterPool.query("DELETE FROM master_companies WHERE id = ?", [id]);
+    } catch {}
     return result.affectedRows > 0;
   });
 }
@@ -423,9 +660,13 @@ export async function assignUserToCompany(
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   if (authRole !== "super_admin") {
     throw new Error("Access denied: Super Admin privileges required to assign users to companies.");
@@ -455,14 +696,30 @@ export async function assignUserToCompany(
     await pool.query("UPDATE users SET company_id = ? WHERE id = ?", [companyId, userId]);
   }
 
+  // Also sync to Master DB routing
+  try {
+    const masterPool = getMasterPool();
+    const [mcRows] = await masterPool.query<RowDataPacket[]>(
+      "SELECT id, database_name FROM master_companies WHERE id = ?",
+      [companyId]
+    );
+    if (mcRows && mcRows.length > 0) {
+      const dbName = mcRows[0].database_name;
+      const username = (uRows[0] as any).username || (uRows[0] as any).name || userId;
+      await masterPool.query(
+        `INSERT INTO user_company_routing (id, user_id, username, company_id, database_name, role, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE database_name = VALUES(database_name), role = VALUES(role)`,
+        [`ucr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, userId, username, companyId, dbName, role]
+      );
+    }
+  } catch {}
+
   return true;
 }
 
 /**
  * Creates a cashier user account directly for a specific company
- * Allowed for:
- * 1. Super Admin
- * 2. Company Admin assigned to this company
  */
 export async function createCompanyCashier(data: {
   companyId: string;
@@ -473,10 +730,15 @@ export async function createCompanyCashier(data: {
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  let authId = session?.userId;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+    if (!authId) authId = cookieStore.get("auth_id")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   if (authRole !== "super_admin") {
     const pool = getMysqlPool();
@@ -520,7 +782,7 @@ export async function createCompanyCashier(data: {
   const userId = `u_cashier_${Date.now()}`;
   const ucId = `uc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-  return await withMySqlTransaction(async (conn) => {
+  const createdCashier = await withMySqlTransaction(async (conn) => {
     await conn.query(
       `INSERT INTO users (id, name, username, email, password, role, company_id, company_name, is_active)
        VALUES (?, ?, ?, ?, ?, 'cashier', ?, ?, 1)`,
@@ -535,6 +797,31 @@ export async function createCompanyCashier(data: {
 
     return { id: userId, username: cleanUsername };
   });
+
+  // Sync to tenant DB and Master DB routing if registered in master
+  try {
+    const { pool: tenantPool, company: compCtx } = await resolveCompanyPoolAndContext(data.companyId);
+    if (compCtx.databaseName) {
+      const { hashPassword } = await import("./users");
+      const hashed = hashPassword(cleanPassword);
+      await tenantPool.query(
+        `INSERT INTO users (id, name, username, email, password, password_hash, role, company_id, company_name, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, 'cashier', ?, ?, 1)
+         ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)`,
+        [userId, cleanUsername, cleanUsername, `${cleanUsername}@local.test`, hashed, hashed, data.companyId, compCtx.name]
+      );
+
+      const masterPool = getMasterPool();
+      await masterPool.query(
+        `INSERT INTO user_company_routing (id, user_id, username, company_id, database_name, role, is_active)
+         VALUES (?, ?, ?, ?, ?, 'cashier', 1)
+         ON DUPLICATE KEY UPDATE database_name = VALUES(database_name), role = VALUES(role)`,
+        [`ucr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, userId, cleanUsername, data.companyId, compCtx.databaseName]
+      );
+    }
+  } catch {}
+
+  return createdCashier;
 }
 
 /**
@@ -545,10 +832,15 @@ export async function removeUserFromCompany(userId: string, companyId: string): 
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  let authId = session?.userId;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+    if (!authId) authId = cookieStore.get("auth_id")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
   const pool = getMysqlPool();
 
@@ -563,9 +855,8 @@ export async function removeUserFromCompany(userId: string, companyId: string): 
       throw new Error("Access denied: You can only remove users from your assigned company.");
     }
 
-    // Company Admin cannot remove another admin or super_admin
     const [targetUser] = await pool.query<RowDataPacket[]>("SELECT role FROM users WHERE id = ?", [userId]);
-    const allowedStaffRoles = ['cashier', 'manager', 'chef', 'waiter'];
+    const allowedStaffRoles = ["cashier", "manager", "chef", "waiter"];
     if (targetUser && !allowedStaffRoles.includes(targetUser[0]?.role)) {
       throw new Error("Access denied: Company Admins cannot remove Administrator accounts.");
     }
@@ -584,6 +875,13 @@ export async function removeUserFromCompany(userId: string, companyId: string): 
     await pool.query("DELETE FROM users WHERE id = ? AND role = 'cashier'", [userId]);
   }
 
+  try {
+    const masterPool = getMasterPool();
+    await masterPool.query("DELETE FROM user_company_routing WHERE user_id = ? AND company_id = ?", [userId, companyId]);
+    const { pool: tenantPool } = await resolveCompanyPoolAndContext(companyId);
+    await tenantPool.query("UPDATE users SET is_active = 0 WHERE id = ?", [userId]);
+  } catch {}
+
   return result.affectedRows > 0;
 }
 
@@ -595,12 +893,16 @@ export async function getCompanyUsers(companyId: string): Promise<UserCompanyAss
   await ensureLocalMySqlInitialized();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  let authId = session?.userId;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+    if (!authId) authId = cookieStore.get("auth_id")?.value;
+  } catch {}
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
 
-  // Company Admins can only view users for their own assigned company
   if (authRole === "company_admin") {
     const pool = getMysqlPool();
     const [assigned] = await pool.query<RowDataPacket[]>(
@@ -610,8 +912,60 @@ export async function getCompanyUsers(companyId: string): Promise<UserCompanyAss
       [companyId, authId, companyId, companyId]
     );
     if (!assigned || assigned.length === 0) {
-      throw new Error("Access denied: You are not authorized to view users for this company.");
+      // Also check master routing
+      try {
+        const masterPool = getMasterPool();
+        const [mAssigned] = await masterPool.query<RowDataPacket[]>(
+          "SELECT id FROM user_company_routing WHERE user_id = ? AND company_id = ? AND is_active = 1",
+          [authId, companyId]
+        );
+        if (!mAssigned || mAssigned.length === 0) {
+          throw new Error("Access denied: You are not authorized to view users for this company.");
+        }
+      } catch (checkErr: any) {
+        if (checkErr.message.includes("Access denied")) throw checkErr;
+      }
     }
+  }
+
+  // Check master DB routing first
+  try {
+    const masterPool = getMasterPool();
+    const [mcRows] = await masterPool.query<RowDataPacket[]>(
+      "SELECT id, name FROM master_companies WHERE id = ?",
+      [companyId]
+    );
+    if (mcRows && mcRows.length > 0) {
+      let masterQuery = `
+        SELECT ucr.id, ucr.user_id, ucr.company_id, ucr.role, ucr.created_at,
+               ucr.username as user_name, ucr.username as user_username, ucr.role as global_role,
+               mc.name as company_name, mc.code as company_code
+        FROM user_company_routing ucr
+        INNER JOIN master_companies mc ON ucr.company_id = mc.id
+        WHERE ucr.company_id = ? AND ucr.is_active = 1
+      `;
+      const masterParams: any[] = [companyId];
+      if (authRole === "company_admin") {
+        masterQuery += " AND ucr.role = 'cashier'";
+      }
+      masterQuery += " ORDER BY ucr.username ASC";
+      const [mRows] = await masterPool.query<RowDataPacket[]>(masterQuery, masterParams);
+      if (mRows && mRows.length > 0) {
+        return mRows.map((r) => ({
+          id: r.id,
+          userId: r.user_id,
+          userName: r.user_name || r.user_username,
+          userEmail: `${r.user_name}@local.test`,
+          userRole: r.global_role === "admin" ? "company_admin" : r.global_role,
+          companyId: r.company_id,
+          companyName: r.company_name,
+          role: r.role,
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        }));
+      }
+    }
+  } catch (mErr) {
+    // fallback to legacy
   }
 
   const pool = getMysqlPool();
@@ -626,7 +980,6 @@ export async function getCompanyUsers(companyId: string): Promise<UserCompanyAss
   `;
   const params: any[] = [companyId];
 
-  // Company Admin can view only cashiers of their company
   if (authRole === "company_admin") {
     query += " AND uc.role = 'cashier'";
   }
@@ -674,56 +1027,91 @@ export async function getUserAssignedCompanies(userId: string): Promise<Company[
  * Super Admins can switch to any active company.
  * Company Admins and Cashiers can ONLY switch to their assigned company!
  */
-export async function switchActiveCompany(companyId: string): Promise<{ success: boolean; company?: Company; error?: string }> {
+export async function switchActiveCompany(
+  companyId: string
+): Promise<{ success: boolean; company?: Company; error?: string }> {
   if (!isLocalMySqlMode()) return { success: false, error: "MySQL mode not active" };
-  await ensureLocalMySqlInitialized();
+  await ensureMasterDbInitialized();
+  const masterPool = getMasterPool();
 
   const session = await getSession();
-  const cookieStore = await cookies();
-  const rawRole = session?.role || cookieStore.get("auth_role")?.value;
-  const authRole = rawRole === "admin" ? "company_admin" : rawRole;
-  const authId = session?.userId || cookieStore.get("auth_id")?.value;
+  let cookieStore: any = null;
+  let rawRole = session?.role;
+  let authId = session?.userId;
+  try {
+    cookieStore = await cookies();
+    if (!rawRole) rawRole = cookieStore.get("auth_role")?.value;
+    if (!authId) authId = cookieStore.get("auth_id")?.value;
+  } catch {}
 
-  const pool = getMysqlPool();
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM companies WHERE id = ? AND is_active = 1",
+  const authRole = (rawRole as string) === "admin" ? "company_admin" : rawRole;
+
+  // 1. Try master_companies
+  const [rows] = await masterPool.query<RowDataPacket[]>(
+    "SELECT * FROM master_companies WHERE id = ? AND is_active = 1",
     [companyId]
   );
 
-  if (!rows || rows.length === 0) {
-    return { success: false, error: "Company not found or inactive." };
-  }
-
-  // Authorization enforcement: non-super_admin must be assigned to the company
-  if (authRole !== "super_admin") {
-    const [assigned] = await pool.query<RowDataPacket[]>(
-      `SELECT u.id FROM users u
-       LEFT JOIN user_companies uc ON u.id = uc.user_id AND uc.company_id = ?
-       WHERE u.id = ? AND (u.company_id = ? OR uc.company_id = ?)`,
-      [companyId, authId, companyId, companyId]
-    );
-    if (!assigned || assigned.length === 0) {
-      return { success: false, error: "Unauthorized: You are not authorized to switch to this company." };
+  let selected: Company | null = null;
+  if (rows && rows.length > 0) {
+    // If non-super_admin, verify user has authorization to access this company
+    if (authRole !== "super_admin") {
+      if (session?.companyId && session.companyId !== companyId) {
+        return { success: false, error: "Unauthorized: You are not authorized to switch to another company." };
+      }
+      const [assigned] = await masterPool.query<RowDataPacket[]>(
+        "SELECT id FROM user_company_routing WHERE company_id = ? AND (user_id = ? OR username = ?) AND is_active = 1",
+        [companyId, authId, session?.username || ""]
+      );
+      if (!assigned || assigned.length === 0) {
+        return { success: false, error: "Unauthorized: You are not authorized to switch to this company." };
+      }
     }
+    selected = mapRowToCompany(rows[0]);
+  } else {
+    // Fallback to legacy
+    await ensureLocalMySqlInitialized();
+    const pool = getMysqlPool();
+    const [legacyRows] = await pool.query<RowDataPacket[]>(
+      "SELECT * FROM companies WHERE id = ? AND is_active = 1",
+      [companyId]
+    );
+    if (!legacyRows || legacyRows.length === 0) {
+      return { success: false, error: "Company not found or inactive." };
+    }
+    if (authRole !== "super_admin") {
+      const [assigned] = await pool.query<RowDataPacket[]>(
+        `SELECT u.id FROM users u
+         LEFT JOIN user_companies uc ON u.id = uc.company_id
+         WHERE u.id = ? AND (u.company_id = ? OR uc.company_id = ?)`,
+        [companyId, authId, companyId, companyId]
+      );
+      if (!assigned || assigned.length === 0) {
+        return { success: false, error: "Unauthorized: You are not authorized to switch to this company." };
+      }
+    }
+    selected = mapRowToCompany(legacyRows[0]);
   }
-
-  const selected = mapRowToCompany(rows[0]);
 
   // Clear in-memory company context cache immediately
   clearCompanyContextCache();
 
   // Update session token so getSession() and /api/auth/me reflect the switched company
   try {
-    const { updateSessionCompany } = await import('./auth-session');
-    await updateSessionCompany(selected.id, selected.name);
+    const { updateSessionCompany } = await import("./auth-session");
+    await updateSessionCompany(selected.id, selected.name, selected.databaseName);
   } catch {}
 
-  cookieStore.set("auth_company_id", selected.id, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-    sameSite: "lax",
-    secure: false,
-  });
+  if (cookieStore) {
+    try {
+      cookieStore.set("auth_company_id", selected.id, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: "lax",
+        secure: false,
+      });
+    } catch {}
+  }
 
   return { success: true, company: selected };
 }

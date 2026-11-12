@@ -2,11 +2,20 @@
 
 import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyContext, getAuthorizedCompanyPool, resolveCompanyPoolAndContext, getAllCompanies } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { cookies } from 'next/headers';
 import { RowDataPacket } from 'mysql2';
+
+async function getSafeCookie(name: string): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    return cookieStore.get(name)?.value;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface ReportQueryParams {
   reportKey: string;
@@ -124,8 +133,8 @@ export async function getReportCompanyOptions(): Promise<ReportCompanyOption[]> 
       await ensureLocalMySqlInitialized();
       const pool = getMysqlPool();
       const session = await getSession();
-      const cookieStore = await cookies();
-      const rawRole = session?.role || cookieStore.get('auth_role')?.value;
+      const cookieRole = await getSafeCookie('auth_role');
+      const rawRole = session?.role || cookieRole;
       const authRole = rawRole === 'admin' ? 'company_admin' : rawRole;
 
       // If Company Admin, return ONLY their assigned company context
@@ -136,6 +145,13 @@ export async function getReportCompanyOptions(): Promise<ReportCompanyOption[]> 
 
       // If Super Admin, return all active companies
       if (authRole === 'super_admin') {
+        try {
+          const masterCompanies = await getAllCompanies();
+          if (masterCompanies && masterCompanies.length > 0) {
+            return masterCompanies.map((c) => ({ id: c.id, name: c.name, code: c.code }));
+          }
+        } catch {}
+
         const [rows] = await pool.query<RowDataPacket[]>(
           'SELECT id, name, code FROM companies WHERE is_active = 1 ORDER BY name ASC'
         );
@@ -177,8 +193,8 @@ export async function getReportData(params: ReportQueryParams): Promise<ReportRe
     await ensureLocalMySqlInitialized();
     const pool = getMysqlPool();
     const session = await getSession();
-    const cookieStore = await cookies();
-    const rawRole = session?.role || cookieStore.get('auth_role')?.value;
+    const cookieRole = await getSafeCookie('auth_role');
+    const rawRole = session?.role || cookieRole;
     const authRole = rawRole === 'admin' ? 'company_admin' : rawRole;
 
     if (authRole === 'cashier') {
@@ -188,14 +204,16 @@ export async function getReportData(params: ReportQueryParams): Promise<ReportRe
     let companyId = '';
     let companyName = 'All Companies';
     const isSuperAdmin = authRole === 'super_admin';
+    let activePool = pool;
 
     if (authRole === 'company_admin') {
-      const company = await getAuthorizedCompanyContext();
+      const { pool: cPool, company } = await getAuthorizedCompanyPool();
       companyId = company.id;
       companyName = company.name;
+      activePool = cPool;
 
       // Check company_permissions.module_reports
-      const [permRows] = await pool.query<RowDataPacket[]>(
+      const [permRows] = await activePool.query<RowDataPacket[]>(
         'SELECT module_reports FROM company_permissions WHERE company_id = ?',
         [company.id]
       );
@@ -204,19 +222,19 @@ export async function getReportData(params: ReportQueryParams): Promise<ReportRe
       }
     } else if (isSuperAdmin) {
       if (targetCompanyId && targetCompanyId !== 'all') {
-        const [compRows] = await pool.query<RowDataPacket[]>('SELECT id, name FROM companies WHERE id = ?', [targetCompanyId]);
-        if (compRows.length > 0) {
-          companyId = compRows[0].id;
-          companyName = compRows[0].name;
-        }
+        const { pool: cPool, company } = await resolveCompanyPoolAndContext(targetCompanyId);
+        companyId = company.id;
+        companyName = company.name;
+        activePool = cPool;
       }
     } else {
-      const company = await getAuthorizedCompanyContext();
+      const { pool: cPool, company } = await getAuthorizedCompanyPool();
       companyId = company.id;
       companyName = company.name;
+      activePool = cPool;
     }
 
-    const result = await executeMySqlReport(reportKey, companyId, companyName, dateRange, currencySymbol, pool);
+    const result = await executeMySqlReport(reportKey, companyId, companyName, dateRange, currencySymbol, activePool);
     result.isSuperAdmin = isSuperAdmin;
     return result;
   }
@@ -225,8 +243,8 @@ export async function getReportData(params: ReportQueryParams): Promise<ReportRe
   // Mode 2: Live MongoDB Mode
   // -------------------------------------------------------------
   const db = await getDb();
-  const cookieStore = await cookies();
-  const authCompanyId = targetCompanyId || cookieStore.get('auth_company_id')?.value || '';
+  const cookieCompanyId = await getSafeCookie('auth_company_id');
+  const authCompanyId = targetCompanyId || cookieCompanyId || '';
   const companyName = 'Store';
 
   return await executeMongoReport(reportKey, authCompanyId, companyName, dateRange, currencySymbol, db);
@@ -254,13 +272,12 @@ async function executeMySqlReport(
       const [salesRows] = await pool.query<RowDataPacket[]>(
         `SELECT s.id, s.bill_number, s.subtotal, s.discount, s.tax, s.round_off, s.total, 
                 s.payment_method, s.payment_status, s.order_type, s.order_source, s.created_by, s.created_at,
-                c.name as company_name
+                ? as company_name
          FROM sales s
-         LEFT JOIN companies c ON s.company_id = c.id
          WHERE ${compFilter} s.payment_status != 'cancelled' 
            AND s.created_at >= ? AND s.created_at <= ?
          ORDER BY s.created_at DESC`,
-        [...compParams, range.startSql, range.endSql]
+        [companyName || 'Company', ...compParams, range.startSql, range.endSql]
       );
 
       let grossSales = 0;
@@ -1768,12 +1785,11 @@ async function executeMySqlReport(
       try {
         const [rows] = await pool.query<RowDataPacket[]>(
           `SELECT a.id, a.company_id, a.branch_id, a.user_id, a.terminal_id, a.action, a.entity_type, a.entity_id, a.details, a.ip_address, a.created_at,
-                  c.name as company_name
+                  ? as company_name
            FROM audit_logs a
-           LEFT JOIN companies c ON a.company_id = c.id
            WHERE ${companyId ? 'a.company_id = ? AND' : ''} a.created_at >= ? AND a.created_at <= ?
            ORDER BY a.created_at DESC LIMIT 500`,
-          [...compParams, range.startSql, range.endSql]
+          [companyName || 'Company', ...compParams, range.startSql, range.endSql]
         );
         auditRows = rows;
       } catch {
@@ -1840,14 +1856,13 @@ async function executeMySqlReport(
            d.order_time, d.assigned_at, d.picked_up_at, d.delivered_at, d.created_at,
            s.total, s.subtotal, s.payment_method, s.payment_status,
            dp.name as delivery_person_name, dp.phone as delivery_person_phone, dp.employee_id as delivery_person_emp_id,
-           c.name as company_name
+           ? as company_name
          FROM deliveries d
          LEFT JOIN sales s ON d.company_id = s.company_id AND d.bill_id = s.bill_number
          LEFT JOIN delivery_persons dp ON d.delivery_person_id = dp.id
-         LEFT JOIN companies c ON d.company_id = c.id
          WHERE ${deliveryCompFilter} d.created_at >= ? AND d.created_at <= ?
          ORDER BY d.created_at DESC`,
-        [...deliveryCompParams, range.startSql, range.endSql]
+        [companyName || 'Company', ...deliveryCompParams, range.startSql, range.endSql]
       );
 
       let totalDeliveries = deliveryRows.length;

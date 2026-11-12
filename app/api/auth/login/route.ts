@@ -1,105 +1,61 @@
 import { NextResponse } from 'next/server';
-import { getUsers, UserRole, verifyPassword, hashPassword } from '@/lib/users';
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { createSession } from '@/lib/auth-session';
+import { authenticateUser } from '@/lib/auth-login';
 
 export async function POST(request: Request) {
   try {
-    const { username, password } = await request.json();
-    const users = await getUsers();
-    const cleanUser = (username || '').toLowerCase().trim();
-    const cleanPass = (password || '').trim();
+    const { username, password, companyCode } = await request.json();
 
-    const user = users.find(
-      (u) =>
-        u.username.toLowerCase() === cleanUser &&
-        (verifyPassword(cleanPass, u.password) ||
-         (u.username.toLowerCase() === 'admin' && (cleanPass === 'admin' || cleanPass === 'admin123' || cleanPass === 'password')) ||
-         (u.username.toLowerCase() === 'cashier' && (cleanPass === 'cashier' || cleanPass === 'cashier123')) ||
-         (u.username.toLowerCase() === 'waiter' && (cleanPass === 'waiter' || cleanPass === 'waiter123')))
-    );
-    
-    if (user) {
-      // Auto-upgrade legacy plaintext password to secure scrypt hash in Local MySQL
-      if (isLocalMySqlMode() && user.password && !user.password.startsWith('scrypt:')) {
-        try {
-          const pool = getMysqlPool();
-          const hashed = hashPassword(password);
-          await pool.query('UPDATE users SET password = ?, password_hash = ? WHERE id = ?', [
-            hashed,
-            hashed,
-            user.id,
-          ]);
-          user.password = hashed;
-        } catch {}
-      }
+    const authResult = await authenticateUser({
+      username,
+      password,
+      companyCode: companyCode || undefined,
+    });
 
-      const rawRole = user.role as string;
-      const role: UserRole = (rawRole === 'super_admin' || user.username.toLowerCase() === 'admin')
-        ? 'super_admin'
-        : (rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole));
-
-      let companyId: string | undefined = user.companyId;
-      let companyName: string | undefined = user.companyName;
-
-      if (isLocalMySqlMode()) {
-        try {
-          const { getUserAssignedCompanies, getAllCompanies } = await import('@/lib/mysql-company');
-          if (role === 'super_admin') {
-            const all = await getAllCompanies();
-            companyId = all[0]?.id;
-            companyName = all[0]?.name;
-          } else {
-            const assigned = await getUserAssignedCompanies(user.id);
-            if (assigned && assigned.length > 0) {
-              companyId = assigned[0].id;
-              companyName = assigned[0].name;
-            }
-          }
-        } catch (compErr) {
-          console.error('Error assigning company on login:', compErr);
-        }
-      }
-
-      // Establish secure, signed httpOnly session
-      await createSession({
-        userId: user.id,
-        username: user.username,
-        role,
-        companyId,
-        companyName,
-      });
-
-      const response = NextResponse.json({
-        success: true,
-        role,
-        username: user.username,
-        companyId,
-        redirectUrl:
-          role === 'super_admin'
-            ? '/super-admin'
-            : role === 'company_admin' || role === 'manager'
-            ? '/dashboard'
-            : role === 'chef'
-            ? '/kitchen'
-            : role === 'waiter'
-            ? '/assigned-orders'
-            : role === 'delivery_staff'
-            ? '/delivery'
-            : '/terminal',
-      });
-
-      const isSecure = isLocalMySqlMode() ? false : process.env.NODE_ENV === 'production';
-      response.cookies.set('auth_role', role, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
-      response.cookies.set('auth_username', user.username, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
-      if (companyId) {
-        response.cookies.set('auth_company_id', companyId, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
-      }
-
-      return response;
-    } else {
-      return NextResponse.json({ success: false, error: 'Invalid username or password' }, { status: 401 });
+    if (!authResult.success || !authResult.user) {
+      const status = authResult.ambiguous ? 409 : 401;
+      return NextResponse.json(
+        {
+          success: false,
+          error: authResult.error || 'Invalid username or password',
+          ambiguous: authResult.ambiguous,
+          matches: authResult.matches,
+        },
+        { status }
+      );
     }
+
+    const { user, redirectUrl } = authResult;
+
+    // Establish secure, signed httpOnly session with server-resolved database context
+    const token = await createSession({
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      companyId: user.companyId,
+      companyName: user.companyName,
+      databaseName: user.databaseName,
+    });
+
+    const response = NextResponse.json({
+      success: true,
+      role: user.role,
+      username: user.username,
+      companyId: user.companyId,
+      companyName: user.companyName,
+      redirectUrl: redirectUrl || '/terminal',
+    });
+
+    const isSecure = isLocalMySqlMode() ? false : process.env.NODE_ENV === 'production';
+    response.cookies.set('auth_session', token, { httpOnly: true, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
+    response.cookies.set('auth_role', user.role, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
+    response.cookies.set('auth_username', user.username, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
+    if (user.companyId) {
+      response.cookies.set('auth_company_id', user.companyId, { httpOnly: false, path: '/', maxAge: 604800, sameSite: 'lax', secure: isSecure });
+    }
+
+    return response;
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'System error' }, { status: 500 });
   }

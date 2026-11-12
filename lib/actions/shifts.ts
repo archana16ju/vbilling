@@ -1,8 +1,8 @@
 'use server';
 
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyPool } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { recordAuditLog } from '@/lib/actions/audit';
@@ -50,8 +50,7 @@ export async function openShift(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       // Check for already open shift
       const [openRows] = await pool.query<RowDataPacket[]>(
@@ -160,8 +159,7 @@ export async function openShift(params: {
 export async function getShiftSummary(shiftId: string): Promise<any> {
   if (isLocalMySqlMode()) {
     await ensureLocalMySqlInitialized();
-    const pool = getMysqlPool();
-    const company = await getAuthorizedCompanyContext();
+    const { pool, company } = await getAuthorizedCompanyPool();
 
     const [shiftRows] = await pool.query<RowDataPacket[]>(
       'SELECT * FROM shifts WHERE id = ? AND company_id = ?',
@@ -237,8 +235,7 @@ export async function closeShift(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       // Retrieve open shift
       const [shiftRows] = await pool.query<RowDataPacket[]>(

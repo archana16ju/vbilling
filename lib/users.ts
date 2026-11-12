@@ -142,7 +142,7 @@ export async function getUsers(): Promise<User[]> {
         return DEFAULT_USERS;
       }
 
-      return rows.map((r: any) => {
+      const mappedUsers = rows.map((r: any) => {
         const rawRole = (r.role || 'cashier') as string;
         const normalizedRole: UserRole = (rawRole === 'super_admin' || (r.username || '').toLowerCase() === 'admin')
           ? 'super_admin'
@@ -158,6 +158,53 @@ export async function getUsers(): Promise<User[]> {
           shortcuts: r.shortcuts ? (typeof r.shortcuts === 'string' ? JSON.parse(r.shortcuts) : r.shortcuts) : undefined,
         };
       });
+
+      // Augment with Master DB users and routes if present
+      try {
+        const { getMasterPool } = await import('./mysql');
+        const mPool = getMasterPool();
+        const existingIds = new Set(mappedUsers.map((u: User) => u.id));
+        const [mSuper]: any = await mPool.query(
+          "SELECT id, username, name, role, created_at FROM master_users WHERE is_active = 1"
+        );
+        for (const mu of mSuper || []) {
+          if (!existingIds.has(mu.id)) {
+            existingIds.add(mu.id);
+            mappedUsers.push({
+              id: mu.id,
+              username: mu.username || mu.name,
+              password: '',
+              role: 'super_admin',
+              createdAt: mu.created_at ? new Date(mu.created_at).getTime() : Date.now(),
+            });
+          }
+        }
+        const [mRoutes]: any = await mPool.query(
+          `SELECT ucr.id, ucr.user_id, ucr.username, ucr.role, ucr.company_id, ucr.created_at, mc.name as company_name
+           FROM user_company_routing ucr
+           LEFT JOIN master_companies mc ON ucr.company_id = mc.id
+           WHERE ucr.is_active = 1`
+        );
+        for (const mr of mRoutes || []) {
+          const uid = mr.user_id || mr.id;
+          if (!existingIds.has(uid)) {
+            existingIds.add(uid);
+            mappedUsers.push({
+              id: uid,
+              username: mr.username,
+              password: '',
+              role: mr.role === 'admin' ? 'company_admin' : (mr.role as UserRole),
+              companyId: mr.company_id,
+              companyName: mr.company_name,
+              createdAt: mr.created_at ? new Date(mr.created_at).getTime() : Date.now(),
+            });
+          }
+        }
+      } catch (masterErr) {
+        // Fallback cleanly to legacy mapped users
+      }
+
+      return mappedUsers;
     } catch (err: any) {
       console.error('MySQL getUsers error:', err.message);
       throw new Error(`Failed to fetch users from Local MySQL: ${err.message}`);

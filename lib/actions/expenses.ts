@@ -1,8 +1,8 @@
 'use server';
 
-import { isLocalMySqlMode, getMysqlPool } from '@/lib/mysql';
+import { isLocalMySqlMode } from '@/lib/mysql';
 import { ensureLocalMySqlInitialized } from '@/lib/mysql-init';
-import { getAuthorizedCompanyContext } from '@/lib/mysql-company';
+import { getAuthorizedCompanyPool } from '@/lib/mysql-company';
 import { getSession } from '@/lib/auth-session';
 import { getDb } from '@/lib/actions/db';
 import { recordAuditLog } from '@/lib/actions/audit';
@@ -52,8 +52,7 @@ export async function createExpense(params: {
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       await pool.query(
         `INSERT INTO expenses (
@@ -162,8 +161,7 @@ export async function updateExpenseStatus(
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();
-      const pool = getMysqlPool();
-      const company = await getAuthorizedCompanyContext();
+      const { pool, company } = await getAuthorizedCompanyPool();
 
       const [existing] = await pool.query<RowDataPacket[]>(
         'SELECT * FROM expenses WHERE id = ? AND company_id = ?',

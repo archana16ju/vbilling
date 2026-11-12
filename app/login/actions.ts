@@ -5,93 +5,40 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getUsers, saveUsers, User, UserRole, verifyPassword, hashPassword } from '@/lib/users';
 import { createSession, getSession, destroySession, requireSuperAdmin } from '@/lib/auth-session';
+import { authenticateUser } from '@/lib/auth-login';
 
 export async function login(prevState: unknown, formData: FormData) {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
+  const companyCode = (formData.get('companyCode') as string || '').trim().toUpperCase();
 
-  const users = await getUsers();
-  const cleanUser = (username || '').toLowerCase().trim();
-  const cleanPass = (password || '').trim();
+  const authResult = await authenticateUser({
+    username,
+    password,
+    companyCode: companyCode || undefined,
+  });
 
-  const user = users.find(
-    (u) =>
-      u.username.toLowerCase() === cleanUser &&
-      (verifyPassword(cleanPass, u.password) ||
-       (u.username.toLowerCase() === 'admin' && (cleanPass === 'admin' || cleanPass === 'admin123' || cleanPass === 'password')) ||
-       (u.username.toLowerCase() === 'cashier' && (cleanPass === 'cashier' || cleanPass === 'cashier123')) ||
-       (u.username.toLowerCase() === 'waiter' && (cleanPass === 'waiter' || cleanPass === 'waiter123')))
-  );
-
-  if (user) {
-    const rawRole = user.role as string;
-    const role: UserRole = (rawRole === 'super_admin' || user.username.toLowerCase() === 'admin')
-      ? 'super_admin'
-      : (rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole));
-    let companyId: string | undefined;
-    let companyName: string | undefined;
-    const { isLocalMySqlMode } = await import('@/lib/mysql');
-
-    // Auto-upgrade legacy plaintext password to secure scrypt hash in Local MySQL
-    if (isLocalMySqlMode() && user.password && !user.password.startsWith('scrypt:')) {
-      try {
-        const { getMysqlPool } = await import('@/lib/mysql');
-        const pool = getMysqlPool();
-        const hashed = hashPassword(password);
-        await pool.query('UPDATE users SET password = ?, password_hash = ? WHERE id = ?', [
-          hashed,
-          hashed,
-          user.id,
-        ]);
-        user.password = hashed;
-      } catch {}
-    }
-    if (isLocalMySqlMode()) {
-      try {
-        const { getUserAssignedCompanies, getAllCompanies } = await import('@/lib/mysql-company');
-        if (role === 'super_admin') {
-          const all = await getAllCompanies();
-          companyId = all[0]?.id;
-          companyName = all[0]?.name;
-        } else {
-          const assigned = await getUserAssignedCompanies(user.id);
-          if (assigned && assigned.length > 0) {
-            companyId = assigned[0].id;
-            companyName = assigned[0].name;
-          }
-        }
-      } catch (e) {
-        console.error('Error assigning company in server action login:', e);
-      }
-    }
-
-    // Create secure, signed httpOnly session
-    await createSession({
-      userId: user.id,
-      username: user.username,
-      role,
-      companyId,
-      companyName,
-    });
-    
-    if (role === 'super_admin') {
-      redirect('/super-admin');
-    } else if (role === 'company_admin') {
-      redirect('/dashboard');
-    } else if (role === 'manager') {
-      redirect('/dashboard');
-    } else if (role === 'chef') {
-      redirect('/kitchen');
-    } else if (role === 'waiter') {
-      redirect('/assigned-orders');
-    } else if (role === 'delivery_staff') {
-      redirect('/delivery');
-    } else {
-      redirect('/terminal');
-    }
-  } else {
-    return { error: 'Invalid username or password' };
+  if (!authResult.success || !authResult.user) {
+    return {
+      error: authResult.error || 'Invalid username or password',
+      ambiguous: authResult.ambiguous,
+      matches: authResult.matches,
+    };
   }
+
+  const { user, redirectUrl } = authResult;
+
+  // Create secure signed httpOnly session with server-resolved database and company context
+  await createSession({
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    companyId: user.companyId,
+    companyName: user.companyName,
+    databaseName: user.databaseName,
+  });
+
+  redirect(redirectUrl || '/terminal');
 }
 
 export async function logout() {

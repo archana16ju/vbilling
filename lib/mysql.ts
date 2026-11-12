@@ -357,12 +357,15 @@ export function hasCompanyPool(databaseName: string): boolean {
 }
 
 /**
- * Executes a callback within an atomic transaction on the legacy MySQL pool.
+ * Executes a callback within an atomic transaction.
+ * If targetPool is provided (e.g. from getAuthorizedCompanyPool()), executes within that company database.
+ * Otherwise defaults to the legacy MySQL pool.
  */
 export async function withMySqlTransaction<T>(
-  callback: (connection: mysql.PoolConnection) => Promise<T>
+  callback: (connection: mysql.PoolConnection) => Promise<T>,
+  targetPool?: mysql.Pool
 ): Promise<T> {
-  const pool = getMysqlPool();
+  const pool = targetPool || getMysqlPool();
   const connection = await pool.getConnection();
 
   try {
