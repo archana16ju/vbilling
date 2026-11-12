@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool } from "./mysql";
+import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool, isLocalMySqlMode } from "./mysql";
 import {
   ensureMasterDbInitialized,
   getMasterCompanyById,
@@ -49,17 +49,35 @@ export interface ProvisionCompanyResult {
  * Example: 'COMP-0004' -> 'company_004_db', 'TESTA' -> 'company_testa_db'
  */
 export function generateCompanyDatabaseName(companyIdOrCode: string): string {
-  const match = companyIdOrCode.match(/^COMP-0*(\d+)$/i);
+  const str = companyIdOrCode.toLowerCase().trim();
+  if (str === 'comp-0001' || str === 'xyz' || str === 'test_a' || str === 'testa') {
+    return 'company_test_a_db';
+  }
+  if (str === 'comp-0002' || str === 'abc' || str === 'test_b' || str === 'testb') {
+    return 'company_test_b_db';
+  }
+  if (str === 'comp-0003' || str === 'vseyal' || str === 'test_c' || str === 'testc') {
+    return 'company_test_c_db';
+  }
+  if (str === 'comp_default' || str === 'main') {
+    return 'company_comp_default_db';
+  }
+
+  const match = str.match(/^comp-0*(\d+)$/i);
   if (match) {
     const padded = String(match[1]).padStart(3, "0");
     return `company_${padded}_db`;
   }
 
-  const clean = companyIdOrCode.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/^_+|_+$/g, "");
+  const clean = str.replace(/[^a-z0-9]/g, "_").replace(/^_+|_+$/g, "");
   return `company_${clean}_db`;
 }
 
 function getDirectServerConnection() {
+  if (!isLocalMySqlMode()) {
+    throw new Error("Safety violation: Direct MySQL connection is strictly restricted to local MySQL mode.");
+  }
+
   const host = process.env.MYSQL_HOST || "127.0.0.1";
   const user = process.env.MYSQL_USER || "root";
   const password = process.env.MYSQL_PASSWORD || "";
@@ -114,6 +132,10 @@ export async function checkDatabaseExistence(
 export async function provisionCompanyDatabase(
   options: ProvisionCompanyOptions
 ): Promise<ProvisionCompanyResult> {
+  if (!isLocalMySqlMode()) {
+    throw new Error("Safety violation: Company database provisioning is strictly restricted to local MySQL mode.");
+  }
+
   await ensureMasterDbInitialized();
 
   const cleanId = options.companyId.trim();

@@ -62,6 +62,12 @@ export function isLocalMySqlMode(): boolean {
  * Strictly blocks any connection attempts outside local development (127.0.0.1 or localhost).
  */
 function getMysqlConfig() {
+  if (!isLocalMySqlMode()) {
+    throw new Error(
+      "Safety violation: Local MySQL is disabled. Set LOCAL_DB_MODE=mysql to enable."
+    );
+  }
+
   const host = process.env.MYSQL_HOST || "127.0.0.1";
   const user = process.env.MYSQL_USER;
   const password = process.env.MYSQL_PASSWORD;

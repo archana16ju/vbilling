@@ -13,7 +13,8 @@
     "electron:dev:mysql": "concurrently \"cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql next dev -p 3015\" \"wait-on http://localhost:3015 && cross-env BILLING_LOCAL_MODE=1 LOCAL_DB_MODE=mysql electron .\"",
     "electron:build": "node scripts/copy-node.js && next build --webpack && electron-builder",
     "electron:build:mysql": "node scripts/copy-node.js && cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql next build --webpack && electron-builder --config electron-builder-local-mysql.json",
-    "electron:publish": "node scripts/copy-node.js && next build --webpack && electron-builder -p always"
+    "electron:publish": "node scripts/copy-node.js && next build --webpack && electron-builder -p always",
+    "migrate:database-per-company:local": "cross-env LOCAL_DB_MODE=mysql NEXT_PUBLIC_LOCAL_DB_MODE=mysql node scripts/migrate-database-per-company.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.105.3",

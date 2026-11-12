@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { getMasterPool, withMasterTransaction } from "./mysql";
+import { getMasterPool, withMasterTransaction, isLocalMySqlMode } from "./mysql";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { verifyPassword } from "./users";
 
@@ -85,6 +85,10 @@ function getDirectServerConnection() {
  * Safe to call idempotently.
  */
 export async function ensureMasterDbInitialized(): Promise<void> {
+  if (!isLocalMySqlMode()) {
+    return;
+  }
+
   if (masterInitPromise) {
     return masterInitPromise;
   }
