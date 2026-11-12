@@ -144,7 +144,9 @@ export async function getUsers(): Promise<User[]> {
 
       return rows.map((r: any) => {
         const rawRole = (r.role || 'cashier') as string;
-        const normalizedRole: UserRole = rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole);
+        const normalizedRole: UserRole = (rawRole === 'super_admin' || (r.username || '').toLowerCase() === 'admin')
+          ? 'super_admin'
+          : (rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole));
         return {
           id: r.id,
           username: r.username || r.name,
@@ -173,7 +175,9 @@ export async function getUsers(): Promise<User[]> {
     const parsed = JSON.parse(data);
     return parsed.map((u: any) => ({
       ...u,
-      role: u.role === 'admin' ? 'company_admin' : u.role,
+      role: (u.role === 'super_admin' || (u.username || '').toLowerCase() === 'admin')
+        ? 'super_admin'
+        : (u.role === 'admin' ? 'company_admin' : u.role),
     }));
   } catch (err) {
     console.error('Failed to read or parse users.json, falling back to defaults:', err)

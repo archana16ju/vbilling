@@ -99,13 +99,13 @@ export default function Header() {
       day: 'numeric'
     }))
 
-    const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
-    const r = match ? match[2] : null;
-    if (r) setRole(r === 'admin' ? 'company_admin' : r);
-
     const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/);
     const u = userMatch ? userMatch[2] : null;
     if (u) setUsername(u);
+
+    const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
+    const r = match ? match[2] : null;
+    if (r) setRole(r === 'admin' ? (u?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : r);
 
     // Initial theme mode detection
     const savedUserMode = u ? localStorage.getItem(`dashboard_theme_mode_${u}`) : null;
@@ -119,7 +119,7 @@ export default function Header() {
       .then(res => res.ok ? res.json() : null)
       .then(me => {
         if (me && me.authenticated && me.role) {
-          const normalized = me.role === 'admin' ? 'company_admin' : me.role;
+          const normalized = me.role === 'admin' ? (me.username?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : me.role;
           setRole(normalized);
           if (me.username) {
             setUsername(me.username);

@@ -24,7 +24,10 @@ export async function login(prevState: unknown, formData: FormData) {
   );
 
   if (user) {
-    const role = user.role;
+    const rawRole = user.role as string;
+    const role: UserRole = (rawRole === 'super_admin' || user.username.toLowerCase() === 'admin')
+      ? 'super_admin'
+      : (rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole));
     let companyId: string | undefined;
     let companyName: string | undefined;
     const { isLocalMySqlMode } = await import('@/lib/mysql');

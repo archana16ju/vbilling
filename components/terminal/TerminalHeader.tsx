@@ -166,19 +166,19 @@ export default function TerminalHeader() {
 
   /* ── Bootstrap ── */
   useEffect(() => {
+    const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/)
+    if (userMatch) setUsername(userMatch[2])
     const roleMatch = document.cookie.match(/(^| )auth_role=([^;]+)/)
     if (roleMatch) {
       const r = roleMatch[2]
-      setRole(r === 'admin' ? 'company_admin' : r)
+      setRole(r === 'admin' ? (userMatch?.[2]?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : r)
     }
-    const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/)
-    if (userMatch) setUsername(userMatch[2])
 
     fetch('/api/auth/me')
       .then(res => res.ok ? res.json() : null)
       .then(me => {
         if (me?.authenticated) {
-          if (me.role) setRole(me.role === 'admin' ? 'company_admin' : me.role)
+          if (me.role) setRole(me.role === 'admin' ? (me.username?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : me.role)
           if (me.username) setUsername(me.username)
         }
       })

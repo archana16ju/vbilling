@@ -34,10 +34,19 @@ export default async function DashboardLayout({
     }
   } else {
     // Production / Non-MySQL Mode: 100% preserve existing live website and installed Electron behavior
+    const session = await getSession();
     const cookieStore = await cookies();
-    const role = cookieStore.get('auth_role')?.value;
+    const role = session?.role || cookieStore.get('auth_role')?.value;
 
-    if (role !== 'admin') {
+    if (
+      role !== 'admin' &&
+      role !== 'super_admin' &&
+      role !== 'company_admin' &&
+      role !== 'manager' &&
+      role !== 'chef' &&
+      role !== 'waiter' &&
+      role !== 'delivery_staff'
+    ) {
       redirect('/login');
     }
   }

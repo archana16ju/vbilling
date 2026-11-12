@@ -31,9 +31,11 @@ export default function Sidebar() {
   const [permissions, setPermissions] = useState<Record<string, boolean> | null>(null)
 
   useEffect(() => {
+    const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/);
+    const u = userMatch ? userMatch[2] : null;
     const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
     const r = match ? match[2] : null;
-    const initialRole = r === 'admin' ? 'company_admin' : r;
+    const initialRole = r === 'admin' ? (u?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : r;
     if (initialRole) setRole(initialRole);
 
     const loadRoleAndPermissions = (currentRole: string | null) => {
@@ -54,7 +56,7 @@ export default function Sidebar() {
       .then(res => res.ok ? res.json() : null)
       .then(me => {
         if (me && me.authenticated && me.role) {
-          const normalized = me.role === 'admin' ? 'company_admin' : me.role;
+          const normalized = me.role === 'admin' ? (me.username?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : me.role;
           setRole(normalized);
           loadRoleAndPermissions(normalized);
         }

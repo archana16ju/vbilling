@@ -140,7 +140,7 @@ export async function getSession(): Promise<SessionData | null> {
 
   // Normalize legacy 'admin' to 'company_admin'
   if ((payload.role as string) === 'admin') {
-    payload.role = 'company_admin';
+    payload.role = payload.username?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin';
   }
 
   // In local MySQL mode, dynamically resolve live company_id and role from users table to prevent stale cookie mismatches

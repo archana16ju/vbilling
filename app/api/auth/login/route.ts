@@ -35,7 +35,9 @@ export async function POST(request: Request) {
       }
 
       const rawRole = user.role as string;
-      const role: UserRole = rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole);
+      const role: UserRole = (rawRole === 'super_admin' || user.username.toLowerCase() === 'admin')
+        ? 'super_admin'
+        : (rawRole === 'admin' ? 'company_admin' : (rawRole as UserRole));
 
       let companyId: string | undefined = user.companyId;
       let companyName: string | undefined = user.companyName;
