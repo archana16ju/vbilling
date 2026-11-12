@@ -195,7 +195,7 @@ export const migrations: Migration[] = [
       if (cashierRows.length === 0) {
         await conn.query(`
           INSERT INTO users (id, name, username, email, password, role, is_active)
-          VALUES ('u2', 'Cashier User', 'cashier', 'cashier@local.test', 'cashier', 'cashier123', 'cashier', 1)
+          VALUES ('u2', 'Cashier User', 'cashier', 'cashier@local.test', 'cashier123', 'cashier', 1)
         `);
       } else {
         cashierId = cashierRows[0].id;
@@ -1123,7 +1123,7 @@ export const migrations: Migration[] = [
     },
   },
   {
-    version: 20,
+    version: 245,
     name: "020_taxes_and_charges",
     up: async (conn) => {
       // 1. Taxes table

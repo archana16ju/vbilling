@@ -643,18 +643,17 @@ export default function TerminalHeader() {
 
           {/* Avatar / profile menu */}
           <div className="relative flex items-center" ref={profileMenuRef}>
-            <Tip label={isLocalMode ? `${username || 'User'} · Logout` : (username || 'User')}>
+            <Tip label={`${username || 'User'} · Logout`}>
               <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 transition
-                  ${isLocalMode ? 'cursor-pointer hover:bg-zinc-800 hover:border-theme' : ''}`}
-                onClick={() => { if (isLocalMode) setShowProfileMenu(prev => !prev) }}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 transition cursor-pointer hover:bg-zinc-800 hover:border-theme"
+                onClick={() => setShowProfileMenu(prev => !prev)}
               >
                 <UserCircle className="h-5 w-5" style={{ color: 'var(--theme-accent, #DB2777)' }} />
               </div>
             </Tip>
 
-            {/* Profile dropdown – Local Mode only */}
-            {isLocalMode && showProfileMenu && (
+            {/* Profile dropdown */}
+            {showProfileMenu && (
               <div className="absolute right-0 top-11 z-50 w-48 rounded-2xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
                 <div className="px-3 py-2 border-b border-zinc-800 text-xs">
                   <p className="font-bold text-white">{username || 'User'}</p>

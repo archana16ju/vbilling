@@ -1,6 +1,6 @@
 'use client';
-import { UserCircle, Building2, Shield, Truck, Sun, Moon } from "lucide-react"
-import { useState, useEffect } from "react"
+import { UserCircle, Building2, Shield, Truck, Sun, Moon, LogOut } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
 import ReplenishmentNotificationBell from "@/components/notifications/ReplenishmentNotificationBell"
@@ -52,6 +52,44 @@ export default function Header() {
   const [activeCompany, setActiveCompany] = useState<{ id: string; name: string; code: string } | null>(null)
   const [currentDate, setCurrentDate] = useState('')
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark')
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false)
+      }
+    }
+    if (showProfileMenu) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showProfileMenu])
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/login', { method: 'DELETE' })
+    } catch {}
+    try {
+      localStorage.removeItem('tables-storage')
+      const termData = localStorage.getItem('terminal-storage')
+      if (termData) {
+        const parsed = JSON.parse(termData)
+        if (parsed?.state) {
+          parsed.state.cart = []
+          parsed.state.selectedCustomer = null
+          parsed.state.orderNote = ''
+          parsed.state.activeCompanyId = ''
+          localStorage.setItem('terminal-storage', JSON.stringify(parsed))
+        }
+      }
+    } catch {}
+    document.cookie = 'auth_role=; Max-Age=0; path=/;'
+    document.cookie = 'auth_username=; Max-Age=0; path=/;'
+    document.cookie = 'auth_id=; Max-Age=0; path=/;'
+    document.cookie = 'auth_company_id=; Max-Age=0; path=/;'
+    document.cookie = 'auth_session=; Max-Age=0; path=/;'
+    window.location.href = '/login'
+  }
 
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString('en-IN', {
@@ -280,8 +318,8 @@ export default function Header() {
             <ShiftAlertsBell />
           )}
 
-          {/* User Session & Avatar */}
-          <div className="flex items-center gap-3 text-zinc-400">
+          {/* User Session & Avatar with Profile Menu */}
+          <div className="relative flex items-center gap-3 text-zinc-400" ref={profileMenuRef}>
             <div className="text-right hidden sm:block">
               <div className="text-sm font-bold flex items-center justify-end gap-1.5">
                 {isSuperAdmin ? (
@@ -308,9 +346,33 @@ export default function Header() {
               </div>
               <div className="text-[11px] text-zinc-500 font-medium">Current Session</div>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300">
-              <UserCircle className="h-6 w-6 text-theme-accent" />
-            </div>
+
+            <Tip label={`${username || 'User'} · Logout`}>
+              <div
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 transition cursor-pointer hover:bg-zinc-800 hover:border-theme shadow-sm"
+                onClick={() => setShowProfileMenu(prev => !prev)}
+              >
+                <UserCircle className="h-6 w-6 text-theme-accent" />
+              </div>
+            </Tip>
+
+            {/* Profile dropdown */}
+            {showProfileMenu && (
+              <div className="absolute right-0 top-12 z-50 w-48 rounded-2xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
+                <div className="px-3 py-2 border-b border-zinc-800 text-xs">
+                  <p className="font-bold text-white">{username || 'User'}</p>
+                  <p className="text-zinc-400 capitalize">{role ? role.replace('_', ' ') : 'User'}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-theme-accent hover:bg-theme-badge border border-transparent hover:border-theme transition cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4 shrink-0" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
