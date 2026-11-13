@@ -17,6 +17,7 @@ import {
   Users,
   Sun,
   Moon,
+  HelpCircle,
 } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
 import { getUserShortcuts } from '@/app/login/actions'
@@ -25,6 +26,7 @@ import DeliveryDetailsModal from '@/components/terminal/DeliveryDetailsModal'
 import WaiterAssignmentModal from '@/components/terminal/WaiterAssignmentModal'
 import ShiftAlertsBell from '@/components/notifications/ShiftAlertsBell'
 import { useTerminalStore, DEFAULT_SHORTCUTS } from '@/store/useTerminalStore'
+import { useShortcutsStore } from '@/store/useShortcutsStore'
 
 /* ─────────────────────────────────────────
    Tooltip wrapper – shows label above child on hover
@@ -579,6 +581,19 @@ export default function TerminalHeader() {
             </button>
           </Tip>
         </div>
+
+        {/* ── Common Help (?) Icon for Keyboard Shortcuts ── */}
+        <Tip label="Keyboard Shortcuts (?)">
+          <button
+            type="button"
+            onClick={() => useShortcutsStore.getState().openHelpModal()}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-theme transition cursor-pointer shadow-sm active:scale-95"
+            title="Keyboard Shortcuts (?)"
+            aria-label="Help & Keyboard Shortcuts"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+        </Tip>
 
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />

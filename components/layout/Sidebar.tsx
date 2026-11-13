@@ -21,9 +21,11 @@ import {
   ShieldCheck,
   ClipboardList,
   Layers,
-  BadgePercent
+  BadgePercent,
+  HelpCircle
 } from "lucide-react"
 import { useState, useEffect } from "react"
+import { useShortcutsStore } from "@/store/useShortcutsStore"
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -211,8 +213,18 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom Footer with Role and Logout */}
+      {/* Bottom Footer with Help, Role and Logout */}
       <div className="shrink-0 border-t border-zinc-800/80 p-2 flex flex-col items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => useShortcutsStore.getState().openHelpModal()}
+          className="w-full flex items-center justify-center gap-1.5 py-1 px-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-theme transition cursor-pointer text-[10px] font-bold shadow-xs active:scale-95"
+          title="Keyboard Shortcuts (?)"
+        >
+          <HelpCircle className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Help (?)</span>
+        </button>
+
         <div
           className="w-full text-center py-1 px-1 rounded-lg bg-zinc-900/90 border border-zinc-800/90 text-[9px] font-bold tracking-wider uppercase text-zinc-400 truncate cursor-default"
           title={`Role: ${role === 'super_admin'

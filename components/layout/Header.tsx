@@ -1,9 +1,10 @@
 'use client';
-import { UserCircle, Building2, Shield, Truck, Sun, Moon, LogOut } from "lucide-react"
+import { UserCircle, Building2, Shield, Truck, Sun, Moon, LogOut, HelpCircle } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
 import ReplenishmentNotificationBell from "@/components/notifications/ReplenishmentNotificationBell"
+import { useShortcutsStore } from "@/store/useShortcutsStore"
 
 /* ─────────────────────────────────────────
    Tooltip wrapper – matches Terminal Header style
@@ -317,6 +318,19 @@ export default function Header() {
           {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (
             <ShiftAlertsBell />
           )}
+
+          {/* Common Help (?) Icon for Keyboard Shortcuts */}
+          <Tip label="Keyboard Shortcuts (?)">
+            <button
+              type="button"
+              onClick={() => useShortcutsStore.getState().openHelpModal()}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-theme transition cursor-pointer shadow-sm active:scale-95"
+              title="Keyboard Shortcuts (?)"
+              aria-label="Help & Keyboard Shortcuts"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+          </Tip>
 
           {/* User Session & Avatar with Profile Menu */}
           <div className="relative flex items-center gap-3 text-zinc-400" ref={profileMenuRef}>

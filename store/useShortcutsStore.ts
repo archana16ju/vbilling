@@ -12,6 +12,7 @@ interface ShortcutsState {
   config: StoredShortcutConfig;
   isCustom: boolean;
   activeCompanyId: string;
+  activeCompanyName?: string;
   isLoaded: boolean;
   isHelpModalOpen: boolean;
 
@@ -52,6 +53,7 @@ export const useShortcutsStore = create<ShortcutsState>()(
       config: getDefaultStoredShortcutsConfig(),
       isCustom: false,
       activeCompanyId: '',
+      activeCompanyName: '',
       isLoaded: false,
       isHelpModalOpen: false,
 
@@ -202,6 +204,7 @@ export const useShortcutsStore = create<ShortcutsState>()(
                 config: data.config,
                 isCustom: !!data.isCustom,
                 activeCompanyId: data.companyId || companyId || '',
+                activeCompanyName: data.companyName || '',
                 isLoaded: true,
               });
             }

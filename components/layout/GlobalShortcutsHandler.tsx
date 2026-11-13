@@ -14,7 +14,7 @@ export default function GlobalShortcutsHandler() {
   const [isCounterLocked, setIsCounterLocked] = useState(false);
   const [showShiftNotice, setShowShiftNotice] = useState(false);
 
-  // Initialize company shortcuts on load
+  // Initialize company shortcuts on load and react to company switches
   useEffect(() => {
     fetchCompanyShortcuts();
 
@@ -22,7 +22,13 @@ export default function GlobalShortcutsHandler() {
       fetchCompanyShortcuts();
     };
     window.addEventListener('company-theme-changed', handleCompanyChange);
-    return () => window.removeEventListener('company-theme-changed', handleCompanyChange);
+    window.addEventListener('company-switched', handleCompanyChange);
+    window.addEventListener('focus', handleCompanyChange);
+    return () => {
+      window.removeEventListener('company-theme-changed', handleCompanyChange);
+      window.removeEventListener('company-switched', handleCompanyChange);
+      window.removeEventListener('focus', handleCompanyChange);
+    };
   }, [fetchCompanyShortcuts]);
 
   useEffect(() => {

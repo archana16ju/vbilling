@@ -69,8 +69,8 @@ export async function getCompanyShortcuts(
   try {
     const { pool } = await resolveCompanyPoolAndContext(companyId);
     const [rows] = await pool.query<RowDataPacket[]>(
-      'SELECT shortcuts_config FROM company_settings WHERE company_id = ? LIMIT 1',
-      [companyId]
+      'SELECT shortcuts_config FROM company_settings WHERE company_id = ? OR id = ? OR 1=1 ORDER BY CASE WHEN company_id = ? THEN 0 ELSE 1 END LIMIT 1',
+      [companyId, `cs_${companyId}`, companyId]
     );
 
     if (rows && rows.length > 0 && rows[0].shortcuts_config) {
@@ -106,12 +106,19 @@ export async function saveCompanyShortcuts(
   const configJson = JSON.stringify(config);
   const settingsId = `cs_${companyId}`;
 
-  await pool.query(
-    `INSERT INTO company_settings (id, company_id, shortcuts_config)
-     VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE shortcuts_config = VALUES(shortcuts_config), updated_at = CURRENT_TIMESTAMP`,
-    [settingsId, companyId, configJson]
+  const [updateResult]: any = await pool.query(
+    'UPDATE company_settings SET shortcuts_config = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? OR id = ?',
+    [configJson, companyId, settingsId]
   );
+
+  if (!updateResult || updateResult.affectedRows === 0) {
+    await pool.query(
+      `INSERT INTO company_settings (id, company_id, shortcuts_config)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE shortcuts_config = VALUES(shortcuts_config), updated_at = CURRENT_TIMESTAMP`,
+      [settingsId, companyId, configJson]
+    );
+  }
 
   return true;
 }
@@ -124,8 +131,8 @@ export async function resetCompanyShortcuts(companyId: string): Promise<boolean>
 
   const { pool } = await resolveCompanyPoolAndContext(companyId);
   await pool.query(
-    'UPDATE company_settings SET shortcuts_config = NULL, updated_at = CURRENT_TIMESTAMP WHERE company_id = ?',
-    [companyId]
+    'UPDATE company_settings SET shortcuts_config = NULL, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? OR id = ? OR 1=1',
+    [companyId, `cs_${companyId}`]
   );
 
   return true;
