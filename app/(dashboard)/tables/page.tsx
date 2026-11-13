@@ -120,13 +120,23 @@ export default function TableCollectionsPage() {
     setMounted(true);
     const match = document.cookie.match(/(^| )auth_role=([^;]+)/);
     const r = match ? match[2] : null;
-    if (r) setRole(r === 'admin' ? 'company_admin' : r);
+    if (r) {
+      const userRole = r === 'admin' ? 'company_admin' : r;
+      setRole(userRole);
+      if (userRole === 'waiter') {
+        clearSelectedTable();
+      }
+    }
 
     fetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : null))
       .then((me) => {
         if (me && me.authenticated && me.role) {
-          setRole(me.role === 'admin' ? 'company_admin' : me.role);
+          const userRole = me.role === 'admin' ? 'company_admin' : me.role;
+          setRole(userRole);
+          if (userRole === 'waiter') {
+            clearSelectedTable();
+          }
         }
       })
       .catch(() => {});
@@ -302,8 +312,8 @@ export default function TableCollectionsPage() {
 
       {/* Main Content Area */}
       <div className="flex-1 w-full mx-auto">
-        {/* Active Selection Banner if table selected in Terminal */}
-        {selectedTable && (
+        {/* Active Selection Banner if table selected in Terminal (Hidden for Waiters) */}
+        {!isWaiter && selectedTable && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 px-5 py-3 shadow-lg shadow-emerald-500/10 animate-in fade-in">
             <div className="flex items-center gap-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-md">
@@ -343,17 +353,18 @@ export default function TableCollectionsPage() {
 
         {/* Floor summary & count with Live Availability Metrics */}
         {(() => {
+          const effectiveSelectedId = isWaiter ? null : selectedTableId;
           const totalTables = currentFloorTables.length;
-          const runningTables = currentFloorTables.filter((t) => t.status === 'RUNNING' || selectedTableId === t.id).length;
-          const freeTables = currentFloorTables.filter((t) => t.status === 'FREE' && selectedTableId !== t.id).length;
+          const runningTables = currentFloorTables.filter((t) => t.status === 'RUNNING' || effectiveSelectedId === t.id).length;
+          const freeTables = currentFloorTables.filter((t) => t.status === 'FREE' && effectiveSelectedId !== t.id).length;
           const totalCapacity = currentFloorTables.reduce((sum, t) => sum + (t.capacity || 0), 0);
           const totalSeated = currentFloorTables.reduce(
-            (sum, t) => sum + ((t.status === 'RUNNING' || selectedTableId === t.id) ? (t.guestCount || 1) : 0),
+            (sum, t) => sum + ((t.status === 'RUNNING' || effectiveSelectedId === t.id) ? (t.guestCount || 1) : 0),
             0
           );
           const totalAvailableSeats = Math.max(0, totalCapacity - totalSeated);
           const overCapacityTables = currentFloorTables.filter(
-            (t) => (t.status === 'RUNNING' || selectedTableId === t.id) && (t.guestCount || 1) > t.capacity
+            (t) => (t.status === 'RUNNING' || effectiveSelectedId === t.id) && (t.guestCount || 1) > t.capacity
           );
 
           return (
@@ -435,7 +446,7 @@ export default function TableCollectionsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {currentFloorTables.map((table) => {
               const statusCfg = STATUS_CONFIG[table.status] || STATUS_CONFIG.FREE;
-              const isSelected = selectedTableId === table.id;
+              const isSelected = !isWaiter && selectedTableId === table.id;
               const isRunning = table.status === 'RUNNING' || isSelected;
               const isBillPrinted = table.status === 'BILL_PRINTED';
               const isNeedsAttention = table.status === 'NEEDS_ATTENTION';
@@ -452,13 +463,14 @@ export default function TableCollectionsPage() {
                 <div
                   key={table.id}
                   onClick={() => {
+                    if (isWaiter) return;
                     if (isSelected) {
                       clearSelectedTable();
                     } else {
                       selectTable(table, table.capacity || 2);
                     }
                   }}
-                  className={`group relative flex flex-col justify-between rounded-3xl p-5 min-h-[155px] transition-all hover:shadow-xl cursor-pointer ${
+                  className={`group relative flex flex-col justify-between rounded-3xl p-5 min-h-[155px] transition-all hover:shadow-xl ${isWaiter ? 'cursor-default' : 'cursor-pointer'} ${
                     isSelected
                       ? 'border-2 border-emerald-500 bg-emerald-950/40 shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-500/30'
                       : isOverCapacity
