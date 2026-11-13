@@ -1,70 +1,70 @@
 'use client';
-import { UserCircle, Building2, Shield, Truck, Sun, Moon, LogOut, HelpCircle } from "lucide-react"
+
+import {
+  UserCircle,
+  Building2,
+  Shield,
+  Truck,
+  Sun,
+  Moon,
+  Laptop,
+  LogOut,
+  HelpCircle,
+  Keyboard,
+  BookOpen,
+  LifeBuoy,
+  ExternalLink,
+  Check,
+  Settings,
+  ShieldCheck,
+  User,
+  ChefHat,
+  Sparkles,
+} from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import ShiftAlertsBell from "@/components/notifications/ShiftAlertsBell"
-import ReplenishmentNotificationBell from "@/components/notifications/ReplenishmentNotificationBell"
+import SmartNotificationBell from "@/components/notifications/SmartNotificationBell"
 import { useShortcutsStore } from "@/store/useShortcutsStore"
-
-/* ─────────────────────────────────────────
-   Tooltip wrapper – matches Terminal Header style
-───────────────────────────────────────── */
-function Tip({
-  label,
-  children,
-  side = 'bottom',
-}: {
-  label: string;
-  children: React.ReactNode;
-  side?: 'bottom' | 'top';
-}) {
-  return (
-    <div className="relative group/tip flex items-center justify-center">
-      {children}
-      <div
-        className={`
-          pointer-events-none absolute z-[100] whitespace-nowrap
-          rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm
-          px-2.5 py-1 text-[11px] font-bold text-white shadow-xl
-          opacity-0 scale-95
-          group-hover/tip:opacity-100 group-hover/tip:scale-100
-          transition-all duration-150
-          ${side === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'}
-          left-1/2 -translate-x-1/2
-        `}
-      >
-        {label}
-        <span
-          className={`
-            absolute left-1/2 -translate-x-1/2 border-4 border-transparent
-            ${side === 'bottom'
-              ? 'bottom-full border-b-zinc-700'
-              : 'top-full border-t-zinc-700'}
-          `}
-        />
-      </div>
-    </div>
-  );
-}
 
 export default function Header() {
   const [role, setRole] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const [activeCompany, setActiveCompany] = useState<{ id: string; name: string; code: string } | null>(null)
   const [currentDate, setCurrentDate] = useState('')
-  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark')
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
-  const profileMenuRef = useRef<HTMLDivElement>(null)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>('dark')
+  
+  // Compact smart header hover & click menu state
+  const [activeMenu, setActiveMenu] = useState<'company' | 'theme' | 'help' | 'role' | 'profile' | null>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  const handleMenuEnter = (menuId: 'company' | 'theme' | 'help' | 'role' | 'profile') => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    setActiveMenu(menuId)
+  }
+
+  const handleMenuLeave = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      setActiveMenu(null)
+    }, 180)
+  }
+
+  const handleMenuClick = (menuId: 'company' | 'theme' | 'help' | 'role' | 'profile') => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    setActiveMenu(prev => (prev === menuId ? null : menuId))
+  }
+
+  // Close menus on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setShowProfileMenu(false)
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setActiveMenu(null)
       }
     }
-    if (showProfileMenu) document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showProfileMenu])
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -94,9 +94,9 @@ export default function Header() {
 
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString('en-IN', {
-      weekday: 'long',
+      weekday: 'short',
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     }))
 
@@ -125,7 +125,7 @@ export default function Header() {
           if (me.username) {
             setUsername(me.username);
             const userSpecificMode = localStorage.getItem(`dashboard_theme_mode_${me.username}`);
-            if (userSpecificMode === 'light' || userSpecificMode === 'dark') {
+            if (userSpecificMode === 'light' || userSpecificMode === 'dark' || userSpecificMode === 'system') {
               setThemeMode(userSpecificMode);
             }
           }
@@ -169,7 +169,7 @@ export default function Header() {
 
     const handleExternalThemeChange = (e: any) => {
       const mode = e?.detail?.mode;
-      if (mode === 'light' || mode === 'dark') {
+      if (mode === 'light' || mode === 'dark' || mode === 'system') {
         setThemeMode(mode);
       }
     };
@@ -183,8 +183,8 @@ export default function Header() {
     };
   }, []);
 
-  // Handler for independent dark/light mode toggle
-  const handleThemeToggle = (newMode: 'dark' | 'light') => {
+  // Handler for independent dark/light/system mode toggle
+  const handleThemeToggle = (newMode: 'dark' | 'light' | 'system') => {
     setThemeMode(newMode);
     try {
       localStorage.setItem('dashboard_theme_mode', newMode);
@@ -193,9 +193,17 @@ export default function Header() {
       }
     } catch {}
 
+    let effective = newMode;
+    if (newMode === 'system') {
+      effective = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+    }
+
     const root = document.documentElement;
-    root.setAttribute('data-theme', newMode);
-    if (newMode === 'light') {
+    root.setAttribute('data-theme', effective);
+    root.setAttribute('data-theme-setting', newMode);
+    if (effective === 'light') {
       root.classList.add('light-mode');
       root.classList.remove('dark-mode', 'dark');
       root.style.setProperty('--theme-mode', 'light');
@@ -210,191 +218,545 @@ export default function Header() {
       root.style.setProperty('--theme-mode', 'dark');
       if (document.body) {
         document.body.setAttribute('data-theme', 'dark');
-        document.body.classList.add('dark-mode');
-        document.body.classList.add('dark');
+        document.body.classList.add('dark-mode', 'dark');
         document.body.classList.remove('light-mode');
       }
     }
 
-    window.dispatchEvent(new CustomEvent('dashboard-theme-mode-changed', { detail: { mode: newMode } }));
+    window.dispatchEvent(new CustomEvent('dashboard-theme-mode-changed', { detail: { mode: newMode, effective } }));
   };
 
   const isSuperAdmin = role === 'super_admin';
-  const isStockAdmin = isSuperAdmin || role === 'company_admin' || role === 'admin' || role === 'manager';
-  const isChef = role === 'chef';
-  const canViewStockNotifications = isStockAdmin || isChef;
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 flex-col justify-between bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 px-6 sm:px-8">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-20 flex h-12 flex-col justify-between bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-6 transition-all duration-200"
+    >
       <div className="flex h-full items-center justify-between">
-        <div className="flex flex-col">
-          <h2 className="text-lg sm:text-xl font-black tracking-tight text-white flex items-center gap-2">
-            <span>{isSuperAdmin ? 'Super Admin System' : role === 'waiter' ? 'Waiter Service Portal' : role === 'delivery_staff' ? 'Delivery Staff Portal' : 'Company Dashboard'}</span>
+        {/* ── Left: Compact Title & Date ── */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <h2 className="text-sm sm:text-base font-black tracking-tight text-white flex items-center gap-1.5 truncate">
+            <span className="truncate">
+              {isSuperAdmin
+                ? 'Super Admin'
+                : role === 'waiter'
+                  ? 'Waiter Portal'
+                  : role === 'delivery_staff'
+                    ? 'Delivery Staff'
+                    : role === 'chef'
+                      ? 'Kitchen Display'
+                      : 'Dashboard'}
+            </span>
           </h2>
-          <span className="text-xs font-medium text-zinc-400">{currentDate}</span>
+          <span className="hidden md:inline-flex items-center text-[11px] font-medium text-zinc-400 pl-2.5 border-l border-zinc-800 shrink-0">
+            {currentDate}
+          </span>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4">
-          {/* ── Company Name – Terminal Icon-Based Design ── */}
+        {/* ── Right: Compact Smart Header Items with Hover Details ── */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* 1. COMPANY SELECTOR */}
           {activeCompany && (
-            <Tip label={activeCompany.name}>
-              {isSuperAdmin ? (
-                <Link
-                  href="/super-admin"
-                  className="flex h-8 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-300 transition-all hover:bg-zinc-800 hover:border-theme hover:text-white shadow-sm cursor-pointer"
-                  title="Super Admin: Click to manage companies"
+            <div
+              className="relative"
+              onMouseEnter={() => handleMenuEnter('company')}
+              onMouseLeave={handleMenuLeave}
+            >
+              <button
+                type="button"
+                onClick={() => handleMenuClick('company')}
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                  activeMenu === 'company'
+                    ? 'border-pink-500 bg-pink-950/40 text-pink-300 shadow-md shadow-pink-950/30'
+                    : 'border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:border-pink-500/60 hover:bg-zinc-800 hover:text-white'
+                }`}
+                aria-label="Company Details"
+              >
+                <Building2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--theme-accent, #DB2777)' }} />
+                <span className="font-mono text-[11px] font-black tracking-wide text-pink-400">
+                  {activeCompany.code}
+                </span>
+              </button>
+
+              {/* Hover / Click Dropdown for Company Details */}
+              {activeMenu === 'company' && (
+                <div
+                  onMouseEnter={() => handleMenuEnter('company')}
+                  onMouseLeave={handleMenuLeave}
+                  className="absolute right-0 top-full mt-1.5 w-64 sm:w-72 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-3 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
                 >
-                  <Building2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--theme-accent, #DB2777)' }} />
-                  <span className="font-bold text-zinc-200">{activeCompany.name}</span>
-                  <span
-                    className="rounded px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-[10px] font-mono"
-                    style={{ color: 'var(--theme-badge-text, #F472B6)' }}
-                  >
-                    {activeCompany.code}
-                  </span>
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (role === 'company_admin' || role === 'admin') window.location.href = '/companies';
-                  }}
-                  className={`flex h-8 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs font-bold text-zinc-300 transition-all shadow-sm ${
-                    role === 'company_admin' || role === 'admin'
-                      ? 'cursor-pointer hover:bg-zinc-800 hover:border-theme hover:text-white'
-                      : 'cursor-default'
-                  }`}
-                  title={role === 'company_admin' || role === 'admin' ? "Click to view company details" : activeCompany.name}
-                >
-                  <Building2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--theme-accent, #DB2777)' }} />
-                  <span className="font-bold text-zinc-200">{activeCompany.name}</span>
-                  <span
-                    className="rounded px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-[10px] font-mono"
-                    style={{ color: 'var(--theme-badge-text, #F472B6)' }}
-                  >
-                    {activeCompany.code}
-                  </span>
-                </button>
+                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500/20 text-pink-400 border border-pink-500/30">
+                        <Building2 className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-zinc-100">Company Overview</h4>
+                        <span className="text-[10px] text-zinc-400">Multi-tenant scope</span>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-black text-emerald-400 uppercase tracking-wider">
+                      Active
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2.5 text-xs">
+                    <div>
+                      <span className="text-[10px] font-medium text-zinc-400 block">Full Company Name</span>
+                      <p className="font-bold text-white text-sm truncate">{activeCompany.name}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-1.5 border-t border-zinc-800/60 text-[11px]">
+                      <span className="text-zinc-400">Company Code</span>
+                      <span className="font-mono font-bold text-pink-400 bg-pink-950/40 border border-pink-500/30 px-1.5 py-0.5 rounded">
+                        {activeCompany.code}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-zinc-400">Company ID</span>
+                      <span className="font-mono text-zinc-300">{activeCompany.id}</span>
+                    </div>
+                  </div>
+
+                  {/* Contextual navigation */}
+                  {isSuperAdmin ? (
+                    <Link
+                      href="/super-admin"
+                      onClick={() => setActiveMenu(null)}
+                      className="mt-2.5 flex items-center justify-between rounded-xl bg-pink-950/30 hover:bg-pink-950/50 border border-pink-500/40 px-2.5 py-1.5 text-xs font-bold text-pink-300 hover:text-white transition shadow-xs"
+                    >
+                      <span>Manage All Companies</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  ) : role === 'company_admin' || role === 'admin' ? (
+                    <Link
+                      href="/companies"
+                      onClick={() => setActiveMenu(null)}
+                      className="mt-2.5 flex items-center justify-between rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700 px-2.5 py-1.5 text-xs font-bold text-zinc-200 hover:text-white transition"
+                    >
+                      <span>Company Profile & Settings</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  ) : null}
+                </div>
               )}
-            </Tip>
+            </div>
           )}
 
-          {/* ── Dashboard Independent Theme Mode (Dark & Light Mode Icons - Terminal Style) ── */}
-          <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/90 p-1 shadow-sm">
-            <Tip label="Light Mode">
-              <button
-                type="button"
-                onClick={() => handleThemeToggle('light')}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  themeMode === 'light'
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
-                }`}
-                title="Switch to Light Mode"
-                aria-label="Dashboard Light Mode"
-              >
-                <Sun className="h-3.5 w-3.5" />
-              </button>
-            </Tip>
-
-            <Tip label="Dark Mode">
-              <button
-                type="button"
-                onClick={() => handleThemeToggle('dark')}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  themeMode === 'dark'
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
-                }`}
-                title="Switch to Dark Mode"
-                aria-label="Dashboard Dark Mode"
-              >
-                <Moon className="h-3.5 w-3.5" />
-              </button>
-            </Tip>
-          </div>
- 
-          {/* Stock Replenishment / Kitchen Out of Stock Notification Bell */}
-          {canViewStockNotifications && (
-            <ReplenishmentNotificationBell role={role} isChef={isChef} />
-          )}
-
-          {/* Shift Alerts Notification Bell - Strictly for assigned staff, not Super Admin or Company Admin */}
-          {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (
-            <ShiftAlertsBell />
-          )}
-
-          {/* Common Help (?) Icon for Keyboard Shortcuts */}
-          <Tip label="Keyboard Shortcuts (?)">
+          {/* 2. THEME MODE */}
+          <div
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('theme')}
+            onMouseLeave={handleMenuLeave}
+          >
             <button
               type="button"
-              onClick={() => useShortcutsStore.getState().openHelpModal()}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-theme transition cursor-pointer shadow-sm active:scale-95"
-              title="Keyboard Shortcuts (?)"
+              onClick={() => handleMenuClick('theme')}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all shadow-xs cursor-pointer ${
+                activeMenu === 'theme'
+                  ? 'border-pink-500 bg-pink-950/40 text-pink-300 shadow-md shadow-pink-950/30'
+                  : 'border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white'
+              }`}
+              title={`Theme: ${themeMode}`}
+              aria-label="Theme Mode Selection"
+            >
+              {themeMode === 'light' ? (
+                <Sun className="h-4 w-4 text-amber-400" />
+              ) : themeMode === 'system' ? (
+                <Laptop className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <Moon className="h-4 w-4 text-indigo-400" />
+              )}
+            </button>
+
+            {/* Hover / Click Dropdown for Theme Options */}
+            {activeMenu === 'theme' && (
+              <div
+                onMouseEnter={() => handleMenuEnter('theme')}
+                onMouseLeave={handleMenuLeave}
+                className="absolute right-0 top-full mt-1.5 w-60 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-2.5 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
+              >
+                <div className="border-b border-zinc-800/80 pb-2 mb-2 px-1">
+                  <h4 className="text-xs font-bold text-zinc-100">Theme Appearance</h4>
+                  <p className="text-[10px] text-zinc-400">Select dashboard interface mode</p>
+                </div>
+
+                <div className="space-y-1">
+                  {/* Light */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleThemeToggle('light');
+                      setActiveMenu(null);
+                    }}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                      themeMode === 'light'
+                        ? 'bg-amber-500/15 border border-amber-500/40 text-amber-300'
+                        : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-amber-400">
+                        <Sun className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold">Light Mode</p>
+                        <p className="text-[10px] text-zinc-400">Crisp daytime white</p>
+                      </div>
+                    </div>
+                    {themeMode === 'light' && <Check className="h-4 w-4 text-amber-400 shrink-0" />}
+                  </button>
+
+                  {/* Dark */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleThemeToggle('dark');
+                      setActiveMenu(null);
+                    }}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                      themeMode === 'dark'
+                        ? 'bg-indigo-500/15 border border-indigo-500/40 text-indigo-300'
+                        : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-indigo-400">
+                        <Moon className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold">Dark Mode</p>
+                        <p className="text-[10px] text-zinc-400">Deep midnight zinc</p>
+                      </div>
+                    </div>
+                    {themeMode === 'dark' && <Check className="h-4 w-4 text-indigo-400 shrink-0" />}
+                  </button>
+
+                  {/* System */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleThemeToggle('system');
+                      setActiveMenu(null);
+                    }}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                      themeMode === 'system'
+                        ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                        : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-emerald-400">
+                        <Laptop className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold">System Default</p>
+                        <p className="text-[10px] text-zinc-400">Syncs with OS theme</p>
+                      </div>
+                    </div>
+                    {themeMode === 'system' && <Check className="h-4 w-4 text-emerald-400 shrink-0" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. SMART NOTIFICATIONS (Compact Bell with Categories & Recent Hover Details) */}
+          <SmartNotificationBell />
+
+          {/* 4. HELP & SHORTCUTS */}
+          <div
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('help')}
+            onMouseLeave={handleMenuLeave}
+          >
+            <button
+              type="button"
+              onClick={() => handleMenuClick('help')}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all shadow-xs cursor-pointer ${
+                activeMenu === 'help'
+                  ? 'border-pink-500 bg-pink-950/40 text-pink-300 shadow-md shadow-pink-950/30'
+                  : 'border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white'
+              }`}
+              title="Help & Resources"
               aria-label="Help & Keyboard Shortcuts"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
-          </Tip>
 
-          {/* User Session & Avatar with Profile Menu */}
-          <div className="relative flex items-center gap-3 text-zinc-400" ref={profileMenuRef}>
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-bold flex items-center justify-end gap-1.5">
-                {isSuperAdmin ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-950/60 border border-amber-800/80 px-2.5 py-0.5 text-xs font-black text-amber-300">
-                    <Shield className="h-3.5 w-3.5 text-amber-400" />
-                    Super Admin
-                  </span>
-                ) : role === 'company_admin' ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full theme-badge px-2.5 py-0.5 text-xs font-black">
-                    Company Admin
-                  </span>
-                ) : role === 'waiter' ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 px-2.5 py-0.5 text-xs font-black shadow-sm">
-                    Waiter
-                  </span>
-                ) : role === 'delivery_staff' ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pink-950/60 border border-pink-500/40 text-pink-300 px-2.5 py-0.5 text-xs font-black shadow-sm">
-                    <Truck className="h-3.5 w-3.5 text-pink-400" />
-                    Delivery Staff
-                  </span>
-                ) : (
-                  <span className="capitalize font-bold text-zinc-200">{role || 'Loading...'}</span>
-                )}
+            {/* Hover / Click Dropdown for Help */}
+            {activeMenu === 'help' && (
+              <div
+                onMouseEnter={() => handleMenuEnter('help')}
+                onMouseLeave={handleMenuLeave}
+                className="absolute right-0 top-full mt-1.5 w-64 sm:w-72 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-2.5 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
+              >
+                <div className="border-b border-zinc-800/80 pb-2 mb-2 px-1">
+                  <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                    <HelpCircle className="h-3.5 w-3.5 text-pink-400" />
+                    Help & Resources
+                  </h4>
+                  <p className="text-[10px] text-zinc-400">Shortcuts, guides & system support</p>
+                </div>
+
+                <div className="space-y-1">
+                  {/* Keyboard Shortcuts */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      useShortcutsStore.getState().openHelpModal();
+                      setActiveMenu(null);
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-xl text-left hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-pink-400">
+                        <Keyboard className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-200">Keyboard Shortcuts</p>
+                        <p className="text-[10px] text-zinc-400">Quick terminal shortcuts</p>
+                      </div>
+                    </div>
+                    <kbd className="rounded px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 text-[10px] font-mono font-bold text-zinc-300">
+                      ?
+                    </kbd>
+                  </button>
+
+                  {/* Documentation */}
+                  <Link
+                    href="/settings"
+                    onClick={() => setActiveMenu(null)}
+                    className="w-full flex items-center justify-between p-2 rounded-xl text-left hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-cyan-400">
+                        <BookOpen className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-200">Documentation</p>
+                        <p className="text-[10px] text-zinc-400">User guide & configuration</p>
+                      </div>
+                    </div>
+                    <ExternalLink className="h-3.5 w-3.5 text-zinc-500" />
+                  </Link>
+
+                  {/* Help Center & Support */}
+                  <div className="w-full flex items-center justify-between p-2 rounded-xl bg-zinc-950/60 border border-zinc-800/70">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-emerald-400">
+                        <LifeBuoy className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-zinc-200">Help Center & Support</p>
+                        <p className="text-[10px] text-zinc-400">Vseyal POS 2.0 · Local MySQL</p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] font-mono text-emerald-400">
+                      Online
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="text-[11px] text-zinc-500 font-medium">Current Session</div>
+            )}
+          </div>
+
+          {/* 5. ROLE INDICATOR */}
+          <div
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('role')}
+            onMouseLeave={handleMenuLeave}
+          >
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleMenuClick('role')}
+              className={`flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                activeMenu === 'role'
+                  ? 'border-pink-500 bg-pink-950/40 text-pink-300 shadow-md shadow-pink-950/30'
+                  : isSuperAdmin
+                    ? 'border-amber-800/80 bg-amber-950/50 text-amber-300 hover:border-amber-600'
+                    : role === 'company_admin' || role === 'admin'
+                      ? 'border-pink-800/80 bg-pink-950/50 text-pink-300 hover:border-pink-600'
+                      : role === 'waiter'
+                        ? 'border-emerald-800/80 bg-emerald-950/50 text-emerald-300 hover:border-emerald-600'
+                        : role === 'chef'
+                          ? 'border-amber-800/80 bg-amber-950/50 text-amber-300 hover:border-amber-600'
+                          : role === 'delivery_staff'
+                            ? 'border-pink-800/80 bg-pink-950/50 text-pink-300 hover:border-pink-600'
+                            : 'border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:border-zinc-700'
+              }`}
+              title="Role & Session Details"
+              aria-label="Role & Session"
+            >
+              {isSuperAdmin ? (
+                <>
+                  <Shield className="h-3 w-3 text-amber-400 shrink-0" />
+                  <span className="text-[11px] font-black text-amber-300 tracking-wider">SUPER</span>
+                </>
+              ) : role === 'company_admin' || role === 'admin' ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-pink-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-black text-pink-300 tracking-wider">ADMIN</span>
+                </>
+              ) : role === 'manager' ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
+                  <span className="text-[11px] font-black text-blue-300 tracking-wider">MGR</span>
+                </>
+              ) : role === 'chef' ? (
+                <>
+                  <ChefHat className="h-3 w-3 text-amber-400 shrink-0" />
+                  <span className="text-[11px] font-black text-amber-300 tracking-wider">CHEF</span>
+                </>
+              ) : role === 'waiter' ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="text-[11px] font-black text-emerald-300 tracking-wider">WAITER</span>
+                </>
+              ) : role === 'delivery_staff' ? (
+                <>
+                  <Truck className="h-3 w-3 text-pink-400 shrink-0" />
+                  <span className="text-[11px] font-black text-pink-300 tracking-wider">DELIVERY</span>
+                </>
+              ) : (
+                <span className="text-[11px] font-bold text-zinc-300 uppercase">{role || 'STAFF'}</span>
+              )}
             </div>
 
-            <Tip label={`${username || 'User'} · Logout`}>
+            {/* Hover / Click Dropdown for Role & Session */}
+            {activeMenu === 'role' && (
               <div
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 transition cursor-pointer hover:bg-zinc-800 hover:border-theme shadow-sm"
-                onClick={() => setShowProfileMenu(prev => !prev)}
+                onMouseEnter={() => handleMenuEnter('role')}
+                onMouseLeave={handleMenuLeave}
+                className="absolute right-0 top-full mt-1.5 w-64 sm:w-72 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-3 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
               >
-                <UserCircle className="h-6 w-6 text-theme-accent" />
-              </div>
-            </Tip>
-
-            {/* Profile dropdown */}
-            {showProfileMenu && (
-              <div className="absolute right-0 top-12 z-50 w-48 rounded-2xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-                <div className="px-3 py-2 border-b border-zinc-800 text-xs">
-                  <p className="font-bold text-white">{username || 'User'}</p>
-                  <p className="text-zinc-400 capitalize">{role ? role.replace('_', ' ') : 'User'}</p>
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-pink-400">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-zinc-100">Role & Session</h4>
+                      <span className="text-[10px] text-zinc-400">Authorization scope</span>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-theme-accent hover:bg-theme-badge border border-transparent hover:border-theme transition cursor-pointer"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" />
-                  <span>Logout</span>
-                </button>
+
+                <div className="space-y-2 rounded-xl bg-zinc-950/70 border border-zinc-800/70 p-2.5 text-xs">
+                  <div>
+                    <span className="text-[10px] font-medium text-zinc-400 block">Full Role Title</span>
+                    <p className="font-bold text-white text-sm">
+                      {isSuperAdmin
+                        ? 'Super Administrator'
+                        : role === 'company_admin' || role === 'admin'
+                          ? 'Company Administrator'
+                          : role === 'manager'
+                            ? 'Restaurant / Store Manager'
+                            : role === 'chef'
+                              ? 'Executive Kitchen Chef'
+                              : role === 'waiter'
+                                ? 'Dining Room Waiter'
+                                : role === 'delivery_staff'
+                                  ? 'Express Delivery Staff'
+                                  : role === 'cashier'
+                                    ? 'POS Terminal Cashier'
+                                    : role || 'Store Staff'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-zinc-800/60 text-[11px]">
+                    <span className="text-zinc-400">Active User</span>
+                    <span className="font-bold text-zinc-200">{username || 'Authenticated'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-zinc-400">Session Status</span>
+                    <span className="text-emerald-400 font-medium">Verified Active Session</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-zinc-400">Store Scope</span>
+                    <span className="font-medium text-zinc-300 truncate max-w-[130px]">
+                      {activeCompany ? `${activeCompany.name}` : 'All System Databases'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 6. USER PROFILE & LOGOUT */}
+          <div
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('profile')}
+            onMouseLeave={handleMenuLeave}
+          >
+            <button
+              type="button"
+              onClick={() => handleMenuClick('profile')}
+              className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all shadow-xs cursor-pointer ${
+                activeMenu === 'profile'
+                  ? 'border-pink-500 bg-pink-950/40 shadow-md shadow-pink-950/30'
+                  : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-pink-500/60 hover:bg-zinc-800'
+              }`}
+              title="Profile & Settings"
+              aria-label="User Profile"
+            >
+              <UserCircle className="h-5 w-5 text-theme-accent" />
+            </button>
+
+            {/* Hover / Click Dropdown for Profile */}
+            {activeMenu === 'profile' && (
+              <div
+                onMouseEnter={() => handleMenuEnter('profile')}
+                onMouseLeave={handleMenuLeave}
+                className="absolute right-0 top-full mt-1.5 w-60 sm:w-64 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-2.5 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
+              >
+                {/* User Info Overview */}
+                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-950/70 border border-zinc-800/70 mb-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-pink-400 shrink-0">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-white text-xs truncate">{username || 'User'}</p>
+                    <p className="text-[10px] text-zinc-400 capitalize truncate">
+                      {role ? role.replace('_', ' ') : 'User'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  {/* Account Settings */}
+                  <Link
+                    href="/settings"
+                    onClick={() => setActiveMenu(null)}
+                    className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition"
+                  >
+                    <Settings className="h-3.5 w-3.5 text-zinc-400" />
+                    <span>Account Settings</span>
+                  </Link>
+
+                  {/* Sign Out Button */}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-pink-400 hover:text-white hover:bg-pink-950/40 border border-transparent hover:border-pink-800/60 transition cursor-pointer mt-1 pt-1.5 border-t border-zinc-800/80"
+                  >
+                    <LogOut className="h-3.5 w-3.5 shrink-0" />
+                    <span>Sign out of session</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
       {/* Top Dynamic Theme Accent Bar */}
       <div className="h-[2px] w-full bg-theme-bar opacity-80" />
     </header>
