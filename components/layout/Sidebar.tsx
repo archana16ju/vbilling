@@ -22,10 +22,11 @@ import {
   ClipboardList,
   Layers,
   BadgePercent,
-  HelpCircle
+  Megaphone,
+  BellRing,
+  ShieldAlert
 } from "lucide-react"
 import { useState, useEffect } from "react"
-import { useShortcutsStore } from "@/store/useShortcutsStore"
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -98,29 +99,36 @@ export default function Sidebar() {
     ...(role !== 'cashier'
       ? [{ name: "Companies", href: "/companies", icon: Building2, moduleKey: "companies" }]
       : []),
+    { name: "Announcements", href: "/announcements", icon: Megaphone, moduleKey: null },
+    ...(role === 'super_admin' || role === 'company_admin' || role === 'manager'
+      ? [
+          { name: "Notification Rules", href: "/notification-rules", icon: BellRing, moduleKey: "settings" },
+          { name: "Login Activity", href: "/login-activity", icon: ShieldAlert, moduleKey: null },
+        ]
+      : []),
     { name: "Settings", href: "/settings", icon: SettingsIcon, moduleKey: "settings" },
 
   ]
 
   const filteredNavItems = navItems.filter((item) => {
-    // Waiter is strictly restricted to Tables
+    // Waiter is strictly restricted to Tables and Announcements
     if (role === 'waiter') {
-      return item.href === '/tables' || item.href === '/assigned-orders';
+      return item.href === '/tables' || item.href === '/assigned-orders' || item.href === '/announcements';
     }
 
-    // Chef is strictly restricted to Kitchen
+    // Chef is strictly restricted to Kitchen and Announcements
     if (role === 'chef') {
-      return item.href === '/kitchen';
+      return item.href === '/kitchen' || item.href === '/announcements';
     }
 
-    // Cashier is restricted to Terminal
+    // Cashier is restricted to Terminal and Announcements
     if (role === 'cashier') {
-      return item.href === '/terminal';
+      return item.href === '/terminal' || item.href === '/announcements';
     }
 
-    // Delivery Staff is strictly restricted to Delivery
+    // Delivery Staff is strictly restricted to Delivery and Announcements
     if (role === 'delivery_staff') {
-      return item.href === '/delivery';
+      return item.href === '/delivery' || item.href === '/announcements';
     }
 
     // Manager manages store operations (cannot access super-admin, companies, or users)
@@ -149,31 +157,6 @@ export default function Sidebar() {
 
     return true;
   });
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/login', { method: 'DELETE' });
-    } catch { }
-    try {
-      localStorage.removeItem('tables-storage');
-      const termData = localStorage.getItem('terminal-storage');
-      if (termData) {
-        const parsed = JSON.parse(termData);
-        if (parsed?.state) {
-          parsed.state.cart = [];
-          parsed.state.selectedCustomer = null;
-          parsed.state.orderNote = '';
-          parsed.state.activeCompanyId = '';
-          localStorage.setItem('terminal-storage', JSON.stringify(parsed));
-        }
-      }
-    } catch {}
-    document.cookie = 'auth_role=; Max-Age=0; path=/;';
-    document.cookie = 'auth_id=; Max-Age=0; path=/;';
-    document.cookie = 'auth_company_id=; Max-Age=0; path=/;';
-    document.cookie = 'auth_session=; Max-Age=0; path=/;';
-    window.location.href = '/login';
-  };
 
   return (
     <aside className="fixed left-0 top-0 z-30 flex h-full w-20 flex-col bg-zinc-950 text-white border-r border-zinc-800/80 shadow-2xl">
@@ -212,53 +195,6 @@ export default function Sidebar() {
           )
         })}
       </nav>
-
-      {/* Bottom Footer with Help, Role and Logout */}
-      <div className="shrink-0 border-t border-zinc-800/80 p-2 flex flex-col items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => useShortcutsStore.getState().openHelpModal()}
-          className="w-full flex items-center justify-center gap-1.5 py-1 px-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-theme transition cursor-pointer text-[10px] font-bold shadow-xs active:scale-95"
-          title="Keyboard Shortcuts (?)"
-        >
-          <HelpCircle className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Help (?)</span>
-        </button>
-
-        <div
-          className="w-full text-center py-1 px-1 rounded-lg bg-zinc-900/90 border border-zinc-800/90 text-[9px] font-bold tracking-wider uppercase text-zinc-400 truncate cursor-default"
-          title={`Role: ${role === 'super_admin'
-            ? 'Super Admin'
-            : role === 'company_admin'
-              ? 'Company Admin'
-              : role || 'Loading...'
-            }`}
-        >
-          {role === 'super_admin' ? 'Super' : role === 'company_admin' ? 'Admin' : role === 'delivery_staff' ? 'Delivery' : role || 'User'}
-        </div>
-        <button
-          onClick={handleLogout}
-          title="Logout"
-          className="sidebar-logout-btn group"
-        >
-          <svg
-            className="sidebar-logout-icon h-3.5 w-3.5 shrink-0 transition-transform duration-200"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            {/* User avatar head */}
-            <circle cx="8.5" cy="6.5" r="3.5" />
-            {/* User avatar torso */}
-            <path d="M2.5 19c0-3.3 2.7-6 6-6s6 2.7 6 6H2.5z" />
-            {/* Right-pointing triangle arrow */}
-            <polygon points="16,8.5 21.5,12 16,15.5" />
-          </svg>
-          <span className="sidebar-logout-text text-[11px] font-semibold tracking-tight leading-none">
-            Logout
-          </span>
-        </button>
-      </div>
     </aside>
   )
 }
