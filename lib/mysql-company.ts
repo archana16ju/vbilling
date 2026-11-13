@@ -475,18 +475,28 @@ export async function createCompany(data: {
   const pool = getMysqlPool();
 
   // Generate next sequential company ID in the format COMP-0001, COMP-0002, COMP-0003...
-  const [allCompanies] = await pool.query<RowDataPacket[]>("SELECT id FROM companies");
-  let maxSeq = 0;
+  let allCompanies: RowDataPacket[] = [];
+  try {
+    const masterPool = getMasterPool();
+    const [mComps] = await masterPool.query<RowDataPacket[]>("SELECT id FROM master_companies");
+    allCompanies = mComps || [];
+  } catch {
+    const [localComps] = await pool.query<RowDataPacket[]>("SELECT id FROM companies");
+    allCompanies = localComps || [];
+  }
+
+  const usedSeqs = new Set<number>();
   for (const c of allCompanies) {
     const match = (c.id || "").match(/^COMP-(\d+)$/i);
     if (match) {
       const num = parseInt(match[1], 10);
-      if (!isNaN(num) && num > maxSeq) {
-        maxSeq = num;
-      }
+      if (!isNaN(num)) usedSeqs.add(num);
     }
   }
-  const nextSeq = maxSeq + 1;
+  let nextSeq = 1;
+  while (usedSeqs.has(nextSeq)) {
+    nextSeq++;
+  }
   const newId = `COMP-${String(nextSeq).padStart(4, "0")}`;
 
   // Check unique code
@@ -625,8 +635,21 @@ export async function deleteCompany(id: string): Promise<boolean> {
     throw new Error("Access denied: Only Super Admin privileges can delete a company.");
   }
 
+  // 1. Identify target company's database before removing records
+  let targetDbName: string | null = null;
+  try {
+    const masterPool = getMasterPool();
+    const [mRows] = await masterPool.query<RowDataPacket[]>(
+      "SELECT database_name FROM master_companies WHERE id = ?",
+      [id]
+    );
+    if (mRows && mRows.length > 0) {
+      targetDbName = mRows[0].database_name;
+    }
+  } catch {}
+
   const pool = getMysqlPool();
-  return await withMySqlTransaction(async (conn) => {
+  const deleted = await withMySqlTransaction(async (conn) => {
     await conn.query("DELETE FROM company_permissions WHERE company_id = ?", [id]);
     await conn.query("DELETE FROM user_companies WHERE company_id = ?", [id]);
     await conn.query("UPDATE users SET company_id = NULL WHERE company_id = ?", [id]);
@@ -646,6 +669,26 @@ export async function deleteCompany(id: string): Promise<boolean> {
     } catch {}
     return result.affectedRows > 0;
   });
+
+  // 2. Drop the physical tenant database if it exists
+  if (targetDbName) {
+    try {
+      const { deprovisionCompanyDatabase } = await import("./company-provisioning");
+      await deprovisionCompanyDatabase(targetDbName);
+    } catch (deprovErr) {
+      console.warn(`Failed to deprovision database '${targetDbName}':`, deprovErr);
+    }
+  }
+
+  // 3. Automatically rearrange remaining active companies to maintain sequential codes (COMP-0001, COMP-0002, ...)
+  try {
+    const { resequenceCompanies } = await import("./company-provisioning");
+    await resequenceCompanies();
+  } catch (resErr) {
+    console.warn("Failed to resequence companies after deletion:", resErr);
+  }
+
+  return deleted;
 }
 
 /**

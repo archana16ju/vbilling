@@ -341,3 +341,157 @@ export async function provisionCompanyDatabase(
     );
   }
 }
+
+/**
+ * Safely drops a company database and evicts any active connection pool.
+ */
+export async function deprovisionCompanyDatabase(databaseName: string): Promise<boolean> {
+  if (!databaseName || !isValidDatabaseName(databaseName)) {
+    return false;
+  }
+
+  // Never drop system or master databases
+  const protectedDbs = [
+    "information_schema",
+    "mysql",
+    "performance_schema",
+    "sys",
+    "billing_master_db",
+    "local_billing_db",
+  ];
+  if (protectedDbs.includes(databaseName.toLowerCase())) {
+    throw new Error(`Safety violation: Refusing to drop protected database '${databaseName}'.`);
+  }
+
+  // 1. Evict and close any active connection pool in memory
+  try {
+    await closeCompanyPool(databaseName, true);
+  } catch (err) {
+    console.warn(`Warning closing pool for '${databaseName}':`, err);
+  }
+
+  // 2. Drop the physical database
+  const serverConn = await getDirectServerConnection();
+  try {
+    await serverConn.query(`DROP DATABASE IF EXISTS \`${databaseName}\``);
+    return true;
+  } finally {
+    await serverConn.end();
+  }
+}
+
+/**
+ * Rearranges remaining active companies to maintain sequential codes (COMP-0001, COMP-0002, ...)
+ * and synchronized database names (c001_<name>_db, c002_<name>_db, ...) without any numbering gaps.
+ */
+export async function resequenceCompanies(): Promise<void> {
+  await ensureMasterDbInitialized();
+  const masterPool = getMasterPool();
+
+  // 1. Fetch all active companies ordered by existing creation date or current ID
+  const [activeCompanies]: any = await masterPool.query(
+    "SELECT * FROM master_companies ORDER BY created_at ASC, id ASC"
+  );
+
+  if (!activeCompanies || activeCompanies.length === 0) return;
+
+  const serverConn = await getDirectServerConnection();
+
+  try {
+    for (let i = 0; i < activeCompanies.length; i++) {
+      const comp = activeCompanies[i];
+      const seq = i + 1;
+      const expectedId = `COMP-${String(seq).padStart(4, "0")}`;
+      const expectedDb = generateCompanyDatabaseName(expectedId, comp.name);
+      const currentId = comp.id;
+      const currentDb = comp.database_name;
+
+      if (currentId === expectedId && currentDb === expectedDb) {
+        continue; // Already aligned
+      }
+
+      console.log(`[Resequence] Moving Company [${currentId} -> ${expectedId}] DB [${currentDb} -> ${expectedDb}]`);
+
+      // A. Rename database if database name needs to change
+      if (currentDb && currentDb !== expectedDb) {
+        // Check if currentDb exists on MySQL
+        const [dbCheck]: any = await serverConn.query(
+          "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?",
+          [currentDb]
+        );
+
+        if (dbCheck && dbCheck.length > 0) {
+          // Close in-memory pool for old database
+          await closeCompanyPool(currentDb, true);
+
+          // Create new database
+          await serverConn.query(
+            `CREATE DATABASE IF NOT EXISTS \`${expectedDb}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`
+          );
+
+          // Move all tables atomically
+          const [tables]: any = await serverConn.query(`SHOW TABLES IN \`${currentDb}\``);
+          for (const row of tables) {
+            const tbl = Object.values(row)[0] as string;
+            await serverConn.query(`RENAME TABLE \`${currentDb}\`.\`${tbl}\` TO \`${expectedDb}\`.\`${tbl}\``);
+          }
+
+          // Drop old database
+          await serverConn.query(`DROP DATABASE IF EXISTS \`${currentDb}\``);
+
+          // Update company_id in tenant database
+          try {
+            await serverConn.query(
+              `UPDATE \`${expectedDb}\`.companies SET id = ? WHERE id = ?`,
+              [expectedId, currentId]
+            );
+            await serverConn.query(
+              `UPDATE \`${expectedDb}\`.users SET company_id = ? WHERE company_id = ?`,
+              [expectedId, currentId]
+            );
+            await serverConn.query(
+              `UPDATE \`${expectedDb}\`.products SET company_id = ? WHERE company_id = ?`,
+              [expectedId, currentId]
+            );
+            await serverConn.query(
+              `UPDATE \`${expectedDb}\`.categories SET company_id = ? WHERE company_id = ?`,
+              [expectedId, currentId]
+            );
+          } catch (tErr) {
+            console.warn(`Tenant tables internal update warning in ${expectedDb}:`, tErr);
+          }
+        }
+      }
+
+      // B. Update master_companies table (using temp ID to avoid unique key collision if needed)
+      const tempId = `TEMP-${Date.now()}-${seq}`;
+      await masterPool.query(
+        "UPDATE master_companies SET id = ?, database_name = ? WHERE id = ?",
+        [tempId, expectedDb, currentId]
+      );
+      await masterPool.query(
+        "UPDATE master_companies SET id = ? WHERE id = ?",
+        [expectedId, tempId]
+      );
+
+      // C. Update user_company_routing
+      await masterPool.query(
+        "UPDATE user_company_routing SET company_id = ?, database_name = ? WHERE company_id = ?",
+        [expectedId, expectedDb, currentId]
+      );
+
+      // D. Update local_billing_db tables for backwards compatibility
+      try {
+        const pool = getMysqlPool();
+        await pool.query("UPDATE companies SET id = ? WHERE id = ?", [expectedId, currentId]);
+        await pool.query("UPDATE users SET company_id = ? WHERE company_id = ?", [expectedId, currentId]);
+        await pool.query("UPDATE user_companies SET company_id = ? WHERE company_id = ?", [expectedId, currentId]);
+        await pool.query("UPDATE company_permissions SET id = ?, company_id = ? WHERE company_id = ?", [`cp_${expectedId}`, expectedId, currentId]);
+      } catch (localErr) {
+        console.warn("Local billing db sync warning on resequence:", localErr);
+      }
+    }
+  } finally {
+    await serverConn.end();
+  }
+}
