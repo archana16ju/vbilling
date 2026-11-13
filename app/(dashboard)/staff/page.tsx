@@ -1097,11 +1097,13 @@ export default function StaffPage() {
                   <select
                     value={newStaffRole}
                     onChange={(e) => setNewStaffRole(e.target.value)}
+                    className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white outline-none focus:border-theme cursor-pointer"
                   >
-                    <option value="Manager">Manager</option>
-                    <option value="Cashier">Cashier</option>
-                    <option value="Chef">Chef</option>
-                    <option value="Waiter">Waiter</option>
+                    <option value="Manager" className="bg-zinc-900 text-white">Manager</option>
+                    <option value="Cashier" className="bg-zinc-900 text-white">Cashier</option>
+                    <option value="Chef" className="bg-zinc-900 text-white">Chef</option>
+                    <option value="Waiter" className="bg-zinc-900 text-white">Waiter</option>
+                    <option value="Delivery Staff" className="bg-zinc-900 text-white">Delivery Staff</option>
                   </select>
                 </div>
 
@@ -1156,9 +1158,9 @@ export default function StaffPage() {
                     onChange={(e) => setNewStaffPayType(e.target.value as any)}
                     className="w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-2 text-white outline-none focus:border-theme cursor-pointer"
                   >
-                    <option value="Monthly">Monthly</option>
-                    <option value="Daily">Daily</option>
-                    <option value="Hourly">Hourly</option>
+                    <option value="Monthly" className="bg-zinc-900 text-white">Monthly</option>
+                    <option value="Daily" className="bg-zinc-900 text-white">Daily</option>
+                    <option value="Hourly" className="bg-zinc-900 text-white">Hourly</option>
                   </select>
                 </div>
 
