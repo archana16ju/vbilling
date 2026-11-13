@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool } from "./mysql";
+import { getCompanyPool, isValidDatabaseName, closeCompanyPool, getMasterPool, getMysqlPool } from "./mysql";
 import {
   ensureMasterDbInitialized,
   getMasterCompanyById,
