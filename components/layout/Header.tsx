@@ -220,6 +220,9 @@ export default function Header() {
   };
 
   const isSuperAdmin = role === 'super_admin';
+  const isStockAdmin = isSuperAdmin || role === 'company_admin' || role === 'admin' || role === 'manager';
+  const isChef = role === 'chef';
+  const canViewStockNotifications = isStockAdmin || isChef;
 
   return (
     <header className="sticky top-0 z-20 flex h-16 flex-col justify-between bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800 px-6 sm:px-8">
@@ -311,8 +314,10 @@ export default function Header() {
             </Tip>
           </div>
  
-          {/* Stock Replenishment Notification Bell */}
-          <ReplenishmentNotificationBell />
+          {/* Stock Replenishment / Kitchen Out of Stock Notification Bell */}
+          {canViewStockNotifications && (
+            <ReplenishmentNotificationBell role={role} isChef={isChef} />
+          )}
 
           {/* Shift Alerts Notification Bell - Strictly for assigned staff, not Super Admin or Company Admin */}
           {!isSuperAdmin && role !== 'company_admin' && role !== 'admin' && (

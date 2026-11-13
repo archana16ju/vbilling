@@ -1,11 +1,37 @@
 import { NextResponse } from 'next/server';
 import { isLocalMySqlMode } from '@/lib/mysql';
-import { createSession } from '@/lib/auth-session';
+import { createSession, getSession } from '@/lib/auth-session';
 import { authenticateUser } from '@/lib/auth-login';
+import { recordLoginActivity, updateLoginSessionStatus } from '@/lib/mysql-master';
+import crypto from 'crypto';
+
+function parseDeviceInfo(userAgent: string | null) {
+  const ua = userAgent || '';
+  let deviceType = 'Browser';
+  if (/Electron/i.test(ua) || /vseyal/i.test(ua)) {
+    deviceType = 'Electron Desktop Application';
+  } else if (/Android/i.test(ua)) {
+    deviceType = 'Android';
+  } else if (/Windows/i.test(ua)) {
+    deviceType = 'Windows Desktop';
+  }
+
+  let browserInfo = 'Standard Browser';
+  if (/Edg\//i.test(ua)) browserInfo = 'Microsoft Edge';
+  else if (/Chrome\//i.test(ua)) browserInfo = 'Google Chrome';
+  else if (/Firefox\//i.test(ua)) browserInfo = 'Mozilla Firefox';
+  else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browserInfo = 'Apple Safari';
+  else if (/Electron/i.test(ua)) browserInfo = 'Electron Client';
+
+  return { deviceType, browserInfo };
+}
 
 export async function POST(request: Request) {
   try {
     const { username, password, companyCode } = await request.json();
+    const userAgent = request.headers.get('user-agent');
+    const { deviceType, browserInfo } = parseDeviceInfo(userAgent);
+    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1';
 
     const authResult = await authenticateUser({
       username,
@@ -14,6 +40,23 @@ export async function POST(request: Request) {
     });
 
     if (!authResult.success || !authResult.user) {
+      // Record failed login attempt
+      try {
+        await recordLoginActivity({
+          sessionId: crypto.randomUUID(),
+          username: (username || '').trim() || 'unknown',
+          companyId: null,
+          loginStatus: 'failed',
+          sessionStatus: 'expired',
+          failureReason: authResult.error || 'Invalid credentials',
+          deviceType,
+          browserInfo,
+          ipAddress,
+        });
+      } catch (logErr) {
+        console.warn('Failed to log login failure:', logErr);
+      }
+
       const status = authResult.ambiguous ? 409 : 401;
       return NextResponse.json(
         {
@@ -27,9 +70,30 @@ export async function POST(request: Request) {
     }
 
     const { user, redirectUrl } = authResult;
+    const sessionId = crypto.randomUUID();
+
+    // Record successful login in master activity log
+    try {
+      await recordLoginActivity({
+        sessionId,
+        userId: user.id,
+        username: user.username,
+        employeeName: user.name || user.username,
+        companyId: user.companyId || null,
+        companyName: user.companyName || null,
+        loginStatus: 'success',
+        sessionStatus: 'active',
+        deviceType,
+        browserInfo,
+        ipAddress,
+      });
+    } catch (logErr) {
+      console.warn('Failed to log login success:', logErr);
+    }
 
     // Establish secure, signed httpOnly session with server-resolved database context
     const token = await createSession({
+      sessionId,
       userId: user.id,
       username: user.username,
       role: user.role,
@@ -63,6 +127,15 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
+    const session = await getSession();
+    if (session?.sessionId) {
+      try {
+        await updateLoginSessionStatus(session.sessionId, 'logged_out');
+      } catch (logErr) {
+        console.warn('Failed to update logout status:', logErr);
+      }
+    }
+
     const { destroySession } = await import('@/lib/auth-session');
     await destroySession();
     const res = NextResponse.json({ success: true, message: 'Logged out successfully' });

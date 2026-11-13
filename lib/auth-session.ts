@@ -2,9 +2,10 @@ import { cookies } from 'next/headers';
 import crypto from 'crypto';
 import { UserRole } from './users';
 import { isLocalMySqlMode, getMysqlPool, getMasterPool, getCompanyPool } from './mysql';
-import { ensureMasterDbInitialized } from './mysql-master';
+import { ensureMasterDbInitialized, isSessionTerminated, updateSessionHeartbeat } from './mysql-master';
 
 export interface SessionData {
+  sessionId?: string;
   userId: string;
   username: string;
   role: UserRole;
@@ -63,6 +64,7 @@ function verifyPayload(token: string): any | null {
  * Creates a secure, signed, httpOnly session cookie.
  */
 export async function createSession(data: {
+  sessionId?: string;
   userId: string;
   username: string;
   role: UserRole;
@@ -71,6 +73,7 @@ export async function createSession(data: {
   databaseName?: string;
 }): Promise<string> {
   const sessionData: SessionData = {
+    sessionId: data.sessionId || crypto.randomUUID(),
     userId: data.userId,
     username: data.username,
     role: data.role,
@@ -165,6 +168,7 @@ export async function resolveSessionContext(
   }
 
   const payload: SessionData = {
+    sessionId: rawPayload.sessionId,
     userId: rawPayload.userId,
     username: rawPayload.username,
     role: rawPayload.role,
@@ -173,6 +177,16 @@ export async function resolveSessionContext(
     databaseName: undefined, // Always resolve server-side! Never trust payload.databaseName directly.
     createdAt: rawPayload.createdAt || Date.now(),
   };
+
+  // Check if session has been terminated by administrator
+  if (isLocalMySqlMode() && payload.sessionId) {
+    const terminated = await isSessionTerminated(payload.sessionId);
+    if (terminated) {
+      return null;
+    }
+    // Update last activity asynchronously
+    updateSessionHeartbeat(payload.sessionId).catch(() => {});
+  }
 
   // Normalize legacy 'admin' to 'company_admin' or 'super_admin'
   if ((payload.role as string) === 'admin') {

@@ -202,6 +202,35 @@ export async function ensureMasterDbInitialized(): Promise<void> {
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
     `);
+
+    // Table: login_activities (Master Authentication & Session Monitoring)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_activities (
+        id VARCHAR(64) PRIMARY KEY,
+        session_id VARCHAR(64) NOT NULL,
+        user_id VARCHAR(64) NULL,
+        username VARCHAR(255) NOT NULL,
+        employee_name VARCHAR(255) NULL,
+        company_id VARCHAR(64) NULL,
+        company_name VARCHAR(255) NULL,
+        login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        logout_at TIMESTAMP NULL,
+        last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        session_status ENUM('active', 'logged_out', 'terminated', 'expired') DEFAULT 'active',
+        login_status ENUM('success', 'failed') DEFAULT 'success',
+        failure_reason VARCHAR(255) NULL,
+        device_type VARCHAR(50) NOT NULL DEFAULT 'Browser',
+        browser_info VARCHAR(255) NULL,
+        ip_address VARCHAR(45) NULL,
+        terminated_by VARCHAR(64) NULL,
+        terminated_at TIMESTAMP NULL,
+        INDEX idx_la_user (user_id),
+        INDEX idx_la_company (company_id),
+        INDEX idx_la_session (session_id),
+        INDEX idx_la_status (session_status),
+        INDEX idx_la_login_at (login_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    `);
   })().catch((err) => {
     masterInitPromise = null;
     throw err;
@@ -705,4 +734,201 @@ export async function setMasterSetting(
        updated_at = NOW()`,
     [key, value, description || null]
   );
+}
+
+export interface LoginActivityEntry {
+  id?: string;
+  sessionId: string;
+  userId?: string | null;
+  username: string;
+  employeeName?: string | null;
+  companyId?: string | null;
+  companyName?: string | null;
+  sessionStatus?: 'active' | 'logged_out' | 'terminated' | 'expired';
+  loginStatus?: 'success' | 'failed';
+  failureReason?: string | null;
+  deviceType?: string;
+  browserInfo?: string | null;
+  ipAddress?: string | null;
+}
+
+/**
+ * Records a login attempt (successful or failed) in the master database.
+ */
+export async function recordLoginActivity(entry: LoginActivityEntry): Promise<string> {
+  if (!isLocalMySqlMode()) return entry.sessionId;
+  await ensureMasterDbInitialized();
+  const pool = getMasterPool();
+
+  const id = entry.id || `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  await pool.query(
+    `INSERT INTO login_activities (
+      id, session_id, user_id, username, employee_name, company_id, company_name,
+      session_status, login_status, failure_reason, device_type, browser_info, ip_address, login_at, last_activity_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+    [
+      id,
+      entry.sessionId,
+      entry.userId || null,
+      entry.username,
+      entry.employeeName || null,
+      entry.companyId || null,
+      entry.companyName || null,
+      entry.sessionStatus || (entry.loginStatus === 'failed' ? 'expired' : 'active'),
+      entry.loginStatus || 'success',
+      entry.failureReason || null,
+      entry.deviceType || 'Browser',
+      entry.browserInfo || null,
+      entry.ipAddress || '127.0.0.1',
+    ]
+  );
+
+  return id;
+}
+
+/**
+ * Updates session status (logged_out or terminated) in master database.
+ */
+export async function updateLoginSessionStatus(
+  sessionId: string,
+  status: 'active' | 'logged_out' | 'terminated' | 'expired',
+  terminatedBy?: string
+): Promise<boolean> {
+  if (!isLocalMySqlMode() || !sessionId) return false;
+  await ensureMasterDbInitialized();
+  const pool = getMasterPool();
+
+  if (status === 'terminated') {
+    await pool.query(
+      `UPDATE login_activities 
+       SET session_status = 'terminated', terminated_by = ?, terminated_at = NOW(), last_activity_at = NOW()
+       WHERE session_id = ?`,
+      [terminatedBy || 'admin', sessionId]
+    );
+  } else if (status === 'logged_out') {
+    await pool.query(
+      `UPDATE login_activities 
+       SET session_status = 'logged_out', logout_at = NOW(), last_activity_at = NOW()
+       WHERE session_id = ? AND session_status = 'active'`,
+      [sessionId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE login_activities 
+       SET session_status = ?, last_activity_at = NOW()
+       WHERE session_id = ?`,
+      [status, sessionId]
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Checks if a session has been terminated by an administrator.
+ */
+export async function isSessionTerminated(sessionId: string): Promise<boolean> {
+  if (!isLocalMySqlMode() || !sessionId) return false;
+  try {
+    await ensureMasterDbInitialized();
+    const pool = getMasterPool();
+
+    const [rows]: any = await pool.query(
+      `SELECT session_status FROM login_activities WHERE session_id = ? ORDER BY login_at DESC LIMIT 1`,
+      [sessionId]
+    );
+
+    if (rows && rows.length > 0) {
+      return rows[0].session_status === 'terminated' || rows[0].session_status === 'logged_out';
+    }
+  } catch (err: any) {
+    console.warn('isSessionTerminated check notice:', err.message);
+  }
+  return false;
+}
+
+/**
+ * Updates the last activity time for an active session.
+ */
+export async function updateSessionHeartbeat(sessionId: string): Promise<void> {
+  if (!isLocalMySqlMode() || !sessionId) return;
+  try {
+    const pool = getMasterPool();
+    await pool.query(
+      `UPDATE login_activities SET last_activity_at = NOW() WHERE session_id = ? AND session_status = 'active'`,
+      [sessionId]
+    );
+  } catch {}
+}
+
+/**
+ * Queries login activities with multi-tenant filtering.
+ */
+export async function getLoginActivities(filters: {
+  companyId?: string | null;
+  username?: string;
+  deviceType?: string;
+  sessionStatus?: string;
+  loginStatus?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}): Promise<any[]> {
+  if (!isLocalMySqlMode()) return [];
+  await ensureMasterDbInitialized();
+  const pool = getMasterPool();
+
+  let query = `
+    SELECT 
+      id, session_id as sessionId, user_id as userId, username, employee_name as employeeName,
+      company_id as companyId, company_name as companyName, login_at as loginAt, logout_at as logoutAt,
+      last_activity_at as lastActivityAt, session_status as sessionStatus, login_status as loginStatus,
+      failure_reason as failureReason, device_type as deviceType, browser_info as browserInfo,
+      ip_address as ipAddress, terminated_by as terminatedBy, terminated_at as terminatedAt
+    FROM login_activities
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+
+  if (filters.companyId && filters.companyId !== 'all') {
+    query += ` AND company_id = ?`;
+    params.push(filters.companyId);
+  }
+
+  if (filters.username) {
+    query += ` AND (LOWER(username) LIKE ? OR LOWER(employee_name) LIKE ?)`;
+    const term = `%${filters.username.toLowerCase()}%`;
+    params.push(term, term);
+  }
+
+  if (filters.deviceType && filters.deviceType !== 'all') {
+    query += ` AND device_type = ?`;
+    params.push(filters.deviceType);
+  }
+
+  if (filters.sessionStatus && filters.sessionStatus !== 'all') {
+    query += ` AND session_status = ?`;
+    params.push(filters.sessionStatus);
+  }
+
+  if (filters.loginStatus && filters.loginStatus !== 'all') {
+    query += ` AND login_status = ?`;
+    params.push(filters.loginStatus);
+  }
+
+  if (filters.startDate) {
+    query += ` AND login_at >= ?`;
+    params.push(filters.startDate);
+  }
+
+  if (filters.endDate) {
+    query += ` AND login_at <= ?`;
+    params.push(filters.endDate);
+  }
+
+  query += ` ORDER BY login_at DESC LIMIT ?`;
+  params.push(filters.limit || 200);
+
+  const [rows]: any = await pool.query(query, params);
+  return rows;
 }

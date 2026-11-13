@@ -15,6 +15,7 @@ export interface AuthResult {
   user?: {
     id: string;
     username: string;
+    name?: string;
     role: UserRole;
     companyId?: string;
     companyName?: string;
@@ -129,6 +130,7 @@ export async function authenticateUser(credentials: AuthCredentials): Promise<Au
           user: {
             id: superUser.id,
             username: superUser.username,
+            name: superUser.name,
             role: 'super_admin',
             companyId: activeCompanyId,
             companyName: activeCompanyName,
@@ -213,6 +215,7 @@ export async function authenticateUser(credentials: AuthCredentials): Promise<Au
             user: {
               id: tenantUser.id,
               username: tenantUser.username,
+              name: tenantUser.name,
               role,
               companyId: route.companyId,
               companyName,
@@ -296,6 +299,7 @@ export async function authenticateUser(credentials: AuthCredentials): Promise<Au
         user: {
           id: existingUser.id,
           username: existingUser.username,
+          name: existingUser.name,
           role,
           companyId,
           companyName,

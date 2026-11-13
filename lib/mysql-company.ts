@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import { getMysqlPool, withMySqlTransaction, isLocalMySqlMode, getMasterPool, getCompanyPool } from "./mysql";
 import { ensureLocalMySqlInitialized } from "./mysql-init";
 import { ensureMasterDbInitialized } from "./mysql-master";
+import { ensureCompanyTablesExist } from "./company-schema";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 import { getSession, SessionData } from "./auth-session";
 
@@ -290,10 +291,13 @@ export async function getAuthorizedCompanyPool(
   const company = await getAuthorizedCompanyContext(explicitSession);
   if (company.databaseName) {
     const pool = getCompanyPool(company.databaseName);
+    await ensureCompanyTablesExist(pool, company.databaseName);
     return { pool, company };
   }
   // Fallback to legacy single database pool if databaseName is not defined
-  return { pool: getMysqlPool(), company };
+  const pool = getMysqlPool();
+  await ensureCompanyTablesExist(pool, "local_billing_db");
+  return { pool, company };
 }
 
 /**
@@ -321,12 +325,14 @@ export async function resolveCompanyPoolAndContext(
   if (rows && rows.length > 0) {
     const company = mapRowToCompany(rows[0]);
     const pool = company.databaseName ? getCompanyPool(company.databaseName) : getMysqlPool();
+    await ensureCompanyTablesExist(pool, company.databaseName);
     return { pool, company };
   }
 
   // Fallback to legacy local_billing_db
   await ensureLocalMySqlInitialized();
   const legacyPool = getMysqlPool();
+  await ensureCompanyTablesExist(legacyPool, "local_billing_db");
   const [legacyRows] = await legacyPool.query<RowDataPacket[]>(
     'SELECT * FROM companies WHERE id = ? AND is_active = 1 LIMIT 1',
     [explicitCompanyId]

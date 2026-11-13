@@ -46,7 +46,12 @@ export const ORDERED_COMPANY_TABLES: string[] = [
   "whatsapp_settings",
   "audit_logs",
   "taxes",
-  "charges"
+  "charges",
+  "announcements",
+  "announcement_reads",
+  "notification_rules",
+  "app_notifications",
+  "duplicate_warnings"
 ];
 
 export const COMPANY_TABLE_SCHEMAS: Record<string, string> = {
@@ -110,4 +115,42 @@ export const COMPANY_TABLE_SCHEMAS: Record<string, string> = {
   "audit_logs": "CREATE TABLE IF NOT EXISTS `audit_logs` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) DEFAULT NULL,\n  `branch_id` varchar(64) DEFAULT NULL,\n  `user_id` varchar(64) DEFAULT NULL,\n  `terminal_id` varchar(64) DEFAULT NULL,\n  `action` varchar(50) NOT NULL,\n  `entity_type` varchar(50) NOT NULL,\n  `entity_id` varchar(64) DEFAULT NULL,\n  `details` json DEFAULT NULL,\n  `ip_address` varchar(45) DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_audit_company` (`company_id`),\n  KEY `idx_audit_user` (`user_id`),\n  KEY `idx_audit_created` (`created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "taxes": "CREATE TABLE IF NOT EXISTS `taxes` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `rate` decimal(5,2) NOT NULL DEFAULT '2.50',\n  `applies_to` varchar(100) DEFAULT 'Every bill',\n  `is_active` tinyint(1) DEFAULT '1',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_taxes_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "charges": "CREATE TABLE IF NOT EXISTS `charges` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `type` varchar(20) DEFAULT 'percentage',\n  `value` decimal(10,2) NOT NULL DEFAULT '5.00',\n  `applies_to` varchar(255) DEFAULT 'Dine In',\n  `is_active` tinyint(1) DEFAULT '1',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_charges_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "announcements": "CREATE TABLE IF NOT EXISTS `announcements` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `title` varchar(255) NOT NULL,\n  `description` longtext NOT NULL,\n  `image_url` varchar(512) DEFAULT NULL,\n  `priority` enum('normal','important','urgent') NOT NULL DEFAULT 'normal',\n  `target_audience_type` enum('everyone','roles','individuals') NOT NULL DEFAULT 'everyone',\n  `target_roles` json DEFAULT NULL,\n  `target_user_ids` json DEFAULT NULL,\n  `publish_at` datetime NOT NULL,\n  `expires_at` datetime DEFAULT NULL,\n  `is_active` tinyint(1) NOT NULL DEFAULT '1',\n  `created_by` varchar(64) NOT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_ann_company` (`company_id`),\n  KEY `idx_ann_active_dates` (`company_id`,`is_active`,`publish_at`,`expires_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "announcement_reads": "CREATE TABLE IF NOT EXISTS `announcement_reads` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `announcement_id` varchar(64) NOT NULL,\n  `user_id` varchar(64) NOT NULL,\n  `read_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_announcement_user` (`announcement_id`,`user_id`),\n  KEY `idx_ar_company` (`company_id`),\n  KEY `idx_ar_user` (`company_id`,`user_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "notification_rules": "CREATE TABLE IF NOT EXISTS `notification_rules` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `event_type` varchar(64) NOT NULL,\n  `is_enabled` tinyint(1) NOT NULL DEFAULT '1',\n  `roles` json NOT NULL,\n  `user_ids` json DEFAULT NULL,\n  `priority` enum('normal','important','urgent') NOT NULL DEFAULT 'normal',\n  `channels` json NOT NULL,\n  `quiet_hours_enabled` tinyint(1) NOT NULL DEFAULT '0',\n  `quiet_hours_start` time DEFAULT NULL,\n  `quiet_hours_end` time DEFAULT NULL,\n  `threshold_value` decimal(12,2) DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_nr_company` (`company_id`),\n  KEY `idx_nr_event` (`company_id`,`event_type`,`is_enabled`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "app_notifications": "CREATE TABLE IF NOT EXISTS `app_notifications` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `event_type` varchar(64) NOT NULL,\n  `title` varchar(255) NOT NULL,\n  `message` text NOT NULL,\n  `priority` enum('normal','important','urgent') NOT NULL DEFAULT 'normal',\n  `entity_type` varchar(64) DEFAULT NULL,\n  `entity_id` varchar(64) DEFAULT NULL,\n  `target_roles` json DEFAULT NULL,\n  `target_user_id` varchar(64) DEFAULT NULL,\n  `action_url` varchar(255) DEFAULT NULL,\n  `dedup_key` varchar(255) DEFAULT NULL,\n  `is_read` tinyint(1) NOT NULL DEFAULT '0',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_an_company` (`company_id`),\n  KEY `idx_an_read` (`company_id`,`is_read`),\n  KEY `idx_an_dedup` (`company_id`,`dedup_key`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "duplicate_warnings": "CREATE TABLE IF NOT EXISTS `duplicate_warnings` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `branch_id` varchar(64) DEFAULT NULL,\n  `entity_type` enum('product','customer','invoice') NOT NULL,\n  `field_name` varchar(64) NOT NULL,\n  `duplicate_value` varchar(255) NOT NULL,\n  `record_id` varchar(64) DEFAULT NULL,\n  `existing_record_id` varchar(64) NOT NULL,\n  `reason` text NOT NULL,\n  `status` enum('unresolved','dismissed','resolved') NOT NULL DEFAULT 'unresolved',\n  `resolved_by` varchar(64) DEFAULT NULL,\n  `resolved_action` varchar(50) DEFAULT NULL,\n  `resolution_notes` text DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `resolved_at` timestamp NULL DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_dw_company` (`company_id`),\n  KEY `idx_dw_status` (`company_id`,`status`),\n  KEY `idx_dw_val` (`company_id`,`entity_type`,`field_name`,`duplicate_value`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
 };
+
+const ensuredCompanyDatabases = new Set<string>();
+
+/**
+ * Ensures that all company tables (including newly added tables) exist in the target pool.
+ * Runs once per company database in-memory to keep execution blazing fast.
+ */
+export async function ensureCompanyTablesExist(pool: any, databaseName?: string): Promise<void> {
+  if (databaseName && ensuredCompanyDatabases.has(databaseName)) return;
+
+  const tablesToEnsure = [
+    "announcements",
+    "announcement_reads",
+    "notification_rules",
+    "app_notifications",
+    "duplicate_warnings"
+  ];
+
+  for (const t of tablesToEnsure) {
+    const ddl = COMPANY_TABLE_SCHEMAS[t];
+    if (ddl) {
+      try {
+        await pool.query(ddl);
+      } catch (err: any) {
+        console.warn(`[Schema Warning] Table ${t} init error:`, err.message);
+      }
+    }
+  }
+
+  if (databaseName) {
+    ensuredCompanyDatabases.add(databaseName);
+  }
+}
