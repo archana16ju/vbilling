@@ -53,6 +53,19 @@ interface DuplicateWarningItem {
   createdAt: string;
 }
 
+interface AnnouncementItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string | null;
+  priority: 'normal' | 'important' | 'urgent';
+  targetAudienceType?: string;
+  publishAt?: string;
+  expiresAt?: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
 function playNotificationChime() {
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -86,6 +99,8 @@ export default function SmartNotificationBell() {
   const [actionPendingId, setActionPendingId] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [unreadAnnouncementCount, setUnreadAnnouncementCount] = useState(0);
   const [activeTab, setActiveTab] = useState<'all' | 'stock' | 'duplicates' | 'announcements'>('all');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -154,9 +169,34 @@ export default function SmartNotificationBell() {
           }
         } catch {}
       }
+
+      // 4. Fetch team announcements
+      try {
+        const annRes = await fetch('/api/announcements');
+        if (annRes.ok) {
+          const annData = await annRes.json();
+          if (annData.success && Array.isArray(annData.announcements)) {
+            setAnnouncements(annData.announcements);
+            const aCount = typeof annData.unreadCount === 'number' ? annData.unreadCount : 0;
+            setUnreadAnnouncementCount(aCount);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching announcements in bell:', err);
+      }
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
+  };
+
+  const handleMarkAnnouncementAsRead = async (annId: string) => {
+    try {
+      await fetch(`/api/announcements/${annId}/read`, { method: 'POST' });
+      setAnnouncements((prev) =>
+        prev.map((a) => (a.id === annId ? { ...a, isRead: true } : a))
+      );
+      setUnreadAnnouncementCount((c) => Math.max(0, c - 1));
+    } catch {}
   };
 
   const handleApprovePO = async (orderId: string) => {
@@ -267,13 +307,26 @@ export default function SmartNotificationBell() {
 
   const totalBadgeCount =
     unreadNotifCount +
+    unreadAnnouncementCount +
     (canSeeDuplicates ? duplicates.length : 0) +
     (canSeeStock ? pendingApprovals.length + outOfStockItems.length : 0);
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (activeTab === 'announcements') return n.eventType === 'new_announcement';
-    return true;
-  });
+  // Combine notifications and announcements for "all" tab
+  const allTimelineItems = [
+    ...notifications.map((n) => ({ ...n, itemType: 'notification' as const })),
+    ...announcements.map((a) => ({
+      id: a.id,
+      eventType: 'announcement',
+      title: a.title,
+      message: a.description,
+      priority: a.priority,
+      isRead: a.isRead,
+      createdAt: a.createdAt,
+      imageUrl: a.imageUrl,
+      actionUrl: '/announcements',
+      itemType: 'announcement' as const,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div
@@ -328,29 +381,27 @@ export default function SmartNotificationBell() {
           </div>
 
           {/* Categories Grid */}
-          <div className="grid grid-cols-2 gap-1.5 mb-2.5">
+          <div className="grid grid-cols-3 gap-1.5 mb-2.5">
             <div className="rounded-xl bg-zinc-950/70 border border-zinc-800/60 p-2">
-              <span className="text-[10px] text-zinc-400 block">System Alerts</span>
+              <span className="text-[9px] text-zinc-400 block truncate">Alerts</span>
               <span className="text-xs font-bold text-white font-mono">
-                {unreadNotifCount} unread
+                {unreadNotifCount}
               </span>
             </div>
 
-            {canSeeStock ? (
-              <div className="rounded-xl bg-zinc-950/70 border border-zinc-800/60 p-2">
-                <span className="text-[10px] text-zinc-400 block">Stock & Orders</span>
-                <span className={`text-xs font-bold font-mono ${pendingApprovals.length + outOfStockItems.length > 0 ? 'text-amber-400' : 'text-zinc-300'}`}>
-                  {pendingApprovals.length + outOfStockItems.length} alerts
-                </span>
-              </div>
-            ) : (
-              <div className="rounded-xl bg-zinc-950/70 border border-zinc-800/60 p-2">
-                <span className="text-[10px] text-zinc-400 block">Announcements</span>
-                <span className="text-xs font-bold text-white font-mono">
-                  {notifications.filter((n) => n.eventType === 'new_announcement').length} active
-                </span>
-              </div>
-            )}
+            <div className="rounded-xl bg-zinc-950/70 border border-zinc-800/60 p-2">
+              <span className="text-[9px] text-zinc-400 block truncate">Stock</span>
+              <span className={`text-xs font-bold font-mono ${pendingApprovals.length + outOfStockItems.length > 0 ? 'text-amber-400' : 'text-zinc-300'}`}>
+                {pendingApprovals.length + outOfStockItems.length}
+              </span>
+            </div>
+
+            <div className="rounded-xl bg-zinc-950/70 border border-zinc-800/60 p-2">
+              <span className="text-[9px] text-zinc-400 block truncate">News</span>
+              <span className={`text-xs font-bold font-mono ${unreadAnnouncementCount > 0 ? 'text-pink-400' : 'text-zinc-300'}`}>
+                {unreadAnnouncementCount > 0 ? `${unreadAnnouncementCount} new` : announcements.length}
+              </span>
+            </div>
           </div>
 
           {/* Recent Notification Preview */}
@@ -469,11 +520,17 @@ export default function SmartNotificationBell() {
 
             <button
               onClick={() => setActiveTab('announcements')}
-              className={`flex-1 py-1 rounded-lg transition ${
+              className={`flex-1 py-1 rounded-lg transition flex items-center justify-center gap-1 ${
                 activeTab === 'announcements' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
               }`}
             >
-              News
+              <Megaphone className="h-3 w-3" />
+              <span>Announcements</span>
+              {unreadAnnouncementCount > 0 && (
+                <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-pink-500 px-1 text-[8px] font-black text-white">
+                  {unreadAnnouncementCount}
+                </span>
+              )}
             </button>
           </div>
 
@@ -665,63 +722,145 @@ export default function SmartNotificationBell() {
                   </div>
                 ))
               )
-            ) : filteredNotifications.length === 0 ? (
+            ) : activeTab === 'announcements' ? (
+              announcements.length === 0 ? (
+                <div className="py-8 text-center text-zinc-500">
+                  <Megaphone className="h-6 w-6 text-zinc-600 mx-auto mb-1" />
+                  <p className="font-semibold text-zinc-400">No Announcements</p>
+                  <p className="text-[10px] text-zinc-600">Company broadcasts and updates will appear here</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-zinc-800/60">
+                  {announcements.map((ann) => (
+                    <div
+                      key={ann.id}
+                      className={`p-3 transition hover:bg-zinc-800/40 space-y-1.5 ${
+                        !ann.isRead ? 'bg-pink-950/20 border-l-2 border-pink-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                              ann.priority === 'urgent'
+                                ? 'border-rose-500/40 bg-rose-950/60 text-rose-300'
+                                : ann.priority === 'important'
+                                ? 'border-amber-500/40 bg-amber-950/60 text-amber-300'
+                                : 'border-blue-500/40 bg-blue-950/60 text-blue-300'
+                            }`}
+                          >
+                            {ann.priority}
+                          </span>
+                          <span className="font-bold text-white text-xs truncate max-w-[180px]">
+                            {ann.title}
+                          </span>
+                        </div>
+
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          {new Date(ann.createdAt).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-zinc-300 leading-relaxed whitespace-pre-line">
+                        {ann.description}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/40">
+                        <Link
+                          href="/announcements"
+                          onClick={() => setIsOpen(false)}
+                          className="text-[10px] font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1"
+                        >
+                          <Megaphone className="h-3 w-3" />
+                          <span>View Board</span>
+                        </Link>
+
+                        {!ann.isRead && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkAnnouncementAsRead(ann.id)}
+                            className="text-[10px] font-bold text-zinc-400 hover:text-white px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 cursor-pointer"
+                          >
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : allTimelineItems.length === 0 ? (
               <div className="py-8 text-center text-zinc-500">
                 <CheckCircle2 className="h-6 w-6 text-zinc-600 mx-auto mb-1" />
                 <p className="font-semibold text-zinc-400">No new notifications</p>
                 <p className="text-[10px] text-zinc-600">Everything is running smoothly</p>
               </div>
             ) : (
-              filteredNotifications.map((n) => (
+              allTimelineItems.map((item) => (
                 <div
-                  key={n.id}
+                  key={item.id}
                   className={`p-3 transition hover:bg-zinc-800/40 space-y-1 ${
-                    !n.isRead ? 'bg-pink-950/10' : ''
+                    !item.isRead ? 'bg-pink-950/10' : ''
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                          n.priority === 'urgent'
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                          item.itemType === 'announcement'
+                            ? 'border-pink-500/40 bg-pink-950/60 text-pink-300'
+                            : item.priority === 'urgent'
                             ? 'border-rose-500/40 bg-rose-950/60 text-rose-300'
-                            : n.priority === 'important'
+                            : item.priority === 'important'
                             ? 'border-amber-500/40 bg-amber-950/60 text-amber-300'
                             : 'border-blue-500/40 bg-blue-950/60 text-blue-300'
                         }`}
                       >
-                        {n.priority}
+                        {item.itemType === 'announcement' ? 'Broadcast' : item.priority}
                       </span>
                       <span className="font-bold text-white text-[11px] truncate max-w-[180px]">
-                        {n.title}
+                        {item.title}
                       </span>
                     </div>
 
                     <span className="text-[10px] text-zinc-500 font-mono">
-                      {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-zinc-300 leading-snug">{n.message}</p>
+                  <p className="text-[11px] text-zinc-300 leading-snug line-clamp-2">{item.message}</p>
 
                   <div className="flex items-center justify-between pt-1">
-                    {n.actionUrl ? (
+                    {item.actionUrl ? (
                       <Link
-                        href={n.actionUrl}
+                        href={item.actionUrl}
                         onClick={() => {
-                          handleMarkAsRead(n.id);
+                          if (item.itemType === 'announcement') {
+                            handleMarkAnnouncementAsRead(item.id);
+                          } else {
+                            handleMarkAsRead(item.id);
+                          }
                           setIsOpen(false);
                         }}
                         className="text-[10px] font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1"
                       >
-                        <span>Open details</span>
+                        <span>{item.itemType === 'announcement' ? 'Open Announcement' : 'Open details'}</span>
                         <ArrowRight className="h-2.5 w-2.5" />
                       </Link>
                     ) : <span />}
 
-                    {!n.isRead && (
+                    {!item.isRead && (
                       <button
-                        onClick={() => handleMarkAsRead(n.id)}
+                        onClick={() => {
+                          if (item.itemType === 'announcement') {
+                            handleMarkAnnouncementAsRead(item.id);
+                          } else {
+                            handleMarkAsRead(item.id);
+                          }
+                        }}
                         className="text-[10px] font-bold text-zinc-400 hover:text-white"
                       >
                         Mark read
