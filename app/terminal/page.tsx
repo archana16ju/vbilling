@@ -15,16 +15,17 @@ function resolveEffectiveMode(themeMode: 'dark' | 'light' | 'system'): 'dark' | 
   if (themeMode === 'dark') return 'dark';
   // 'system' — follow OS preference
   if (typeof window !== 'undefined' && window.matchMedia) {
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
   return 'dark'; // SSR fallback
 }
 
 /* Apply effective mode to the DOM (html + body classes and data-theme) */
-function applyThemeToDom(effectiveMode: 'dark' | 'light') {
+function applyThemeToDom(effectiveMode: 'dark' | 'light', settingMode?: string) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.setAttribute('data-theme', effectiveMode);
+  if (settingMode) root.setAttribute('data-theme-setting', settingMode);
   root.style.setProperty('--theme-mode', effectiveMode);
   if (effectiveMode === 'light') {
     root.classList.add('light-mode');
@@ -55,12 +56,13 @@ export default function TerminalPage() {
   useEffect(() => {
     setMounted(true);
     try {
-      const stored = localStorage.getItem('terminal_theme_mode');
-      if (stored === 'light' || stored === 'dark') {
+      const stored = (localStorage.getItem('terminal_theme_mode') || localStorage.getItem('dashboard_theme_mode') || 'system') as 'dark' | 'light' | 'system';
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
         const store = useTerminalStore.getState();
         if (store.setTerminalThemeMode) store.setTerminalThemeMode(stored);
         if (store.setTerminalModeOverride) store.setTerminalModeOverride(stored);
-        applyThemeToDom(stored);
+        const resolved = resolveEffectiveMode(stored);
+        applyThemeToDom(resolved, stored);
       }
     } catch {}
     design.fetchCompanyTerminalDesign(undefined, true);
@@ -71,6 +73,37 @@ export default function TerminalPage() {
         }
       })
       .catch((err) => console.warn('Terminal getPromotions notice:', err));
+  }, []);
+
+  // Listen for OS system theme changes and dashboard theme switches
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      const currentStored = (useTerminalStore.getState().terminalThemeMode || localStorage.getItem('terminal_theme_mode') || localStorage.getItem('dashboard_theme_mode') || 'system') as 'dark' | 'light' | 'system';
+      if (currentStored === 'system') {
+        const nextEffective = e.matches ? 'dark' : 'light';
+        applyThemeToDom(nextEffective, 'system');
+      }
+    };
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+    const handleDashboardThemeEvent = (e: any) => {
+      const mode = e?.detail?.mode;
+      if (mode === 'light' || mode === 'dark' || mode === 'system') {
+        const store = useTerminalStore.getState();
+        if (store.setTerminalThemeMode) store.setTerminalThemeMode(mode);
+        if (store.setTerminalModeOverride) store.setTerminalModeOverride(mode);
+        const resolved = resolveEffectiveMode(mode);
+        applyThemeToDom(resolved, mode);
+      }
+    };
+    window.addEventListener('dashboard-theme-mode-changed', handleDashboardThemeEvent);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      window.removeEventListener('dashboard-theme-mode-changed', handleDashboardThemeEvent);
+    };
   }, []);
 
   // Restore dashboard company theme when leaving terminal interface
@@ -91,15 +124,16 @@ export default function TerminalPage() {
     };
   }, []);
 
-  // ── Derive effective mode (Terminal has its own independent dark/light mode, default dark) ──
-  const effectiveMode = mounted
-    ? (terminalThemeMode || terminalModeOverride || 'dark')
+  // ── Derive effective mode (Honours 'system', 'light', and 'dark') ──
+  const rawMode: 'dark' | 'light' | 'system' = mounted
+    ? (terminalThemeMode || terminalModeOverride || (typeof window !== 'undefined' ? (localStorage.getItem('terminal_theme_mode') || localStorage.getItem('dashboard_theme_mode') as any) : null) || 'system')
     : 'dark';
+  const effectiveMode = resolveEffectiveMode(rawMode);
   const isLight = effectiveMode === 'light';
 
   // ── Sync theme + accent colors to DOM ──────────────────────────────────────
   useEffect(() => {
-    applyThemeToDom(effectiveMode);
+    applyThemeToDom(effectiveMode, rawMode);
 
     if (!mounted) return;
 

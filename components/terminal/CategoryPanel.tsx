@@ -38,7 +38,14 @@ export default function CategoryPanel() {
     return <div className="flex h-full w-full flex-col bg-zinc-950 pt-3" />
   }
 
-  const isLight = terminalModeOverride === 'light' || terminalThemeMode === 'light'
+  const isLight =
+    terminalModeOverride === 'light' ||
+    terminalThemeMode === 'light' ||
+    ((terminalModeOverride === 'system' || terminalThemeMode === 'system') &&
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      !window.matchMedia('(prefers-color-scheme: dark)').matches) ||
+    (typeof document !== 'undefined' && document.documentElement.classList.contains('light-mode'))
   const isAllActive = selectedCategoryId === 'all' || !selectedCategoryId
 
   const filteredCategories = safeCategories.filter((category) => {

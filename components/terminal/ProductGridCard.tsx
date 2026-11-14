@@ -131,7 +131,10 @@ export default function ProductGridCard({
       }
     : undefined;
 
-  const isLightMode = propThemeMode ? propThemeMode === 'light' : design.themeMode === 'light';
+  const isLightMode = propThemeMode
+    ? propThemeMode === 'light'
+    : design.themeMode === 'light' ||
+      (typeof document !== 'undefined' && document.documentElement.classList.contains('light-mode'));
 
   return (
     <div

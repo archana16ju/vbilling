@@ -17,14 +17,20 @@ import {
   Users,
   Sun,
   Moon,
+  Laptop,
+  Check,
   HelpCircle,
+  ChevronDown,
+  Settings,
+  LogOut,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
 import { getUserShortcuts } from '@/app/login/actions'
 import { useTableStore } from '@/store/useTableStore'
 import DeliveryDetailsModal from '@/components/terminal/DeliveryDetailsModal'
 import WaiterAssignmentModal from '@/components/terminal/WaiterAssignmentModal'
-import ShiftAlertsBell from '@/components/notifications/ShiftAlertsBell'
+import SmartNotificationBell from '@/components/notifications/SmartNotificationBell'
 import { useTerminalStore, DEFAULT_SHORTCUTS } from '@/store/useTerminalStore'
 import { useShortcutsStore } from '@/store/useShortcutsStore'
 
@@ -103,6 +109,7 @@ export default function TerminalHeader() {
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false)
   const profileMenuRef = useRef<HTMLDivElement>(null)
+  const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isLocalMode = process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql'
 
   const {
@@ -138,6 +145,104 @@ export default function TerminalHeader() {
 
   const selectedTable = tables.find((t) => t.id === selectedTableId) || null
 
+  // ── Unified Theme Dropdown State & Handlers ──
+  const [isThemeOpen, setIsThemeOpen] = useState(false)
+  const themeMenuRef = useRef<HTMLDivElement>(null)
+  const themeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const handleThemeMenuEnter = () => {
+    if (themeTimeoutRef.current) clearTimeout(themeTimeoutRef.current)
+    setIsThemeOpen(true)
+  }
+
+  const handleThemeMenuLeave = () => {
+    if (themeTimeoutRef.current) clearTimeout(themeTimeoutRef.current)
+    themeTimeoutRef.current = setTimeout(() => {
+      setIsThemeOpen(false)
+    }, 200)
+  }
+
+  const handleThemeMenuClick = () => {
+    if (themeTimeoutRef.current) clearTimeout(themeTimeoutRef.current)
+    setIsThemeOpen((prev) => !prev)
+  }
+
+  const handleProfileMenuEnter = () => {
+    if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current)
+    setShowProfileMenu(true)
+  }
+
+  const handleProfileMenuLeave = () => {
+    if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current)
+    profileTimeoutRef.current = setTimeout(() => {
+      setShowProfileMenu(false)
+    }, 200)
+  }
+
+  const handleProfileMenuClick = () => {
+    if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current)
+    setShowProfileMenu((prev) => !prev)
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setIsThemeOpen(false)
+      }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setShowProfileMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      if (themeTimeoutRef.current) clearTimeout(themeTimeoutRef.current)
+      if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current)
+    }
+  }, [])
+
+  const applyTerminalTheme = (newMode: 'dark' | 'light' | 'system') => {
+    try {
+      localStorage.setItem('terminal_theme_mode', newMode)
+      localStorage.setItem('dashboard_theme_mode', newMode)
+    } catch {}
+    if (setTerminalThemeMode) setTerminalThemeMode(newMode)
+    if (setTerminalModeOverride) setTerminalModeOverride(newMode)
+
+    let effectiveMode = newMode
+    if (newMode === 'system') {
+      const isOsDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      effectiveMode = isOsDark ? 'dark' : 'light'
+    }
+
+    const root = document.documentElement
+    root.setAttribute('data-theme', effectiveMode)
+    root.setAttribute('data-theme-setting', newMode)
+    if (effectiveMode === 'light') {
+      root.classList.add('light-mode')
+      root.classList.remove('dark-mode', 'dark')
+      root.style.setProperty('--theme-mode', 'light')
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'light')
+        document.body.classList.add('light-mode')
+        document.body.classList.remove('dark-mode', 'dark')
+      }
+    } else {
+      root.classList.add('dark-mode', 'dark')
+      root.classList.remove('light-mode')
+      root.style.setProperty('--theme-mode', 'dark')
+      if (document.body) {
+        document.body.setAttribute('data-theme', 'dark')
+        document.body.classList.add('dark-mode', 'dark')
+        document.body.classList.remove('light-mode')
+      }
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('dashboard-theme-mode-changed', { detail: { mode: newMode } }))
+    } catch {}
+  }
+
   /* ── Logout ── */
   const handleLogout = async () => {
     try { await fetch('/api/auth/login', { method: 'DELETE' }) } catch {}
@@ -168,6 +273,15 @@ export default function TerminalHeader() {
 
   /* ── Bootstrap ── */
   useEffect(() => {
+    // Sync theme setting from localStorage
+    try {
+      const stored = (localStorage.getItem('terminal_theme_mode') || localStorage.getItem('dashboard_theme_mode')) as 'dark' | 'light' | 'system' | null;
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
+        if (setTerminalThemeMode) setTerminalThemeMode(stored);
+        if (setTerminalModeOverride) setTerminalModeOverride(stored);
+      }
+    } catch {}
+
     const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/)
     if (userMatch) setUsername(userMatch[2])
     const roleMatch = document.cookie.match(/(^| )auth_role=([^;]+)/)
@@ -519,68 +633,135 @@ export default function TerminalHeader() {
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />
 
-       {/* ── Terminal Independent Theme Mode (Dark & Light Mode Icons) ── */}
-        <div className="flex items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900/90 p-1 shadow-sm">
-          <Tip label="Light Mode">
+        {/* ── Single Compact Theme Selector Icon with Dropdown ── */}
+        <div
+          ref={themeMenuRef}
+          className="relative"
+          onMouseEnter={handleThemeMenuEnter}
+          onMouseLeave={handleThemeMenuLeave}
+        >
+          <Tip label={`Theme: ${(terminalThemeMode || terminalModeOverride) === 'light' ? 'Light Mode' : (terminalThemeMode || terminalModeOverride) === 'system' ? 'System Default' : 'Dark Mode'}`}>
             <button
               type="button"
-              onClick={() => {
-                try { localStorage.setItem('terminal_theme_mode', 'light'); } catch {}
-                if (setTerminalThemeMode) setTerminalThemeMode('light');
-                if (setTerminalModeOverride) setTerminalModeOverride('light');
-                const root = document.documentElement;
-                root.setAttribute('data-theme', 'light');
-                root.classList.add('light-mode');
-                root.classList.remove('dark-mode', 'dark');
-                root.style.setProperty('--theme-mode', 'light');
-                if (document.body) {
-                  document.body.setAttribute('data-theme', 'light');
-                  document.body.classList.add('light-mode');
-                  document.body.classList.remove('dark-mode', 'dark');
-                }
-              }}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                (terminalThemeMode === 'light' || terminalModeOverride === 'light')
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
+              onClick={handleThemeMenuClick}
+              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all cursor-pointer shadow-sm active:scale-95 ${
+                isThemeOpen
+                  ? 'border-indigo-500/50 bg-zinc-800 text-white shadow-md'
+                  : 'border-zinc-800 bg-zinc-900/90 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700'
               }`}
-              title="Switch Terminal to Light Mode"
-              aria-label="Terminal Light Mode"
+              title="Select Theme Mode (Dark / Light)"
+              aria-label="Theme Mode Selection"
             >
-              <Sun className="h-3.5 w-3.5" />
+              {(terminalThemeMode || terminalModeOverride) === 'light' ? (
+                <Sun className="h-4 w-4 text-amber-400" />
+              ) : (terminalThemeMode || terminalModeOverride) === 'system' ? (
+                <Laptop className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <Moon className="h-4 w-4 text-indigo-400" />
+              )}
             </button>
           </Tip>
 
-          <Tip label="Dark Mode">
-            <button
-              type="button"
-              onClick={() => {
-                try { localStorage.setItem('terminal_theme_mode', 'dark'); } catch {}
-                if (setTerminalThemeMode) setTerminalThemeMode('dark');
-                if (setTerminalModeOverride) setTerminalModeOverride('dark');
-                const root = document.documentElement;
-                root.setAttribute('data-theme', 'dark');
-                root.classList.add('dark-mode', 'dark');
-                root.classList.remove('light-mode');
-                root.style.setProperty('--theme-mode', 'dark');
-                if (document.body) {
-                  document.body.setAttribute('data-theme', 'dark');
-                  document.body.classList.add('dark-mode', 'dark');
-                  document.body.classList.remove('light-mode');
-                }
-              }}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                (terminalThemeMode === 'dark' || (!terminalThemeMode && terminalModeOverride !== 'light'))
-                  ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 border border-transparent'
-              }`}
-              title="Switch Terminal to Dark Mode"
-              aria-label="Terminal Dark Mode"
+          {/* Compact Dropdown Menu */}
+          {isThemeOpen && (
+            <div
+              onMouseEnter={handleThemeMenuEnter}
+              onMouseLeave={handleThemeMenuLeave}
+              className="absolute right-0 top-full mt-1.5 w-56 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-2 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
             >
-              <Moon className="h-3.5 w-3.5" />
-            </button>
-          </Tip>
+              <div className="border-b border-zinc-800/80 pb-1.5 mb-1.5 px-1">
+                <h4 className="text-xs font-bold text-zinc-100">Theme Appearance</h4>
+                <p className="text-[10px] text-zinc-400">Select terminal display mode</p>
+              </div>
+
+              <div className="space-y-1">
+                {/* Dark Mode */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyTerminalTheme('dark')
+                    setIsThemeOpen(false)
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                    (terminalThemeMode === 'dark' || (!terminalThemeMode && terminalModeOverride !== 'light'))
+                      ? 'bg-indigo-500/15 border border-indigo-500/40 text-indigo-300'
+                      : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-indigo-400">
+                      <Moon className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold">Dark Mode</p>
+                      <p className="text-[10px] text-zinc-400">Deep midnight zinc</p>
+                    </div>
+                  </div>
+                  {(terminalThemeMode === 'dark' || (!terminalThemeMode && terminalModeOverride !== 'light')) && (
+                    <Check className="h-4 w-4 text-indigo-400 shrink-0" />
+                  )}
+                </button>
+
+                {/* Light Mode */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyTerminalTheme('light')
+                    setIsThemeOpen(false)
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                    (terminalThemeMode === 'light' || terminalModeOverride === 'light')
+                      ? 'bg-amber-500/15 border border-amber-500/40 text-amber-300'
+                      : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-amber-400">
+                      <Sun className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold">Light Mode</p>
+                      <p className="text-[10px] text-zinc-400">Crisp daytime white</p>
+                    </div>
+                  </div>
+                  {(terminalThemeMode === 'light' || terminalModeOverride === 'light') && (
+                    <Check className="h-4 w-4 text-amber-400 shrink-0" />
+                  )}
+                </button>
+
+                {/* System Default */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyTerminalTheme('system')
+                    setIsThemeOpen(false)
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer ${
+                    terminalThemeMode === 'system' || terminalModeOverride === 'system'
+                      ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                      : 'hover:bg-zinc-800/70 border border-transparent text-zinc-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-950 border border-zinc-800 text-emerald-400">
+                      <Laptop className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold">System Default</p>
+                      <p className="text-[10px] text-zinc-400">Syncs with OS theme</p>
+                    </div>
+                  </div>
+                  {(terminalThemeMode === 'system' || terminalModeOverride === 'system') && (
+                    <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Smart Notifications Bell */}
+        <SmartNotificationBell />
 
         {/* ── Common Help (?) Icon for Keyboard Shortcuts ── */}
         <Tip label="Keyboard Shortcuts (?)">
@@ -622,77 +803,80 @@ export default function TerminalHeader() {
         {/* Separator */}
         <div className="h-6 w-px bg-zinc-800" />
 
-        {/* ── Shift Alerts Bell (Strictly for assigned staff, not Super Admin or Company Admin) ── */}
-        {role !== 'super_admin' && role !== 'company_admin' && role !== 'admin' && (
-          <>
-            <div className="flex items-center">
-              <ShiftAlertsBell />
+        {/* ── User Profile Dropdown (Same as Dashboard Header) ── */}
+        <div
+          ref={profileMenuRef}
+          className="relative"
+          onMouseEnter={handleProfileMenuEnter}
+          onMouseLeave={handleProfileMenuLeave}
+        >
+          <button
+            type="button"
+            onClick={handleProfileMenuClick}
+            className={`flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 transition-all cursor-pointer ${
+              showProfileMenu
+                ? 'bg-zinc-800/90 text-white'
+                : 'hover:bg-zinc-900 text-zinc-300'
+            }`}
+            title="User Profile & Settings"
+            aria-label="User Profile"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-pink-600 to-rose-500 text-white font-black text-xs shadow-sm shrink-0">
+              {username ? username.charAt(0).toUpperCase() : 'U'}
             </div>
-            <div className="h-6 w-px bg-zinc-800" />
-          </>
-        )}
+            <div className="flex flex-col text-left leading-tight hidden sm:flex">
+              <span className="text-xs font-bold text-white truncate max-w-[90px]">
+                {username || 'Admin'}
+              </span>
+              <span className="text-[9px] font-black uppercase tracking-wider text-pink-400">
+                {role ? role.replace('_', ' ') : 'Cashier'}
+              </span>
+            </div>
+            <ChevronDown className="h-3 w-3 text-zinc-400 shrink-0" />
+          </button>
 
-        {/* ── Profile / user ── */}
-        <div className="flex items-center gap-2 pl-1">
-          {/* Role + username (hidden on tiny screens) */}
-          <div className="hidden md:flex flex-col text-right">
-            <span className="text-[11px] font-black text-white leading-tight">
-              {role === 'super_admin'
-                ? 'Super Admin'
-                : role === 'company_admin' || role === 'admin'
-                  ? 'Company Admin'
-                  : role === 'manager'
-                    ? 'Manager'
-                    : role === 'chef'
-                      ? 'Chef'
-                      : role === 'waiter'
-                        ? 'Waiter'
-                        : role === 'cashier'
-                          ? 'Cashier'
-                          : 'User'}
-            </span>
-            <span className="text-[10px] text-zinc-500 font-medium leading-tight">
-              {username ? `${username} · Active` : 'Active'}
-            </span>
-          </div>
-
-          {/* Avatar / profile menu */}
-          <div className="relative flex items-center" ref={profileMenuRef}>
-            <Tip label={`${username || 'User'} · Logout`}>
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 text-zinc-300 transition cursor-pointer hover:bg-zinc-800 hover:border-theme"
-                onClick={() => setShowProfileMenu(prev => !prev)}
-              >
-                <UserCircle className="h-5 w-5" style={{ color: 'var(--theme-accent, #DB2777)' }} />
-              </div>
-            </Tip>
-
-            {/* Profile dropdown */}
-            {showProfileMenu && (
-              <div className="absolute right-0 top-11 z-50 w-48 rounded-2xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-                <div className="px-3 py-2 border-b border-zinc-800 text-xs">
-                  <p className="font-bold text-white">{username || 'User'}</p>
-                  <p className="text-zinc-400 capitalize">{role ? role.replace('_', ' ') : 'Cashier'}</p>
+          {/* Profile Dropdown Menu */}
+          {showProfileMenu && (
+            <div
+              onMouseEnter={handleProfileMenuEnter}
+              onMouseLeave={handleProfileMenuLeave}
+              className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-zinc-800 bg-zinc-900/98 p-2.5 shadow-2xl backdrop-blur-xl z-50 text-white animate-in fade-in-50 zoom-in-95 duration-150"
+            >
+              <div className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-950/70 border border-zinc-800/70 mb-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-pink-600 to-rose-500 text-white font-bold text-sm shrink-0">
+                  {username ? username.charAt(0).toUpperCase() : 'U'}
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-theme-accent hover:bg-theme-badge border border-transparent hover:border-theme transition cursor-pointer"
+                <div className="min-w-0">
+                  <p className="font-bold text-white text-xs truncate">{username || 'User'}</p>
+                  <p className="text-[10px] text-pink-400 capitalize truncate font-semibold">
+                    {role ? role.replace('_', ' ') : 'Cashier'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                {/* Account Settings */}
+                <Link
+                  href="/settings"
+                  onClick={() => setShowProfileMenu(false)}
+                  className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition"
                 >
-                  <svg
-                    className="h-4 w-4 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <circle cx="8.5" cy="6.5" r="3.5" />
-                    <path d="M2.5 19c0-3.3 2.7-6 6-6s6 2.7 6 6H2.5z" />
-                    <polygon points="16,8.5 21.5,12 16,15.5" />
-                  </svg>
-                  <span>Logout</span>
+                  <Settings className="h-3.5 w-3.5 text-zinc-400" />
+                  <span>Account Settings</span>
+                </Link>
+
+                {/* Sign Out Button */}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-bold text-rose-400 hover:text-white hover:bg-rose-950/40 border border-transparent hover:border-rose-800/60 transition cursor-pointer mt-1 pt-1.5 border-t border-zinc-800/80"
+                >
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
+                  <span>Sign out of session</span>
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
