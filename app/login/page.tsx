@@ -86,8 +86,10 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md bg-zinc-900/90 rounded-2xl shadow-2xl border border-zinc-800 p-8 backdrop-blur-xl text-white">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-theme-bar p-0.5 shadow-lg shadow-theme-glow mb-4 border border-theme">
-            <div className="h-full w-full bg-zinc-950/80 rounded-[14px] flex items-center justify-center font-black text-theme-accent text-xl tracking-wider">
-              VB
+            <div className="h-full w-full bg-white dark:bg-zinc-950 rounded-[14px] flex items-center justify-center select-none">
+              <span className="login-brand-text font-black text-xl tracking-wider">
+                VB
+              </span>
             </div>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white">Vseyal Billing POS</h1>

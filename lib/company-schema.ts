@@ -64,7 +64,7 @@ export const COMPANY_TABLE_SCHEMAS: Record<string, string> = {
       \`phone\` varchar(50) DEFAULT NULL,
       \`email\` varchar(255) DEFAULT NULL,
       \`gstin\` varchar(50) DEFAULT NULL,
-      \`currency\` varchar(10) DEFAULT INR,
+      \`currency\` varchar(10) DEFAULT 'INR',
       \`is_active\` tinyint(1) DEFAULT 1,
       \`created_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
       \`updated_at\` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -78,7 +78,7 @@ export const COMPANY_TABLE_SCHEMAS: Record<string, string> = {
   "users": "CREATE TABLE IF NOT EXISTS `users` (\n  `id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `username` varchar(255) DEFAULT NULL,\n  `email` varchar(255) DEFAULT NULL,\n  `password_hash` varchar(255) DEFAULT NULL,\n  `password` varchar(255) DEFAULT NULL,\n  `role` varchar(50) NOT NULL DEFAULT 'user',\n  `company_id` varchar(64) DEFAULT NULL,\n  `company_name` varchar(255) DEFAULT NULL,\n  `shortcuts` json DEFAULT NULL,\n  `is_active` tinyint(1) NOT NULL DEFAULT '1',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_users_email` (`email`),\n  UNIQUE KEY `username` (`username`),\n  KEY `idx_users_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "user_companies": "CREATE TABLE IF NOT EXISTS `user_companies` (\n  `id` varchar(64) NOT NULL,\n  `user_id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `role` varchar(50) DEFAULT 'cashier',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_user_company` (`user_id`,`company_id`),\n  KEY `idx_user_companies_uid` (`user_id`),\n  KEY `idx_user_companies_cid` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "company_permissions": "CREATE TABLE IF NOT EXISTS `company_permissions` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `module_users` tinyint(1) DEFAULT '1',\n  `module_products` tinyint(1) DEFAULT '1',\n  `module_categories` tinyint(1) DEFAULT '1',\n  `module_sales` tinyint(1) DEFAULT '1',\n  `module_bills` tinyint(1) DEFAULT '1',\n  `module_customers` tinyint(1) DEFAULT '1',\n  `module_payments` tinyint(1) DEFAULT '1',\n  `module_inventory` tinyint(1) DEFAULT '1',\n  `module_raw_materials` tinyint(1) DEFAULT '1',\n  `module_reports` tinyint(1) DEFAULT '1',\n  `module_settings` tinyint(1) DEFAULT '1',\n  `custom_modules` json DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `company_id` (`company_id`),\n  KEY `idx_comp_perm` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
-  "company_settings": "CREATE TABLE IF NOT EXISTS `company_settings` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `tax_rate` decimal(5,2) DEFAULT '5.00',\n  `tax_inclusive` tinyint(1) DEFAULT '1',\n  `invoice_prefix` varchar(20) DEFAULT 'BILL',\n  `receipt_header` text,\n  `receipt_footer` text,\n  `printer_width` varchar(10) DEFAULT '80mm',\n  `theme_config` json DEFAULT NULL,\n  `shortcuts_config` json DEFAULT NULL,\n  `terminal_design` json DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `company_id` (`company_id`),\n  KEY `idx_settings_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+  "company_settings": "CREATE TABLE IF NOT EXISTS `company_settings` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `tax_rate` decimal(5,2) DEFAULT '5.00',\n  `tax_inclusive` tinyint(1) DEFAULT '1',\n  `invoice_prefix` varchar(20) DEFAULT 'BILL',\n  `receipt_header` text,\n  `receipt_footer` text,\n  `printer_width` varchar(10) DEFAULT '80mm',\n  `theme_config` json DEFAULT NULL,\n  `shortcuts_config` json DEFAULT NULL,\n  `terminal_design` json DEFAULT NULL,\n  `dashboard_config` json DEFAULT NULL,\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `company_id` (`company_id`),\n  KEY `idx_settings_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "categories": "CREATE TABLE IF NOT EXISTS `categories` (\n  `id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `company_id` varchar(64) DEFAULT NULL,\n  `image` varchar(512) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_categories_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "products": "CREATE TABLE IF NOT EXISTS `products` (\n  `id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `sku` varchar(64) DEFAULT NULL,\n  `barcode` varchar(64) DEFAULT NULL,\n  `price` decimal(10,2) NOT NULL DEFAULT '0.00',\n  `stock` decimal(10,3) NOT NULL DEFAULT '0.000',\n  `unit` varchar(32) DEFAULT 'plate',\n  `quantity_step` decimal(10,3) NOT NULL DEFAULT '1.000',\n  `category_id` varchar(64) DEFAULT NULL,\n  `company_id` varchar(64) DEFAULT NULL,\n  `image` varchar(512) DEFAULT NULL,\n  `tax` decimal(5,2) NOT NULL DEFAULT '0.00',\n  `discount` decimal(5,2) NOT NULL DEFAULT '0.00',\n  `min_stock` decimal(10,3) DEFAULT '5.000',\n  `recipe_yield` decimal(10,3) DEFAULT NULL,\n  `recipe_unit` varchar(32) DEFAULT NULL,\n  `raw_materials_json` json DEFAULT NULL,\n  `addon_group_ids` json DEFAULT NULL,\n  `is_batch_tracked` tinyint(1) DEFAULT '0',\n  `supplier_name` varchar(255) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_products_category` (`category_id`),\n  KEY `idx_products_company` (`company_id`),\n  KEY `idx_products_company_stock` (`company_id`,`stock`),\n  KEY `idx_products_company_name` (`company_id`,`name`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
   "addon_groups": "CREATE TABLE IF NOT EXISTS `addon_groups` (\n  `id` varchar(64) NOT NULL,\n  `company_id` varchar(64) NOT NULL,\n  `name` varchar(255) NOT NULL,\n  `min_selection` int NOT NULL DEFAULT '0',\n  `max_selection` int NOT NULL DEFAULT '1',\n  `is_required` tinyint(1) NOT NULL DEFAULT '0',\n  `selection_type` varchar(20) NOT NULL DEFAULT 'multiple',\n  `is_active` tinyint(1) NOT NULL DEFAULT '1',\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_addon_groups_company` (`company_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
@@ -132,6 +132,7 @@ export async function ensureCompanyTablesExist(pool: any, databaseName?: string)
   if (databaseName && ensuredCompanyDatabases.has(databaseName)) return;
 
   const tablesToEnsure = [
+    "companies",
     "announcements",
     "announcement_reads",
     "notification_rules",
@@ -147,6 +148,52 @@ export async function ensureCompanyTablesExist(pool: any, databaseName?: string)
       } catch (err: any) {
         console.warn(`[Schema Warning] Table ${t} init error:`, err.message);
       }
+    }
+  }
+
+  // Ensure tenant database companies table has the company record populated
+  if (databaseName && databaseName !== "local_billing_db") {
+    try {
+      const [existing]: any = await pool.query("SELECT id FROM companies LIMIT 1");
+      if (!existing || existing.length === 0) {
+        const { getMasterPool } = await import("./mysql");
+        const masterPool = getMasterPool();
+        const [mRows]: any = await masterPool.query(
+          "SELECT * FROM master_companies WHERE database_name = ? LIMIT 1",
+          [databaseName]
+        );
+        if (mRows && mRows.length > 0) {
+          const m = mRows[0];
+          await pool.query(
+            `INSERT INTO companies (id, name, code, address, phone, email, gstin, currency, is_active, allow_promo_stacking)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE 
+               name = VALUES(name),
+               code = VALUES(code),
+               address = VALUES(address),
+               phone = VALUES(phone),
+               email = VALUES(email),
+               gstin = VALUES(gstin),
+               currency = VALUES(currency),
+               is_active = VALUES(is_active),
+               allow_promo_stacking = VALUES(allow_promo_stacking)`,
+            [
+              m.id,
+              m.name,
+              m.code,
+              m.address || null,
+              m.phone || null,
+              m.email || null,
+              m.gstin || null,
+              m.currency || "INR",
+              m.is_active != null ? m.is_active : 1,
+              m.allow_promo_stacking ? 1 : 0,
+            ]
+          );
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Schema Warning] Failed to seed company in ${databaseName}:`, err.message);
     }
   }
 

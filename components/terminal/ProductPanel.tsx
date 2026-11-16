@@ -4,8 +4,8 @@ import AddonSelectionModal from './AddonSelectionModal';
 
 import { useTerminalStore } from '@/store/useTerminalStore';
 import ProductCard from './ProductCard';
-import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package, AlertCircle, CheckCircle2, X } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { Search, SlidersHorizontal, Barcode, CornerDownLeft, Sparkles, Check, Plus, Package, AlertCircle, CheckCircle2, X, User } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 import { useTerminalDesignStore } from '@/store/useTerminalDesignStore';
 import { useShortcutsStore } from '@/store/useShortcutsStore';
@@ -13,56 +13,229 @@ import ProductGridCard from './ProductGridCard';
 import { Product } from '@/lib/mock-data';
 
 export default function ProductPanel() {
-  const {
-    products,
-    selectedCategoryId = 'all',
-    categories,
-    searchQuery,
-    setSearchQuery,
-    addToCart,
-    addToCartWithAddons,
-    setCategory,
-  } = useTerminalStore();
+  const products = useTerminalStore((s) => s.products);
+  const selectedCategoryId = useTerminalStore((s) => s.selectedCategoryId || 'all');
+  const categories = useTerminalStore((s) => s.categories);
+  const searchQuery = useTerminalStore((s) => s.searchQuery);
+  const setSearchQuery = useTerminalStore((s) => s.setSearchQuery);
+  const addToCart = useTerminalStore((s) => s.addToCart);
+  const addToCartWithAddons = useTerminalStore((s) => s.addToCartWithAddons);
+  const setCategory = useTerminalStore((s) => s.setCategory);
+  const selectedCustomer = useTerminalStore((s) => s.selectedCustomer);
 
   const design = useTerminalDesignStore();
   const shortcutsStore = useShortcutsStore();
 
-  const safeProducts = products || [];
-  const safeCategories = categories || [];
+  const safeProducts = useMemo(() => products || [], [products]);
+  const safeCategories = useMemo(() => categories || [], [categories]);
 
-  const selectedCategory = safeCategories.find((c) => c?.id === selectedCategoryId);
+  const selectedCategory = useMemo(() => safeCategories.find((c) => c?.id === selectedCategoryId), [safeCategories, selectedCategoryId]);
   const safeSearchQuery = (searchQuery || '').toLowerCase().trim();
 
   const isSearchBased = design.displayStyle === 'search-based';
   const isImageGrid = design.displayStyle === 'image-grid' || design.displayStyle === 'compact-grid';
 
-  const filteredProducts = safeProducts.filter((p) => {
-    if (!p) return false;
-    const matchesCategory =
-      selectedCategoryId === 'all' || p.categoryId === selectedCategoryId;
+  const filteredProducts = useMemo(() => {
+    return safeProducts.filter((p) => {
+      if (!p) return false;
+      const matchesCategory =
+        selectedCategoryId === 'all' || p.categoryId === selectedCategoryId;
 
-    // In search-based design, if query is empty, filteredProducts is empty
-    if (isSearchBased && !safeSearchQuery) {
-      return false;
-    }
+      // In search-based design, if query is empty, filteredProducts is empty
+      if (isSearchBased && !safeSearchQuery) {
+        return false;
+      }
 
-    if (!safeSearchQuery) {
-      return matchesCategory;
-    }
+      if (!safeSearchQuery) {
+        return matchesCategory;
+      }
 
-    const matchesSearch =
-      (p.name || '').toLowerCase().includes(safeSearchQuery) ||
-      (p.sku || '').toLowerCase().includes(safeSearchQuery) ||
-      (p.barcode || '').toLowerCase().includes(safeSearchQuery) ||
-      (p.barcodes || []).some((b) => (b.barcode || '').toLowerCase().includes(safeSearchQuery));
+      const matchesSearch =
+        (p.name || '').toLowerCase().includes(safeSearchQuery) ||
+        (p.sku || '').toLowerCase().includes(safeSearchQuery) ||
+        (p.barcode || '').toLowerCase().includes(safeSearchQuery) ||
+        (p.barcodes || []).some((b) => (b.barcode || '').toLowerCase().includes(safeSearchQuery));
 
-    return matchesCategory && matchesSearch;
-  });
+      return matchesCategory && matchesSearch;
+    });
+  }, [safeProducts, selectedCategoryId, isSearchBased, safeSearchQuery]);
 
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [selectedProductForAddons, setSelectedProductForAddons] = useState<Product | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Smart Customer Purchase Suggestions state
+  const [customerSuggestions, setCustomerSuggestions] = useState<
+    Array<{
+      product: Product;
+      frequency: number;
+      totalQuantity: number;
+      lastPurchasedAt: number;
+      daysAgo: number;
+      rankingScore: number;
+    }>
+  >([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+  // Compact Custom Scrollbar state for Customer Suggestions
+  const suggestionsScrollRef = useRef<HTMLDivElement>(null);
+  const scrollTrackRef = useRef<HTMLDivElement>(null);
+  const [scrollRatio, setScrollRatio] = useState(0); // 0 to 1
+  const [thumbWidthRatio, setThumbWidthRatio] = useState(0.35); // 0.22 to 0.6
+  const [isDraggingThumb, setIsDraggingThumb] = useState(false);
+  const dragStartXRef = useRef(0);
+  const dragStartScrollLeftRef = useRef(0);
+
+  const handleProductListScroll = useCallback(() => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 0) {
+      setScrollRatio(0);
+      setThumbWidthRatio(1);
+      return;
+    }
+    const visibleRatio = Math.min(Math.max(el.clientWidth / el.scrollWidth, 0.22), 0.6);
+    setThumbWidthRatio(visibleRatio);
+    const currentRatio = el.scrollLeft / maxScroll;
+    setScrollRatio(Math.min(Math.max(currentRatio, 0), 1));
+  }, []);
+
+  useEffect(() => {
+    handleProductListScroll();
+  }, [customerSuggestions, handleProductListScroll]);
+
+  const handleTrackClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const track = scrollTrackRef.current;
+    const el = suggestionsScrollRef.current;
+    if (!track || !el) return;
+    const rect = track.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const trackWidth = rect.width;
+    const thumbWidth = trackWidth * thumbWidthRatio;
+    const availableTrackDistance = trackWidth - thumbWidth;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (availableTrackDistance <= 0 || maxScroll <= 0) return;
+
+    const targetLeft = clickX - thumbWidth / 2;
+    const targetRatio = Math.min(Math.max(targetLeft / availableTrackDistance, 0), 1);
+    el.scrollTo({
+      left: targetRatio * maxScroll,
+      behavior: 'smooth',
+    });
+  };
+
+  const handleThumbMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingThumb(true);
+    dragStartXRef.current = e.clientX;
+    if (suggestionsScrollRef.current) {
+      dragStartScrollLeftRef.current = suggestionsScrollRef.current.scrollLeft;
+    }
+  };
+
+  const handleThumbTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    setIsDraggingThumb(true);
+    if (e.touches[0]) {
+      dragStartXRef.current = e.touches[0].clientX;
+    }
+    if (suggestionsScrollRef.current) {
+      dragStartScrollLeftRef.current = suggestionsScrollRef.current.scrollLeft;
+    }
+  };
+
+  useEffect(() => {
+    if (!isDraggingThumb) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const el = suggestionsScrollRef.current;
+      const track = scrollTrackRef.current;
+      if (!el || !track) return;
+
+      const trackWidth = track.clientWidth;
+      const thumbWidth = trackWidth * thumbWidthRatio;
+      const availableTrackDistance = trackWidth - thumbWidth;
+      if (availableTrackDistance <= 0) return;
+
+      const deltaX = e.clientX - dragStartXRef.current;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 0) return;
+
+      const scrollDelta = (deltaX / availableTrackDistance) * maxScroll;
+      el.scrollLeft = dragStartScrollLeftRef.current + scrollDelta;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const el = suggestionsScrollRef.current;
+      const track = scrollTrackRef.current;
+      if (!el || !track || !e.touches[0]) return;
+
+      const trackWidth = track.clientWidth;
+      const thumbWidth = trackWidth * thumbWidthRatio;
+      const availableTrackDistance = trackWidth - thumbWidth;
+      if (availableTrackDistance <= 0) return;
+
+      const deltaX = e.touches[0].clientX - dragStartXRef.current;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 0) return;
+
+      const scrollDelta = (deltaX / availableTrackDistance) * maxScroll;
+      el.scrollLeft = dragStartScrollLeftRef.current + scrollDelta;
+    };
+
+    const handleEnd = () => {
+      setIsDraggingThumb(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleEnd);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDraggingThumb, thumbWidthRatio]);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setCustomerSuggestions([]);
+      return;
+    }
+
+    let isSubscribed = true;
+    const fetchPurchaseHistory = async () => {
+      try {
+        setIsLoadingSuggestions(true);
+        const params = new URLSearchParams();
+        if (selectedCustomer.id) params.set('customerId', selectedCustomer.id);
+        if (selectedCustomer.phone) params.set('phone', selectedCustomer.phone);
+
+        const res = await fetch(`/api/customers/purchase-history?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isSubscribed && data.success && Array.isArray(data.suggestions)) {
+            setCustomerSuggestions(data.suggestions);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load customer purchase suggestions:', err);
+      } finally {
+        if (isSubscribed) setIsLoadingSuggestions(false);
+      }
+    };
+
+    fetchPurchaseHistory();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [selectedCustomer?.id, selectedCustomer?.phone]);
 
   // Scanner state & notification
   const [scannerNotification, setScannerNotification] = useState<{
@@ -122,6 +295,8 @@ export default function ProductPanel() {
     setMounted(true);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e || typeof e.key !== 'string' || !e.key) return;
+
       const target = e.target as HTMLElement | null;
       const isInput =
         target &&
@@ -145,7 +320,7 @@ export default function ProductPanel() {
           handleBarcodeScan(bufferedCode);
           return;
         }
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      } else if (e.key && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
         if (timeDiff > 90) {
           scannerBufferRef.current.chars = [e.key];
         } else {
@@ -453,6 +628,142 @@ export default function ProductPanel() {
 
       {/* Main Center Display Section */}
       <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
+        {/* Smart Customer Purchase Suggestions Section */}
+        {selectedCustomer && customerSuggestions.length > 0 && (
+          <div className="px-6 pt-3 pb-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="rounded-2xl border customer-suggestion-banner p-3.5 shadow-xl text-white">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <User className="h-5 w-5 text-white/90 shrink-0" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white drop-shadow-sm truncate">
+                    Frequently Purchased by This Customer
+                  </span>
+                  <span className="rounded-full bg-zinc-800/90 dark:bg-zinc-800/90 border border-zinc-700/80 px-3 py-0.5 text-xs font-semibold text-zinc-200 shadow-sm shrink-0">
+                    {selectedCustomer.name}
+                  </span>
+                </div>
+
+                {/* Right: Compact horizontal scrollbar + favourites count on the exact same line */}
+                <div className="flex items-center gap-3 shrink-0 ml-3">
+                  {/* Slim modern horizontal scrollbar */}
+                  <div
+                    ref={scrollTrackRef}
+                    onClick={handleTrackClick}
+                    className="fav-scrollbar-track relative h-2 w-24 sm:w-28 md:w-32 rounded-full cursor-pointer overflow-hidden transition-all shadow-inner flex items-center select-none"
+                    style={{
+                      height: '8px',
+                      width: '120px',
+                      minWidth: '90px',
+                      backgroundColor: 'rgba(30, 36, 48, 0.95)',
+                      borderRadius: '9999px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.6)',
+                      position: 'relative',
+                    }}
+                    title="Click or drag to scroll favourites"
+                  >
+                    <div
+                      onMouseDown={handleThumbMouseDown}
+                      onTouchStart={handleThumbTouchStart}
+                      className="fav-scrollbar-thumb absolute top-0 bottom-0 rounded-full cursor-grab active:cursor-grabbing"
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        left: `${scrollRatio * (1 - thumbWidthRatio) * 100}%`,
+                        width: `${Math.max(thumbWidthRatio * 100, 25)}%`,
+                        background: 'linear-gradient(90deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%)',
+                        borderRadius: '9999px',
+                        boxShadow: '0 0 10px rgba(56, 189, 248, 0.6)',
+                        transition: isDraggingThumb ? 'none' : 'left 0.08s ease-out',
+                      }}
+                    />
+                  </div>
+
+                  <span className="text-xs font-semibold text-white/90 drop-shadow-sm shrink-0 font-mono">
+                    {customerSuggestions.length} favourites
+                  </span>
+                </div>
+              </div>
+
+              {/* Horizontal scrolling list of suggestion cards (scrollbar strictly hidden) */}
+              <div
+                ref={suggestionsScrollRef}
+                onScroll={handleProductListScroll}
+                className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar scroll-smooth [&::-webkit-scrollbar]:hidden"
+                style={{
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                  }
+                }}
+              >
+                {customerSuggestions.map((item) => (
+                  <div
+                    key={`customer-sug-${item.product.id}`}
+                    onClick={() => handleSelectProduct(item.product)}
+                    className="group relative flex min-w-[210px] max-w-[230px] shrink-0 items-center gap-3 rounded-xl border border-white/40 bg-white p-2.5 hover:scale-[1.02] hover:shadow-xl transition-all cursor-pointer shadow-md active:scale-98 dark:bg-zinc-950/85 dark:border-zinc-800"
+                  >
+                    {item.product.image ? (
+                      <img
+                        src={item.product.image}
+                        alt={item.product.name}
+                        className="h-12 w-12 rounded-lg object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="flex h-12 w-12 items-center justify-center rounded-lg border font-black text-sm shrink-0"
+                        style={{
+                          backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                          borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                          color: 'var(--theme-accent, #DB2777)',
+                        }}
+                      >
+                        {item.product.name.charAt(0)}
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-bold text-zinc-900 group-hover:text-pink-600 transition dark:text-white dark:group-hover:text-pink-300">
+                        {item.product.name}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className="text-xs font-black font-mono"
+                          style={{ color: 'var(--theme-accent, #DB2777)' }}
+                        >
+                          {design.currencySymbol}{Number(item.product.price).toFixed(2)}
+                        </span>
+                        <span className="rounded bg-pink-500/15 border border-pink-500/30 px-1 py-0.2 text-[9px] font-extrabold text-pink-600 dark:text-pink-300 font-mono">
+                          {item.frequency}x
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        {item.daysAgo === 0
+                          ? 'Purchased today'
+                          : item.daysAgo <= 7
+                          ? `${item.daysAgo}d ago`
+                          : `Total ${item.totalQuantity} pcs`}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 group-hover:bg-pink-600 group-hover:text-white dark:bg-zinc-800 dark:text-zinc-300 dark:group-hover:bg-pink-600 dark:group-hover:text-white transition shadow-sm"
+                      title="Add to cart"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* DESIGN 1: NEW SEARCH-BASED FAST BILLING */}
         {isSearchBased ? (
           !safeSearchQuery ? (

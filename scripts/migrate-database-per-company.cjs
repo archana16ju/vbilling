@@ -32,7 +32,7 @@ function generateCompanyDatabaseName(companyIdOrCode) {
 
 // Ordered table list
 const ORDERED_COMPANY_TABLES = [
-  "_migrations", "users", "user_companies", "company_permissions", "company_settings",
+  "_migrations", "companies", "users", "user_companies", "company_permissions", "company_settings",
   "categories", "products", "addon_groups", "addon_items", "addon_group_items",
   "product_barcodes", "barcode_sequences", "raw_materials", "suppliers", "purchase_orders",
   "product_batches", "batch_transactions", "stock_transactions", "customers",

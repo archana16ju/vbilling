@@ -33,6 +33,7 @@ export default function GlobalShortcutsHandler() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e || typeof e.key !== 'string' || !e.key) return;
       const target = e.target as HTMLElement | null;
       const isInput =
         target &&

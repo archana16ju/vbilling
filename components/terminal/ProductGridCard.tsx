@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import { Product } from '@/lib/mock-data';
 import { useTerminalStore } from '@/store/useTerminalStore';
 import { useTerminalDesignStore } from '@/store/useTerminalDesignStore';
@@ -15,7 +15,7 @@ interface ProductGridCardProps {
   themeMode?: 'dark' | 'light';
 }
 
-export default function ProductGridCard({
+function ProductGridCard({
   product,
   isActive: propIsActive,
   onSelect,
@@ -23,7 +23,7 @@ export default function ProductGridCard({
   themeMode: propThemeMode,
 }: ProductGridCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart);
-  const cart = useTerminalStore((state) => state.cart);
+  const cartQty = useTerminalStore((state) => state.cart.find((c) => c.product.id === product?.id)?.quantity || 0);
   const promotions = useTerminalStore((state) => state.promotions);
   const promoTag = getProductPromotionTag(product, promotions);
   
@@ -32,10 +32,6 @@ export default function ProductGridCard({
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   if (!product) return null;
-
-  // Cart quantity for this item
-  const cartItem = (cart || []).find((c) => c.product.id === product.id);
-  const cartQty = cartItem ? cartItem.quantity : 0;
 
   const isActive = propIsActive || localActive;
   const imageUrl = getProductImageUrl(product);
@@ -258,3 +254,5 @@ export default function ProductGridCard({
     </div>
   );
 }
+
+export default memo(ProductGridCard);

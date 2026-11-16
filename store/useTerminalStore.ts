@@ -189,10 +189,10 @@ type TerminalState = {
   generateNextBillId: (companyId?: string) => string
   reconcileBillSequence: (serverCount: number, companyId?: string, force?: boolean) => void
 
-  terminalModeOverride: 'dark' | 'light' | null
-  setTerminalModeOverride: (mode: 'dark' | 'light' | null) => void
-  terminalThemeMode: 'dark' | 'light'
-  setTerminalThemeMode: (mode: 'dark' | 'light') => void
+  terminalModeOverride: 'dark' | 'light' | 'system' | null
+  setTerminalModeOverride: (mode: 'dark' | 'light' | 'system' | null) => void
+  terminalThemeMode: 'dark' | 'light' | 'system'
+  setTerminalThemeMode: (mode: 'dark' | 'light' | 'system') => void
 }
 
 export const DEFAULT_SHORTCUTS: Record<string, string> = {

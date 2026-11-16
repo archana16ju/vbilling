@@ -41,6 +41,8 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Phone,
+  Search,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { validatePromotion, getPromoStackingSetting, getPromotions } from '@/lib/actions/promotions';
@@ -124,6 +126,41 @@ export default function CartPanel() {
   // WhatsApp / Delivery Confirmation overlay state
   const [deliveryConfirmData, setDeliveryConfirmData] = useState<DeliveryConfirmationData | null>(null);
   const printerDesignForWA = usePrinterDesignStore();
+
+  // Quick Customer Lookup State
+  const [phoneSearchQuery, setPhoneSearchQuery] = useState('');
+  const [customerLookupMatches, setCustomerLookupMatches] = useState<any[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const q = phoneSearchQuery.trim();
+    if (!q) {
+      setCustomerLookupMatches([]);
+      setIsCustomerDropdownOpen(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingCustomer(true);
+        const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setCustomerLookupMatches(data);
+            setIsCustomerDropdownOpen(true);
+          }
+        }
+      } catch (err) {
+        console.error('Customer lookup error:', err);
+      } finally {
+        setIsSearchingCustomer(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [phoneSearchQuery]);
 
   const cartSafe = Array.isArray(cart) ? cart : [];
 
@@ -455,196 +492,98 @@ export default function CartPanel() {
     try {
       const billId = opts.preGeneratedBillId || generateNextBillId();
 
-      // Local MySQL direct persistence
-      if (isLocalMode) {
-        try {
-          const res: any = await recordSale({
-            ...fullSaleData,
-            id: billId,
-            timestamp: Date.now(),
-          });
-          if (res && res.success) {
-            const saleDataToComplete = res.sale || { ...fullSaleData, id: billId, timestamp: Date.now() };
-            const completedSale = { ...saleDataToComplete, syncStatus: 'COMPLETED' as const };
-            completeSale(completedSale, billId);
-            setAppliedPromo(null);
-            setLoyaltyPointsToRedeem(0);
-            if (selectedTable) {
-              if (opts.keepTableOccupied) {
-                occupyTable(
-                  selectedTable.id,
-                  billId,
-                  subtotal,
-                  selectedGuestCount,
-                  assignedWaiter?.id || selectedTable.waiterId,
-                  assignedWaiter?.name || selectedTable.waiterName
-                );
-              } else {
-                releaseTable(selectedTable.id);
-                clearAssignedWaiter?.();
-              }
-            } else if (!opts.keepTableOccupied) {
-              clearAssignedWaiter?.();
-            }
-            setShowCashModal(false);
-            setAmountReceivedStr('');
-            showActionNotification(
-              opts.isSendToKitchen
-                ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
-                : opts.isBillOnly
-                  ? `Bill Only generated: #${billId}`
-                  : `Sale completed: #${billId}`
-            );
-            // Show WhatsApp send modal for paid bills
-            if (!opts.isBillOnly && !opts.isSendToKitchen) {
-              const waItems = cartSafe.map((i) => ({
-                name: i.product.name,
-                quantity: i.quantity,
-                price: i.product.price,
-              }));
-              openDeliveryConfirmation({
-                billId,
-                total,
-                items: waItems,
-                customerName: fullSaleData.customerName,
-                customerPhone: fullSaleData.customerPhone,
-                paymentMethod: finalMethod,
-              });
-            }
-            return;
-          } else if (res && !res.success) {
-            alert(res.error || 'Sale could not be recorded.');
-            setIsProcessing(false);
-            return;
-          }
-        } catch (localErr) {
-          console.warn('Direct local MySQL recordSale fallback to offline:', localErr);
-        }
-      }
+      const saleDataToComplete = {
+        ...fullSaleData,
+        id: billId,
+        timestamp: Date.now(),
+        syncStatus: (isLocalMode ? 'COMPLETED' : 'PENDING_SYNC') as any,
+      };
 
-      // Online API fallback
-      let isOnlineFlowFailed = false;
-      if (isOnline && isBackendOnline && !isLocalMode) {
-        try {
-          const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
-          const res = await fetch(`${liveApiUrl}/api/db/recordSale`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...fullSaleData, id: billId, timestamp: Date.now() }),
-          });
-          if (res.ok) {
-            const result: any = await res.json();
-            if (result && result.success) {
-              const saleDataToComplete = result.sale || { ...fullSaleData, id: billId, timestamp: Date.now() };
-              const completedSale = { ...saleDataToComplete, syncStatus: 'COMPLETED' as const };
-              completeSale(completedSale, billId);
-              if (selectedTable) {
-                if (opts.keepTableOccupied) {
-                  occupyTable(
-                    selectedTable.id,
-                    billId,
-                    subtotal,
-                    selectedGuestCount,
-                    assignedWaiter?.id || selectedTable.waiterId,
-                    assignedWaiter?.name || selectedTable.waiterName
-                  );
-                } else {
-                  releaseTable(selectedTable.id);
-                  clearAssignedWaiter?.();
-                }
-              } else if (!opts.keepTableOccupied) {
-                clearAssignedWaiter?.();
-              }
-              setShowCashModal(false);
-              setAmountReceivedStr('');
-              showActionNotification(
-                opts.isSendToKitchen
-                  ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
-                  : opts.isBillOnly
-                    ? `Bill Only generated: #${billId}`
-                    : `Sale completed: #${billId}`
-              );
-              // Show WhatsApp send modal for paid bills
-              if (!opts.isBillOnly && !opts.isSendToKitchen) {
-                const waItems = cartSafe.map((i) => ({
-                  name: i.product.name,
-                  quantity: i.quantity,
-                  price: i.product.price,
-                }));
-                openDeliveryConfirmation({
-                  billId,
-                  total,
-                  items: waItems,
-                  customerName: fullSaleData.customerName,
-                  customerPhone: fullSaleData.customerPhone,
-                  paymentMethod: finalMethod,
-                });
-              }
-              return;
-            }
-          }
-          isOnlineFlowFailed = true;
-        } catch {
-          isOnlineFlowFailed = true;
-        }
-      }
+      // 1. INSTANT LOCAL BILLING COMPLETION (0ms latency):
+      // Immediately register the sale locally, clear the cart, trigger receipt printing, and unlock UI for next customer
+      completeSale(saleDataToComplete as Sale, billId);
+      setAppliedPromo(null);
+      setLoyaltyPointsToRedeem(0);
 
-      // Offline storage path
-      if (!isOnline || !isBackendOnline || isOnlineFlowFailed || isLocalMode) {
-        const offlineSale = {
-          ...fullSaleData,
-          id: billId,
-          timestamp: Date.now(),
-          syncStatus: 'PENDING_SYNC' as const,
-        };
-
-        addOfflineSale(offlineSale as Sale);
-        completeSale(offlineSale as Sale, billId);
-        if (selectedTable) {
-          if (opts.keepTableOccupied) {
-            occupyTable(
-              selectedTable.id,
-              billId,
-              subtotal,
-              selectedGuestCount,
-              assignedWaiter?.id || selectedTable.waiterId,
-              assignedWaiter?.name || selectedTable.waiterName
-            );
-          } else {
-            releaseTable(selectedTable.id);
-            clearAssignedWaiter?.();
-          }
-        } else if (!opts.keepTableOccupied) {
+      if (selectedTable) {
+        if (opts.keepTableOccupied) {
+          occupyTable(
+            selectedTable.id,
+            billId,
+            subtotal,
+            selectedGuestCount,
+            assignedWaiter?.id || selectedTable.waiterId,
+            assignedWaiter?.name || selectedTable.waiterName
+          );
+        } else {
+          releaseTable(selectedTable.id);
           clearAssignedWaiter?.();
         }
-        setShowCashModal(false);
-        setAmountReceivedStr('');
-        showActionNotification(
-          opts.isSendToKitchen
-            ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
-            : opts.isBillOnly
-              ? `Bill Only saved: #${billId}`
-              : `Sale completed: #${billId}`
-        );
-        // Show WhatsApp send modal for offline paid bills
-        if (!opts.isBillOnly && !opts.isSendToKitchen) {
-          const waItems = cartSafe.map((i) => ({
-            name: i.product.name,
-            quantity: i.quantity,
-            price: i.product.price,
-          }));
-          openDeliveryConfirmation({
-            billId,
-            total,
-            items: waItems,
-            customerName: fullSaleData.customerName,
-            customerPhone: fullSaleData.customerPhone,
-            paymentMethod: finalMethod,
-          });
-        }
+      } else if (!opts.keepTableOccupied) {
+        clearAssignedWaiter?.();
       }
+
+      setShowCashModal(false);
+      setAmountReceivedStr('');
+      showActionNotification(
+        opts.isSendToKitchen
+          ? `Order sent to Kitchen & recorded in Sales (#${billId})!`
+          : opts.isBillOnly
+            ? `Bill Only generated: #${billId}`
+            : `Sale completed: #${billId}`
+      );
+
+      // Only open WhatsApp delivery confirmation if the order type is actually Delivery
+      if (orderType === 'Delivery' && !opts.isBillOnly && !opts.isSendToKitchen) {
+        const waItems = cartSafe.map((i) => ({
+          name: i.product.name,
+          quantity: i.quantity,
+          price: i.product.price,
+        }));
+        openDeliveryConfirmation({
+          billId,
+          total,
+          items: waItems,
+          customerName: fullSaleData.customerName,
+          customerPhone: fullSaleData.customerPhone,
+          paymentMethod: finalMethod,
+        });
+      }
+
+      // 2. NON-BLOCKING ASYNC PERSISTENCE:
+      // Persist to MySQL in background so terminal is instantly responsive for the next bill
+      (async () => {
+        try {
+          if (isLocalMode) {
+            const res: any = await recordSale({
+              ...fullSaleData,
+              id: billId,
+              timestamp: saleDataToComplete.timestamp,
+            });
+            if (!res || !res.success) {
+              console.warn('Direct local MySQL recordSale notice, queuing offline:', res?.error);
+              addOfflineSale({ ...saleDataToComplete, syncStatus: 'PENDING_SYNC' } as Sale);
+            }
+          } else if (isOnline && isBackendOnline) {
+            const liveApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://skbriyani.vseyal.com';
+            const res = await fetch(`${liveApiUrl}/api/db/recordSale`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...fullSaleData, id: billId, timestamp: saleDataToComplete.timestamp }),
+            });
+            if (!res.ok) {
+              addOfflineSale({ ...saleDataToComplete, syncStatus: 'PENDING_SYNC' } as Sale);
+            }
+          } else {
+            addOfflineSale({ ...saleDataToComplete, syncStatus: 'PENDING_SYNC' } as Sale);
+          }
+        } catch (bgErr) {
+          console.warn('Background persistence fallback to offline sync:', bgErr);
+          addOfflineSale({ ...saleDataToComplete, syncStatus: 'PENDING_SYNC' } as Sale);
+        }
+      })();
     } catch (e) {
-      console.error('Failure during checkout:', e);
+      console.error('Failure during checkout initiation:', e);
       alert('Transaction failed! Please check logs.');
     } finally {
       setIsProcessing(false);
@@ -756,6 +695,7 @@ export default function CartPanel() {
     setMounted(true);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e || typeof e.key !== 'string' || !e.key) return;
       const target = e.target as HTMLElement | null;
       const isInput =
         target &&
@@ -1022,6 +962,135 @@ export default function CartPanel() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Quick Customer Lookup / Attached Customer Bar */}
+      <div className="border-b border-zinc-800 bg-zinc-900/30 px-3 py-1.5 relative">
+        {selectedCustomer ? (
+          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 shadow-sm">
+            <div
+              className="flex items-center gap-2 cursor-pointer min-w-0"
+              onClick={() => setIsCustomerModalOpen(true)}
+              title="Click to view or switch customer"
+            >
+              <div
+                className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold shrink-0 border"
+                style={{
+                  backgroundColor: 'var(--theme-badge-bg, rgba(219,39,119,0.15))',
+                  borderColor: 'var(--theme-active-border, rgba(219,39,119,0.3))',
+                  color: 'var(--theme-accent, #DB2777)',
+                }}
+              >
+                {selectedCustomer.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 truncate">
+                <span className="text-xs font-bold text-white truncate block">
+                  {selectedCustomer.name}
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono truncate block">
+                  {selectedCustomer.phone || 'No phone'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
+                title="Detach customer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="relative">
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Phone className="absolute left-2.5 top-2.5 h-3 w-3 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Lookup customer by phone or name..."
+                  value={phoneSearchQuery}
+                  onChange={(e) => setPhoneSearchQuery(e.target.value)}
+                  onFocus={() => {
+                    if (phoneSearchQuery.trim()) setIsCustomerDropdownOpen(true);
+                  }}
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-1.5 pl-7 pr-7 text-[11px] text-white placeholder:text-zinc-500 focus:border-theme focus:outline-none transition"
+                />
+                {phoneSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneSearchQuery('');
+                      setIsCustomerDropdownOpen(false);
+                    }}
+                    className="absolute right-2 top-2 text-zinc-400 hover:text-white"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsCustomerModalOpen(true)}
+                className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-[10px] font-bold text-zinc-300 hover:border-zinc-700 hover:text-white transition cursor-pointer"
+                title="Open customer directory"
+              >
+                <User className="h-3 w-3" />
+              </button>
+            </div>
+
+            {/* Customer Search Dropdown */}
+            {isCustomerDropdownOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 p-1.5 shadow-2xl no-scrollbar animate-in fade-in duration-100">
+                {customerLookupMatches.length > 0 ? (
+                  <div className="space-y-1">
+                    {customerLookupMatches.map((cust) => (
+                      <div
+                        key={cust.id}
+                        onClick={() => {
+                          setSelectedCustomer(cust);
+                          setPhoneSearchQuery('');
+                          setIsCustomerDropdownOpen(false);
+                        }}
+                        className="flex items-center justify-between rounded-lg p-2 hover:bg-zinc-800/80 cursor-pointer transition"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white truncate">{cust.name}</p>
+                          <p className="text-[10px] text-zinc-400 font-mono truncate">
+                            {cust.phone || 'No phone'} · {cust.loyaltyTier || 'Silver'}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-pink-400">Select</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-2 text-center text-xs text-zinc-400">
+                    <p>No customer found</p>
+                  </div>
+                )}
+
+                <div className="border-t border-zinc-800 pt-1 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomerModalOpen(true);
+                      setIsCustomerDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-bold text-pink-400 hover:bg-zinc-800 transition cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Quick Add &quot;{phoneSearchQuery}&quot;</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Cart Items List */}
@@ -1509,8 +1578,10 @@ className="w-full flex items-center justify-center gap-1 rounded-xl bg-gradient-
         isOpen={isCustomerModalOpen}
         onClose={() => setIsCustomerModalOpen(false)}
         currentSelectedId={selectedCustomer?.id}
+        initialPhone={phoneSearchQuery}
         onSelectCustomer={(cust) => {
           setSelectedCustomer(cust);
+          setPhoneSearchQuery('');
           setIsCustomerModalOpen(false);
         }}
       />

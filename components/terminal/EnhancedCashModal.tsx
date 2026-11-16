@@ -66,6 +66,7 @@ export default function EnhancedCashModal({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e || typeof e.key !== 'string' || !e.key) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();

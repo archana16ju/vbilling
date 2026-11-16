@@ -117,8 +117,35 @@ export function applyThemeToDom(theme?: Partial<CompanyTheme> | null, forceApply
       }
     } catch {}
 
-    const mode = (userMode === 'light' || userMode === 'dark') ? userMode : (t.mode === 'light' ? 'light' : 'dark');
+    let effectiveMode = userMode;
+    if (userMode === 'system') {
+      effectiveMode = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+
+      // Setup dynamic listener for OS theme changes
+      if (typeof window !== 'undefined' && window.matchMedia) {
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handleSysTheme = () => {
+          const curMode = localStorage.getItem('dashboard_theme_mode');
+          if (curMode === 'system') {
+            applyThemeToDom(theme, forceApplyMode);
+            window.dispatchEvent(new CustomEvent('dashboard-theme-mode-changed', { detail: { mode: 'system' } }));
+          }
+        };
+        try {
+          if ((window as any).__themeSystemListener) {
+            mediaQuery.removeEventListener('change', (window as any).__themeSystemListener);
+          }
+        } catch {}
+        (window as any).__themeSystemListener = handleSysTheme;
+        mediaQuery.addEventListener('change', handleSysTheme);
+      }
+    }
+
+    const mode = (effectiveMode === 'light' || effectiveMode === 'dark') ? effectiveMode : (t.mode === 'light' ? 'light' : 'dark');
     root.setAttribute('data-theme', mode);
+    root.setAttribute('data-theme-setting', userMode || 'system');
     if (mode === 'light') {
       root.classList.add('light-mode');
       root.classList.remove('dark-mode');

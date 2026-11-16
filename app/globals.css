@@ -850,7 +850,7 @@ html[data-theme="light"] [data-card-photo-overlay] *,
 html[data-theme="light"] [class*="bg-[#1e293b]"],
 html[data-theme="light"] [class*="bg-[#1e293b]"] *,
 html.light-mode .bg-theme-bar,
-html.light-mode .bg-theme-bar *:not(.bg-white):not(.bg-white *):not(button.bg-white):not(button.bg-white *),
+html.light-mode .bg-theme-bar *:not(.bg-white):not(.bg-white *):not(button.bg-white):not(button.bg-white *):not(.login-brand-text):not(.login-brand-text *),
 html.light-mode .bg-theme-gradient,
 html.light-mode .bg-theme-gradient *:not(.bg-white):not(.bg-white *):not(button.bg-white):not(button.bg-white *),
 html.light-mode [class*="bg-theme-gradient"],
@@ -1130,6 +1130,16 @@ html.light-mode .text-pink-300,
 html.light-mode .text-theme-badge,
 html.light-mode .text-theme-accent,
 html.light-mode [class*="text-pink-"] {
+  color: var(--theme-accent, #DB2777) !important;
+}
+
+/* Login brand badge text: clear accent contrast in light & dark modes */
+.login-brand-text {
+  color: var(--theme-badge-text, #F472B6) !important;
+}
+html[data-theme="light"] .login-brand-text,
+html.light-mode .login-brand-text,
+body.light-mode .login-brand-text {
   color: var(--theme-accent, #DB2777) !important;
 }
 

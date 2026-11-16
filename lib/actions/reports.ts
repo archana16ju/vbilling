@@ -1798,18 +1798,39 @@ async function executeMySqlReport(
 
       const tableData = auditRows.map((r) => {
         let detailsStr = '—';
+        let prevValStr = '—';
+        let newValStr = '—';
+        let roleStr = 'Admin';
+        let usernameStr = r.user_id || 'System';
+
         if (r.details) {
           try {
+            const parsed = typeof r.details === 'string' ? JSON.parse(r.details) : r.details;
+            if (parsed && typeof parsed === 'object') {
+              if (parsed.userRole) roleStr = parsed.userRole;
+              if (parsed.username) usernameStr = parsed.username;
+              if (parsed.previousValue !== undefined) {
+                prevValStr = typeof parsed.previousValue === 'object' ? JSON.stringify(parsed.previousValue) : String(parsed.previousValue);
+              }
+              if (parsed.newValue !== undefined) {
+                newValStr = typeof parsed.newValue === 'object' ? JSON.stringify(parsed.newValue) : String(parsed.newValue);
+              }
+            }
             detailsStr = typeof r.details === 'string' ? r.details : JSON.stringify(r.details);
-          } catch {}
+          } catch {
+            detailsStr = String(r.details);
+          }
         }
         return {
           id: r.id,
           date: new Date(r.created_at).toLocaleString(),
-          user: r.user_id || 'System',
+          user: usernameStr,
+          role: roleStr,
           action: r.action,
           entityType: r.entity_type,
           entityId: r.entity_id || '—',
+          previousValue: prevValStr,
+          newValue: newValStr,
           ip: r.ip_address || '127.0.0.1',
           details: detailsStr,
         };
@@ -1830,10 +1851,13 @@ async function executeMySqlReport(
         ],
         columns: [
           { key: 'date', label: 'Timestamp', format: 'text' },
-          { key: 'user', label: 'User / Operator', format: 'text' },
+          { key: 'user', label: 'Operator', format: 'text' },
+          { key: 'role', label: 'Role', format: 'badge' },
           { key: 'action', label: 'Action Taken', format: 'badge' },
-          { key: 'entityType', label: 'Entity Type', format: 'badge' },
-          { key: 'entityId', label: 'Target ID', format: 'text' },
+          { key: 'entityType', label: 'Module', format: 'badge' },
+          { key: 'entityId', label: 'Affected Record ID', format: 'text' },
+          { key: 'previousValue', label: 'Previous Value', format: 'text' },
+          { key: 'newValue', label: 'New Value', format: 'text' },
           { key: 'ip', label: 'IP Address', format: 'text' },
           { key: 'details', label: 'Event Details', format: 'text' },
         ],
@@ -3144,15 +3168,26 @@ async function executeMongoReport(
       if (companyId && companyId !== 'all') audQuery.companyId = companyId;
       const logs = await db.collection('audit_logs').find(audQuery).sort({ createdAt: -1 }).limit(100).toArray();
 
-      const tableData = logs.map((l: any) => ({
-        date: l.createdAt ? new Date(l.createdAt).toLocaleString() : 'N/A',
-        user: l.userId || 'system',
-        action: l.action || 'EVENT',
-        entityType: l.entityType || 'SYSTEM',
-        entityId: l.entityId || '-',
-        ip: l.ipAddress || '127.0.0.1',
-        details: typeof l.details === 'object' ? JSON.stringify(l.details) : l.details || '-',
-      }));
+      const tableData = logs.map((l: any) => {
+        const detailsObj = typeof l.details === 'object' && l.details !== null ? l.details : {};
+        const prevVal = detailsObj.previousValue !== undefined ? (typeof detailsObj.previousValue === 'object' ? JSON.stringify(detailsObj.previousValue) : String(detailsObj.previousValue)) : '—';
+        const newVal = detailsObj.newValue !== undefined ? (typeof detailsObj.newValue === 'object' ? JSON.stringify(detailsObj.newValue) : String(detailsObj.newValue)) : '—';
+        const userRole = detailsObj.userRole || 'Admin';
+        const username = detailsObj.username || l.userId || 'system';
+
+        return {
+          date: l.createdAt ? new Date(l.createdAt).toLocaleString() : 'N/A',
+          user: username,
+          role: userRole,
+          action: l.action || 'EVENT',
+          entityType: l.entityType || 'SYSTEM',
+          entityId: l.entityId || '-',
+          previousValue: prevVal,
+          newValue: newVal,
+          ip: l.ipAddress || '127.0.0.1',
+          details: typeof l.details === 'object' ? JSON.stringify(l.details) : l.details || '-',
+        };
+      });
 
       return {
         reportKey,
@@ -3167,10 +3202,13 @@ async function executeMongoReport(
         ],
         columns: [
           { key: 'date', label: 'Timestamp', format: 'text' },
-          { key: 'user', label: 'User / Operator', format: 'text' },
+          { key: 'user', label: 'Operator', format: 'text' },
+          { key: 'role', label: 'Role', format: 'badge' },
           { key: 'action', label: 'Action Taken', format: 'badge' },
-          { key: 'entityType', label: 'Entity Type', format: 'badge' },
-          { key: 'entityId', label: 'Target ID', format: 'text' },
+          { key: 'entityType', label: 'Module', format: 'badge' },
+          { key: 'entityId', label: 'Affected Record ID', format: 'text' },
+          { key: 'previousValue', label: 'Previous Value', format: 'text' },
+          { key: 'newValue', label: 'New Value', format: 'text' },
           { key: 'ip', label: 'IP Address', format: 'text' },
           { key: 'details', label: 'Event Details', format: 'text' },
         ],

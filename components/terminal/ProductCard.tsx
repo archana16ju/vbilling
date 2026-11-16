@@ -1,4 +1,5 @@
 'use client'
+import React, { memo } from "react"
 import { Product } from "@/lib/mock-data"
 import { useTerminalStore } from "@/store/useTerminalStore"
 import { useTerminalDesignStore } from "@/store/useTerminalDesignStore"
@@ -10,7 +11,7 @@ interface ProductCardProps {
   onSelectProduct?: (product: Product) => void;
 }
 
-export default function ProductCard({ product, onSelectProduct }: ProductCardProps) {
+function ProductCard({ product, onSelectProduct }: ProductCardProps) {
   const addToCart = useTerminalStore((state) => state.addToCart)
   const promotions = useTerminalStore((state) => state.promotions)
   const design = useTerminalDesignStore()
@@ -96,6 +97,8 @@ export default function ProductCard({ product, onSelectProduct }: ProductCardPro
     </div>
   )
 }
+
+export default memo(ProductCard);
 
 function ShoppingCartIcon(props: React.SVGProps<SVGSVGElement>) {
   return (

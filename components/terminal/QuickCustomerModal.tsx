@@ -9,6 +9,7 @@ interface QuickCustomerModalProps {
   onClose: () => void;
   onSelectCustomer: (cust: Customer) => void;
   currentSelectedId?: string;
+  initialPhone?: string;
 }
 
 export default function QuickCustomerModal({
@@ -16,6 +17,7 @@ export default function QuickCustomerModal({
   onClose,
   onSelectCustomer,
   currentSelectedId,
+  initialPhone,
 }: QuickCustomerModalProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,11 +31,13 @@ export default function QuickCustomerModal({
   const [newAddress, setNewAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [duplicateMatch, setDuplicateMatch] = useState<any>(null);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (query = '') => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/customers?stats=false');
+      const url = query ? `/api/customers?q=${encodeURIComponent(query)}` : '/api/customers?stats=false';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -50,11 +54,22 @@ export default function QuickCustomerModal({
   useEffect(() => {
     if (isOpen) {
       fetchCustomers();
-      setIsAddingNew(false);
-      setSearch('');
+      if (initialPhone) {
+        setSearch(initialPhone);
+        setNewPhone(initialPhone);
+        setIsAddingNew(false);
+      } else {
+        setSearch('');
+        setNewPhone('');
+        setIsAddingNew(false);
+      }
+      setNewName('');
+      setNewEmail('');
+      setNewAddress('');
       setFormError('');
+      setDuplicateMatch(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPhone]);
 
   if (!isOpen) return null;
 
@@ -68,9 +83,10 @@ export default function QuickCustomerModal({
     );
   });
 
-  const handleCreateCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateCustomer = async (e?: React.FormEvent, allowDuplicate = false) => {
+    if (e) e.preventDefault();
     setFormError('');
+    setDuplicateMatch(null);
     if (!newName.trim()) {
       setFormError('Customer name is required');
       return;
@@ -86,10 +102,17 @@ export default function QuickCustomerModal({
           phone: newPhone.trim(),
           email: newEmail.trim(),
           address: newAddress.trim(),
+          allowDuplicate,
         }),
       });
 
       const data = await res.json();
+      if (res.status === 409 && data.duplicate) {
+        setFormError(data.error || 'A customer with this phone number already exists.');
+        setDuplicateMatch(data.duplicate.existingRecord);
+        return;
+      }
+
       if (!res.ok || data.error) {
         setFormError(data.error || 'Failed to create customer');
       } else {
@@ -243,8 +266,35 @@ export default function QuickCustomerModal({
         ) : (
           <form onSubmit={handleCreateCustomer} className="mt-4 space-y-3">
             {formError && (
-              <div className="rounded-xl bg-rose-950/60 p-2.5 text-xs text-rose-300 border border-rose-800/80 font-medium">
-                {formError}
+              <div className="rounded-xl bg-rose-950/60 p-3 text-xs text-rose-300 border border-rose-800/80 font-medium space-y-2">
+                <p>{formError}</p>
+                {duplicateMatch && (
+                  <div className="flex items-center justify-between rounded-lg bg-black/40 p-2 border border-rose-800/40">
+                    <div>
+                      <p className="font-bold text-white text-xs">{duplicateMatch.name}</p>
+                      <p className="text-[11px] text-zinc-400">{duplicateMatch.phone || 'No phone'} · {duplicateMatch.loyalty_tier || 'Silver'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectCustomer(duplicateMatch);
+                          onClose();
+                        }}
+                        className="rounded-lg bg-pink-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-pink-500 transition cursor-pointer"
+                      >
+                        Attach Existing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCreateCustomer(undefined, true)}
+                        className="rounded-lg bg-zinc-800 px-2 py-1 text-[11px] font-bold text-zinc-300 hover:text-white transition cursor-pointer"
+                      >
+                        Add Anyway
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

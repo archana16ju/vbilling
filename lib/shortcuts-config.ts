@@ -501,6 +501,8 @@ export function getDefaultStoredShortcutsConfig(): StoredShortcutConfig {
  * Normalizes keyboard event into a standardized string representation.
  */
 export function normalizeEventToShortcutString(e: KeyboardEvent): string {
+  if (!e || typeof e.key !== 'string' || !e.key) return '';
+
   const parts: string[] = [];
   if (e.ctrlKey) parts.push('Ctrl');
   if (e.altKey) parts.push('Alt');
@@ -520,7 +522,7 @@ export function normalizeEventToShortcutString(e: KeyboardEvent): string {
   else if (rawKey === 'ArrowLeft') rawKey = '←';
   else if (rawKey === 'ArrowRight') rawKey = '→';
   else if (rawKey === 'Escape') rawKey = 'Esc';
-  else if (rawKey.length === 1) {
+  else if (rawKey && rawKey.length === 1) {
     // If key is already a symbol with Shift (e.g. ? or +), don't duplicate Shift
     if (rawKey === '?' || rawKey === '+') {
       const shiftIdx = parts.indexOf('Shift');
@@ -529,7 +531,9 @@ export function normalizeEventToShortcutString(e: KeyboardEvent): string {
     rawKey = rawKey.toUpperCase();
   }
 
-  parts.push(rawKey);
+  if (rawKey) {
+    parts.push(rawKey);
+  }
   return parts.join(' + ');
 }
 

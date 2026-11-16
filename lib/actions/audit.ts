@@ -12,10 +12,14 @@ export interface AuditLogEntry {
   companyId?: string | null;
   branchId?: string | null;
   userId?: string | null;
+  username?: string | null;
+  userRole?: string | null;
   terminalId?: string | null;
   action: string;
   entityType: string;
   entityId?: string | null;
+  previousValue?: any;
+  newValue?: any;
   details?: any;
   ipAddress?: string | null;
 }
@@ -55,8 +59,6 @@ function sanitizeDetails(obj: any): any {
 export async function recordAuditLog(entry: AuditLogEntry): Promise<boolean> {
   try {
     const id = entry.id || `aud_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    const sanitized = sanitizeDetails(entry.details);
-    const detailsJson = sanitized ? JSON.stringify(sanitized) : null;
 
     // Resolve IP address safely
     let clientIp = entry.ipAddress || null;
@@ -70,24 +72,36 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<boolean> {
     }
 
     // Resolve user & company if not supplied
-    let authUser = entry.userId || null;
+    let authUser = entry.username || entry.userId || null;
+    let authRole = entry.userRole || null;
     let authComp = entry.companyId || null;
 
-    if (!authUser || !authComp) {
+    if (!authUser || !authRole || !authComp) {
       try {
         const session = await getSession();
         const cookieStore = await cookies();
         if (!authUser) authUser = session?.username || session?.userId || cookieStore.get('auth_username')?.value || 'system';
+        if (!authRole) authRole = session?.role || cookieStore.get('auth_role')?.value || 'admin';
         if (!authComp && isLocalMySqlMode()) {
           const comp = await getAuthorizedCompanyContext();
           authComp = comp.id;
         } else if (!authComp) {
-          authComp = cookieStore.get('auth_company_id')?.value || null;
+          authComp = session?.companyId || cookieStore.get('auth_company_id')?.value || null;
         }
       } catch {
         // Fallback to entry values
       }
     }
+
+    const detailsCombined = {
+      ...(typeof entry.details === 'object' && entry.details !== null ? entry.details : (entry.details ? { message: entry.details } : {})),
+      ...(entry.previousValue !== undefined ? { previousValue: entry.previousValue } : {}),
+      ...(entry.newValue !== undefined ? { newValue: entry.newValue } : {}),
+      ...(authRole ? { userRole: authRole } : {}),
+      ...(authUser ? { username: authUser } : {}),
+    };
+    const sanitized = sanitizeDetails(detailsCombined);
+    const detailsJson = sanitized ? JSON.stringify(sanitized) : null;
 
     if (isLocalMySqlMode()) {
       await ensureLocalMySqlInitialized();

@@ -299,7 +299,7 @@ export async function authenticateUser(credentials: AuthCredentials): Promise<Au
         user: {
           id: existingUser.id,
           username: existingUser.username,
-          name: existingUser.name,
+          name: (existingUser as any).name || (existingUser as any).fullName || existingUser.username,
           role,
           companyId,
           companyName,

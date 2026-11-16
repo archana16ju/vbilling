@@ -1,7 +1,8 @@
 'use client';
+
 import { fetchWithClientCache } from '@/lib/client-cache';
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Home,
   Briefcase,
@@ -24,14 +25,42 @@ import {
   BadgePercent,
   Megaphone,
   BellRing,
-  ShieldAlert
-} from "lucide-react"
-import { useState, useEffect } from "react"
+  ShieldAlert,
+} from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  CompanyHeaderNavConfig,
+  DEFAULT_HEADER_NAV_CONFIG,
+  normalizeHeaderNavConfig,
+} from "@/lib/header-nav-config";
 
 export default function Sidebar() {
-  const pathname = usePathname()
-  const [role, setRole] = useState<string | null>(null)
-  const [permissions, setPermissions] = useState<Record<string, boolean> | null>(null)
+  const pathname = usePathname();
+  const [role, setRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, boolean> | null>(null);
+  const [navConfig, setNavConfig] = useState<CompanyHeaderNavConfig>(DEFAULT_HEADER_NAV_CONFIG);
+
+  const loadNavConfig = () => {
+    try {
+      const cached = localStorage.getItem('company_header_nav_config');
+      if (cached) {
+        setNavConfig(normalizeHeaderNavConfig(JSON.parse(cached)));
+      }
+    } catch {}
+
+    fetch('/api/companies/header-nav-config')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.config) {
+          const normalized = normalizeHeaderNavConfig(data.config);
+          setNavConfig(normalized);
+          try {
+            localStorage.setItem('company_header_nav_config', JSON.stringify(normalized));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     const userMatch = document.cookie.match(/(^| )auth_username=([^;]+)/);
@@ -44,11 +73,11 @@ export default function Sidebar() {
     const loadRoleAndPermissions = (currentRole: string | null) => {
       if (currentRole === 'company_admin') {
         fetchWithClientCache('/api/companies/permissions')
-          .then((res) => res.ok ? res.json() : null)
+          .then((res) => (res.ok ? res.json() : null))
           .then((data) => {
             if (data && !data.error) setPermissions(data);
           })
-          .catch(() => { });
+          .catch(() => {});
       }
     };
 
@@ -56,101 +85,128 @@ export default function Sidebar() {
 
     // Fetch verified session to guarantee role is immediately available
     fetch('/api/auth/me')
-      .then(res => res.ok ? res.json() : null)
-      .then(me => {
+      .then((res) => (res.ok ? res.json() : null))
+      .then((me) => {
         if (me && me.authenticated && me.role) {
           const normalized = me.role === 'admin' ? (me.username?.toLowerCase() === 'admin' ? 'super_admin' : 'company_admin') : me.role;
           setRole(normalized);
           loadRoleAndPermissions(normalized);
         }
       })
-      .catch(() => { });
-  }, [])
+      .catch(() => {});
+
+    loadNavConfig();
+
+    const handleNavConfigChanged = (e: any) => {
+      if (e?.detail) {
+        setNavConfig(normalizeHeaderNavConfig(e.detail));
+      } else {
+        loadNavConfig();
+      }
+    };
+
+    const handleCompanySwitched = () => {
+      loadNavConfig();
+    };
+
+    window.addEventListener('header-nav-config-changed', handleNavConfigChanged);
+    window.addEventListener('company-switched', handleCompanySwitched);
+
+    return () => {
+      window.removeEventListener('header-nav-config-changed', handleNavConfigChanged);
+      window.removeEventListener('company-switched', handleCompanySwitched);
+    };
+  }, []);
 
   const isSuperAdmin = role === 'super_admin';
 
   // Navigation items matching user's requested vertical design UI structure
-  const navItems = [
+  const rawNavItems = [
     ...(isSuperAdmin
-      ? [{ name: "SuperAdmin", href: "/super-admin", icon: ShieldCheck, moduleKey: null }]
+      ? [{ id: 'super_admin', name: "SuperAdmin", href: "/super-admin", icon: ShieldCheck, moduleKey: null }]
       : []),
-    { name: "Overview", href: "/dashboard", icon: Home, moduleKey: null },
-    { name: "Terminal", href: "/terminal", icon: Briefcase, moduleKey: "terminal" },
-    { name: "Tables", href: "/tables", icon: LayoutGrid, moduleKey: "tables" },
-    { name: "Orders", href: "/assigned-orders", icon: ClipboardList, moduleKey: "tables" },
-    { name: "Sales", href: "/sales", icon: List, moduleKey: "sales_and_bills" },
-    { name: "Kitchen", href: "/kitchen", icon: ShoppingBasket, moduleKey: "kitchen" },
-    { name: "Delivery", href: "/delivery", icon: Truck, moduleKey: "delivery" },
-    { name: "Products", href: "/products", icon: FileText, moduleKey: "products" },
-    { name: "Categories", href: "/categories", icon: Tags, moduleKey: "categories" },
-    { name: "Add-ons", href: "/add-ons", icon: Layers, moduleKey: "products" },
-    { name: "Promotions", href: "/promotions", icon: BadgePercent, moduleKey: "promotions" },
-
-    {
-      name: "Stock",
-      href: process.env.NEXT_PUBLIC_LOCAL_DB_MODE === 'mysql' ? "/stocks" : "/stocks",
-      icon: Box,
-      moduleKey: "stocks"
-    },
-    { name: "Customers", href: "/customers", icon: User, moduleKey: "customers" },
-    { name: "Reports", href: "/reports", icon: BarChart3, moduleKey: "reports" },
-    { name: "Staff", href: "/staff", icon: CalendarCheck, moduleKey: "staff" },
-    { name: "Users", href: "/users", icon: Users, moduleKey: "users" },
+    { id: 'dashboard', name: "Overview", href: "/dashboard", icon: Home, moduleKey: null },
+    { id: 'terminal', name: "Terminal", href: "/terminal", icon: Briefcase, moduleKey: "terminal" },
+    { id: 'tables', name: "Tables", href: "/tables", icon: LayoutGrid, moduleKey: "tables" },
+    { id: 'orders', name: "Orders", href: "/assigned-orders", icon: ClipboardList, moduleKey: "tables" },
+    { id: 'sales', name: "Sales", href: "/sales", icon: List, moduleKey: "sales_and_bills" },
+    { id: 'kitchen', name: "Kitchen", href: "/kitchen", icon: ShoppingBasket, moduleKey: "kitchen" },
+    { id: 'delivery', name: "Delivery", href: "/delivery", icon: Truck, moduleKey: "delivery" },
+    { id: 'inventory', name: "Products", href: "/products", icon: FileText, moduleKey: "products" },
+    { id: 'categories', name: "Categories", href: "/categories", icon: Tags, moduleKey: "categories" },
+    { id: 'addons', name: "Add-ons", href: "/add-ons", icon: Layers, moduleKey: "products" },
+    { id: 'promotions', name: "Promotions", href: "/promotions", icon: BadgePercent, moduleKey: "promotions" },
+    { id: 'stocks', name: "Stock", href: "/stocks", icon: Box, moduleKey: "stocks" },
+    { id: 'customers', name: "Customers", href: "/customers", icon: User, moduleKey: "customers" },
+    { id: 'reports', name: "Reports", href: "/reports", icon: BarChart3, moduleKey: "reports" },
+    { id: 'staff', name: "Staff", href: "/staff", icon: CalendarCheck, moduleKey: "staff" },
+    { id: 'users', name: "Users", href: "/users", icon: Users, moduleKey: "users" },
     ...(role !== 'cashier'
-      ? [{ name: "Companies", href: "/companies", icon: Building2, moduleKey: "companies" }]
+      ? [{ id: 'companies', name: "Companies", href: "/companies", icon: Building2, moduleKey: "companies" }]
       : []),
-    { name: "Announcements", href: "/announcements", icon: Megaphone, moduleKey: null },
+    { id: 'announcements', name: "Announcements", href: "/announcements", icon: Megaphone, moduleKey: null },
     ...(role === 'super_admin' || role === 'company_admin' || role === 'manager'
       ? [
-          { name: "Notification Rules", href: "/notification-rules", icon: BellRing, moduleKey: "settings" },
-          { name: "Login Activity", href: "/login-activity", icon: ShieldAlert, moduleKey: null },
+          { id: 'notification_rules', name: "Notification Rules", href: "/notification-rules", icon: BellRing, moduleKey: "settings" },
+          { id: 'login_activity', name: "Login Activity", href: "/login-activity", icon: ShieldAlert, moduleKey: null },
         ]
       : []),
-    { name: "Settings", href: "/settings", icon: SettingsIcon, moduleKey: "settings" },
+    { id: 'settings', name: "Settings", href: "/settings", icon: SettingsIcon, moduleKey: "settings" },
+  ];
 
-  ]
-
-  const filteredNavItems = navItems.filter((item) => {
-    // Waiter is strictly restricted to Tables and Announcements
+  // Filter items:
+  // 1. Must respect existing role and permission checks
+  // 2. If customized to show in Header (or More dropdown), filter OUT of Sidebar to avoid duplicate entries
+  // 3. If hidden completely (visible === false), do NOT show in Sidebar
+  const filteredNavItems = rawNavItems.filter((item) => {
+    // Role-based hard boundaries
     if (role === 'waiter') {
-      return item.href === '/tables' || item.href === '/assigned-orders' || item.href === '/announcements';
-    }
-
-    // Chef is strictly restricted to Kitchen and Announcements
-    if (role === 'chef') {
-      return item.href === '/kitchen' || item.href === '/announcements';
-    }
-
-    // Cashier is restricted to Terminal and Announcements
-    if (role === 'cashier') {
-      return item.href === '/terminal' || item.href === '/announcements';
-    }
-
-    // Delivery Staff is strictly restricted to Delivery and Announcements
-    if (role === 'delivery_staff') {
-      return item.href === '/delivery' || item.href === '/announcements';
-    }
-
-    // Manager manages store operations (cannot access super-admin, companies, or users)
-    if (role === 'manager') {
+      if (item.href !== '/tables' && item.href !== '/assigned-orders' && item.href !== '/announcements') {
+        return false;
+      }
+    } else if (role === 'chef') {
+      if (item.href !== '/kitchen' && item.href !== '/announcements') {
+        return false;
+      }
+    } else if (role === 'cashier') {
+      if (item.href !== '/terminal' && item.href !== '/announcements') {
+        return false;
+      }
+    } else if (role === 'delivery_staff') {
+      if (item.href !== '/delivery' && item.href !== '/announcements') {
+        return false;
+      }
+    } else if (role === 'manager') {
       if (item.href === '/super-admin' || item.href === '/companies' || item.href === '/users') {
         return false;
       }
-      return true;
+    } else if (!isSuperAdmin && role === 'company_admin' && permissions && item.moduleKey) {
+      if (item.moduleKey === 'sales_and_bills' || item.moduleKey === 'sales') {
+        if (permissions.sales_and_bills === false || permissions.sales === false || permissions.bills === false) {
+          return false;
+        }
+      } else if (item.moduleKey === 'stocks' || item.moduleKey === 'raw_materials' || item.moduleKey === 'inventory') {
+        if (permissions.stocks === false || permissions.raw_materials === false || permissions.inventory === false) {
+          return false;
+        }
+      } else if (permissions[item.moduleKey] === false) {
+        return false;
+      }
     }
 
-    // Super Admin sees all navigation modules
-    if (isSuperAdmin) return true;
+    // Header Customization Deduplication:
+    // Find matching item in company's header nav configuration
+    const configItem = navConfig.items.find(
+      (c) => c.id === item.id || c.href === item.href
+    );
 
-    // Filter out disabled modules for Company Admin
-    if (role === 'company_admin' && permissions && item.moduleKey) {
-      if (item.moduleKey === 'sales_and_bills' || item.moduleKey === 'sales') {
-        return permissions.sales_and_bills !== false && permissions.sales !== false && permissions.bills !== false;
+    if (configItem) {
+      // If admin hid this menu item completely, don't show in sidebar
+      if (!configItem.visible) {
+        return false;
       }
-      if (item.moduleKey === 'stocks' || item.moduleKey === 'raw_materials' || item.moduleKey === 'inventory') {
-        return permissions.stocks !== false && permissions.raw_materials !== false && permissions.inventory !== false;
-      }
-      if (permissions[item.moduleKey] === false) {
+      // If admin placed this item in the Header (or More dropdown), remove from sidebar to avoid duplicates
+      if (configItem.showInHeader) {
         return false;
       }
     }
@@ -192,10 +248,9 @@ export default function Sidebar() {
                 {item.name}
               </span>
             </Link>
-          )
+          );
         })}
       </nav>
     </aside>
-  )
+  );
 }
-

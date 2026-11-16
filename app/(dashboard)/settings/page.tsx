@@ -6,6 +6,7 @@ import KeyboardShortcutsSettingsPanel from "@/components/settings/KeyboardShortc
 import StorageManager from "@/components/settings/StorageManager"
 import PrinterDesignPanel from '@/components/settings/PrinterDesignPanel';
 import TerminalDesignPanel from '@/components/settings/TerminalDesignPanel';
+import CustomizeHeaderModal from '@/components/dashboard/CustomizeHeaderModal';
 import SoftwareUpdatesPanel from "@/components/settings/SoftwareUpdatesPanel"
 import CompanyPermissionsPanel from "@/components/settings/CompanyPermissionsPanel"
 import CompanyThemePanel from "@/components/settings/CompanyThemePanel"
@@ -21,6 +22,7 @@ const BASE_TABS = [
   { id: 'printer', label: 'Printer Settings' },
   { id: 'printer-design', label: 'Receipt Design' },
   { id: 'terminal-design', label: 'Terminal Design' },
+  { id: 'header-customization', label: '🧭 Customize Header' },
   { id: 'terminal', label: 'Terminal Settings' },
   { id: 'shortcuts', label: 'Keyboard Shortcuts' },
   { id: 'storage', label: 'Local Storage' },
@@ -88,6 +90,7 @@ export default function SettingsPage() {
     }
   }, []);
   const [isScanning, setIsScanning] = useState(false)
+  const [isHeaderModalOpen, setIsHeaderModalOpen] = useState(false)
   const [wifiIp, setWifiIp] = useState(wifiPrinter?.ip || '')
   const [wifiPort, setWifiPort] = useState(wifiPrinter?.port || '9100')
   const [wifiName, setWifiName] = useState(wifiPrinter?.name || 'Network Printer')
@@ -223,6 +226,47 @@ export default function SettingsPage() {
               {activeTab === 'whatsapp' && <WhatsAppSettingsPanel />}
               {activeTab === 'printer-design' && <PrinterDesignPanel />}
               {activeTab === 'terminal-design' && <TerminalDesignPanel />}
+              {activeTab === 'header-customization' && (
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/90 p-6 shadow-xl backdrop-blur-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <h2 className="text-xl font-black text-white flex items-center gap-2.5">
+                          <SlidersHorizontal className="h-6 w-6 text-pink-400" />
+                          Dashboard Header Navigation
+                        </h2>
+                        <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+                          Configure which navigation menus appear in the dashboard header capsule, adjust direct item limits, reorder items, and manage sidebar placement.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsHeaderModalOpen(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold shadow-lg shadow-pink-950/60 transition active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                        <span>Open Navigation Customizer</span>
+                      </button>
+                    </div>
+
+                    <div className="mt-6 p-4 rounded-xl bg-zinc-950/70 border border-zinc-800 text-xs text-zinc-300 space-y-2">
+                      <div className="font-bold text-white flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        Company-Level Tenant Isolation
+                      </div>
+                      <p className="text-zinc-400 text-[11px] leading-relaxed">
+                        Navigation customizations are isolated strictly to your active company database. Menu items placed in the header capsule will automatically be removed from the left sidebar to prevent duplicate entries.
+                      </p>
+                    </div>
+                  </div>
+
+                  <CustomizeHeaderModal
+                    isOpen={isHeaderModalOpen}
+                    onClose={() => setIsHeaderModalOpen(false)}
+                  />
+                </div>
+              )}
               {activeTab === 'printer' && (
                 <div className="space-y-6">
                   {/* Printer Hub Overview Banner */}

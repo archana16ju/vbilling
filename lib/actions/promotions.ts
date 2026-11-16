@@ -270,8 +270,15 @@ export async function getPromoStackingSetting(): Promise<boolean> {
   if (isLocalMySqlMode()) {
     const { getAuthorizedCompanyPool } = await import('@/lib/mysql-company');
     const { pool, company } = await getAuthorizedCompanyPool();
-    const [rows]: any = await pool.query('SELECT allow_promo_stacking FROM companies WHERE id = ?', [company.id]);
-    return rows && rows[0] ? Boolean(rows[0].allow_promo_stacking) : false;
+    try {
+      const [rows]: any = await pool.query('SELECT allow_promo_stacking FROM companies WHERE id = ?', [company.id]);
+      return rows && rows[0] ? Boolean(rows[0].allow_promo_stacking) : false;
+    } catch (err: any) {
+      if (err?.code === 'ER_NO_SUCH_TABLE') {
+        return false;
+      }
+      throw err;
+    }
   }
   const db = await getDb();
   const companyId = await getAuthCompanyId();
@@ -283,7 +290,17 @@ export async function setPromoStackingSetting(allow: boolean): Promise<boolean> 
   if (isLocalMySqlMode()) {
     const { getAuthorizedCompanyPool, clearCompanyContextCache } = await import('@/lib/mysql-company');
     const { pool, company } = await getAuthorizedCompanyPool();
-    await pool.query('UPDATE companies SET allow_promo_stacking = ? WHERE id = ?', [allow ? 1 : 0, company.id]);
+    await pool.query(
+      `INSERT INTO companies (id, name, code, is_active, allow_promo_stacking)
+       VALUES (?, ?, ?, 1, ?)
+       ON DUPLICATE KEY UPDATE allow_promo_stacking = VALUES(allow_promo_stacking)`,
+      [company.id, company.name, company.code, allow ? 1 : 0]
+    );
+    try {
+      const { getMasterPool } = await import('@/lib/mysql');
+      const masterPool = getMasterPool();
+      await masterPool.query('UPDATE master_companies SET allow_promo_stacking = ? WHERE id = ?', [allow ? 1 : 0, company.id]);
+    } catch {}
     clearCompanyContextCache(company.id);
     return true;
   }

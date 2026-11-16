@@ -318,6 +318,17 @@ export async function mysqlCreateProduct(product: Omit<Product, 'id'>, companyId
   
   const newProduct: Product = { ...product, id: 'p' + Date.now() };
 
+  // Duplicate detection for barcode and SKU
+  try {
+    const { detectProductDuplicate } = await import('@/lib/duplicate-detector');
+    const dup = await detectProductDuplicate(company.id, newProduct);
+    if (dup.hasDuplicate && !(product as any).allowDuplicate) {
+      throw new Error(dup.reason || 'Duplicate product barcode or SKU detected');
+    }
+  } catch (err: any) {
+    if (err.message && err.message.includes('Duplicate product')) throw err;
+  }
+
   // Resolve primary barcode
   const barcodes = (product as any).barcodes as any[] | undefined;
   let primaryBarcode = newProduct.barcode;
@@ -409,6 +420,24 @@ export async function mysqlUpdateProduct(id: string, updates: Partial<Product>):
   const setClauses: string[] = [];
   const params: any[] = [];
   const u = updates as any;
+
+  // Duplicate detection for barcode and SKU on update
+  if (u.barcode || u.sku) {
+    try {
+      const { detectProductDuplicate } = await import('@/lib/duplicate-detector');
+      const dup = await detectProductDuplicate(company.id, {
+        id,
+        barcode: u.barcode,
+        sku: u.sku,
+        name: u.name,
+      });
+      if (dup.hasDuplicate && !u.allowDuplicate) {
+        throw new Error(dup.reason || 'Duplicate product barcode or SKU detected');
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Duplicate product')) throw err;
+    }
+  }
 
   // Handle barcodes updates
   const barcodes = u.barcodes as any[] | undefined;
@@ -1532,6 +1561,12 @@ export async function mysqlRecordSale(sale: any, companyIdParam?: string): Promi
         [company.id, saleDbId, billNumber]
       );
       if (existing && existing.length > 0) {
+        if (existing[0].id !== saleDbId) {
+          try {
+            const { detectInvoiceDuplicate } = await import('@/lib/duplicate-detector');
+            await detectInvoiceDuplicate(company.id, billNumber, sale.branchId, saleDbId);
+          } catch {}
+        }
         return { success: true, sale: mapRowToSale(existing[0]) };
       }
     }
@@ -1852,11 +1887,42 @@ export async function mysqlRecordSale(sale: any, companyIdParam?: string): Promi
       }
 
       // 3. Raw materials recipe deduction with Automatic Stock Restoration
-      const [allRawMaterialsRows] = await conn.query<RowDataPacket[]>(
-        'SELECT id, name, sku, unit, stock, cost_per_unit, low_stock_limit, status, created_at, updated_at FROM raw_materials WHERE company_id = ?',
-        [company.id]
-      );
-      const allRawMaterials = allRawMaterialsRows.map(mapRowToRawMaterial);
+      // Optimized: Only query raw materials that are actually referenced by items in this sale
+      const referencedMaterialIds = new Set<string>();
+      for (const item of finalSale.items) {
+        const prodId = item.product?.id || item.productId || item.id;
+        if (!prodId) continue;
+        const dbP = dbProducts.find((p) => p.id === prodId);
+        const productToUse = dbP || item.product;
+        if (!productToUse) continue;
+
+        let rawMaterialsList = productToUse.rawMaterials;
+        if (dbP && dbP.raw_materials_json) {
+          try {
+            rawMaterialsList = typeof dbP.raw_materials_json === 'string'
+              ? JSON.parse(dbP.raw_materials_json)
+              : dbP.raw_materials_json;
+          } catch {}
+        }
+
+        if (Array.isArray(rawMaterialsList)) {
+          for (const rm of rawMaterialsList) {
+            if (rm?.rawMaterialId) referencedMaterialIds.add(rm.rawMaterialId);
+          }
+        }
+      }
+
+      let allRawMaterials: RawMaterial[] = [];
+      if (referencedMaterialIds.size > 0) {
+        const placeholders = Array.from(referencedMaterialIds).map(() => '?').join(',');
+        const [rmRows] = await conn.query<RowDataPacket[]>(
+          `SELECT id, name, sku, unit, stock, cost_per_unit, low_stock_limit, status, created_at, updated_at 
+           FROM raw_materials 
+           WHERE company_id = ? AND id IN (${placeholders})`,
+          [company.id, ...Array.from(referencedMaterialIds)]
+        );
+        allRawMaterials = rmRows.map(mapRowToRawMaterial);
+      }
 
       // Aggregate deductions per raw material for this entire sale
       const aggregatedDeductions = new Map<string, number>();
@@ -1942,11 +2008,12 @@ export async function mysqlRecordSale(sale: any, companyIdParam?: string): Promi
             [materialId, company.id]
           );
 
-          try {
-            await mysqlCheckLowStockAndCreateReorders(company.id);
-          } catch (reorderErr) {
-            console.warn('Auto reorder creation notice on sale deduction:', reorderErr);
-          }
+          // Asynchronously trigger reorder check so it never blocks or delays checkout execution
+          setTimeout(() => {
+            mysqlCheckLowStockAndCreateReorders(company.id).catch((reorderErr) => {
+              console.warn('Auto reorder creation notice on sale deduction:', reorderErr);
+            });
+          }, 0);
         }
       }
 

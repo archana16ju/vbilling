@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-session';
 import { isLocalMySqlMode } from '@/lib/mysql';
+import { getAuthorizedCompanyPool } from '@/lib/mysql-company';
+import { detectCustomerDuplicate, normalizePhoneNumber } from '@/lib/duplicate-detector';
+import { RowDataPacket } from 'mysql2';
 import {
   mysqlGetCustomers,
   mysqlGetCustomersWithStats,
@@ -27,6 +30,41 @@ export async function GET(request: Request) {
         return NextResponse.json(orders);
       }
 
+      const q = (url.searchParams.get('q') || url.searchParams.get('phone') || '').trim();
+      if (q) {
+        const { pool, company } = await getAuthorizedCompanyPool();
+        const cleanDigits = q.replace(/\D/g, '');
+        const searchPattern = `%${q}%`;
+        const digitsPattern = cleanDigits ? `%${cleanDigits}%` : searchPattern;
+
+        const [rows] = await pool.query<RowDataPacket[]>(
+          `SELECT id, company_id, name, phone, email, address, gstin, created_at,
+                  loyalty_points_balance, loyalty_tier, total_points_earned, total_points_redeemed
+           FROM customers 
+           WHERE company_id = ? 
+             AND (name LIKE ? OR phone LIKE ? OR phone LIKE ? OR email LIKE ?)
+           ORDER BY name ASC LIMIT 25`,
+          [company.id, searchPattern, searchPattern, digitsPattern, searchPattern]
+        );
+
+        const mapped = rows.map((r: any) => ({
+          id: r.id,
+          companyId: r.company_id,
+          name: r.name,
+          phone: r.phone || undefined,
+          email: r.email || undefined,
+          address: r.address || undefined,
+          gstin: r.gstin || undefined,
+          createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+          loyaltyPointsBalance: Number(r.loyalty_points_balance) || 0,
+          loyaltyTier: r.loyalty_tier || 'Silver',
+          totalPointsEarned: Number(r.total_points_earned) || 0,
+          totalPointsRedeemed: Number(r.total_points_redeemed) || 0,
+        }));
+
+        return NextResponse.json(mapped);
+      }
+
       const withStats = url.searchParams.get('stats') !== 'false';
       const customers = withStats
         ? await mysqlGetCustomersWithStats()
@@ -51,6 +89,26 @@ export async function POST(request: Request) {
     const data = await request.json();
     if (!data.name || data.name.trim() === '') {
       return NextResponse.json({ error: 'Customer name is required' }, { status: 400 });
+    }
+
+    const companyId = session.companyId || 'comp_default';
+
+    // Duplicate detection by phone within current company
+    if (data.phone) {
+      const dup = await detectCustomerDuplicate(companyId, {
+        phone: data.phone,
+        name: data.name,
+      });
+
+      if (dup.hasDuplicate && !data.allowDuplicate) {
+        return NextResponse.json(
+          {
+            error: `A customer with phone "${data.phone}" already exists (${dup.existingRecord?.name || 'Existing Customer'}).`,
+            duplicate: dup,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     if (isLocalMySqlMode()) {
@@ -81,6 +139,27 @@ export async function PUT(request: Request) {
     const data = await request.json();
     if (!data.id) {
       return NextResponse.json({ error: 'Customer ID is required' }, { status: 400 });
+    }
+
+    const companyId = session.companyId || 'comp_default';
+
+    // Duplicate detection by phone on update
+    if (data.phone) {
+      const dup = await detectCustomerDuplicate(companyId, {
+        id: data.id,
+        phone: data.phone,
+        name: data.name,
+      });
+
+      if (dup.hasDuplicate && !data.allowDuplicate) {
+        return NextResponse.json(
+          {
+            error: `Another customer with phone "${data.phone}" already exists (${dup.existingRecord?.name || 'Existing Customer'}).`,
+            duplicate: dup,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     if (isLocalMySqlMode()) {
